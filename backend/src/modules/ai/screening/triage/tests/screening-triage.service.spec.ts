@@ -40,6 +40,7 @@ function buildDrizzleMock(opts: {
   insertRow?: ScreeningDecisionRow | null;
   selectRows?: ScreeningDecisionRow[];
   materialsRows?: unknown[];
+  thesisRows?: { dealBreakers: string[] | null }[];
 } = {}) {
   const capture: InsertCapture = {};
   const returning = jest.fn().mockImplementation(async () => {
@@ -71,7 +72,12 @@ function buildDrizzleMock(opts: {
 
   const select = jest.fn().mockImplementation((projection?: Record<string, unknown>) => {
     const isMaterials = Boolean(projection && "pitchDeckUrl" in projection);
-    const rows = isMaterials ? opts.materialsRows ?? [] : opts.selectRows ?? [];
+    const isThesisQuery = Boolean(projection && "dealBreakers" in projection);
+    const rows = isMaterials
+      ? opts.materialsRows ?? []
+      : isThesisQuery
+        ? opts.thesisRows ?? []
+        : opts.selectRows ?? [];
     const limit = jest.fn().mockResolvedValue(rows);
     const orderBy = jest.fn().mockReturnValue({ limit });
     const where = jest.fn().mockReturnValue({ orderBy, limit });
@@ -105,7 +111,7 @@ async function buildService(
 describe("policy snapshot", () => {
   it("locks the (version, thresholds) tuple — bump POLICY_VERSION when changing any threshold", () => {
     expect(POLICY_SNAPSHOT).toStrictEqual({
-      POLICY_VERSION: 2,
+      POLICY_VERSION: 3,
       LOW_SCORE_THRESHOLD: 40,
       ADVANCE_SCORE_THRESHOLD: 60,
       OUT_OF_SCOPE_THESIS_THRESHOLD: 30,
@@ -244,6 +250,78 @@ describe("applyTriagePolicy (pure)", () => {
     );
     expect(out.classification).toBe("advance");
     expect(out.reasonCodes).toEqual([]);
+  });
+
+  it("dealbreaker reason codes hard-reject before thesis-fit and lens checks", () => {
+    const out = applyTriagePolicy(
+      [
+        lens("market", 90, "advance"),
+        lens("team", 85, "advance"),
+        lens("traction", 80, "advance"),
+      ],
+      {
+        thesisFitScore: 12,
+        dealbreakerReasonCodes: ["dealbreaker:crypto"],
+      },
+    );
+
+    expect(out.classification).toBe("reject");
+    expect(out.reasonCodes).toEqual(["dealbreaker:crypto"]);
+    expect(out.overallScore).toBe(85);
+  });
+
+  it("dedupes repeated dealbreaker codes from multiple active theses", () => {
+    const out = applyTriagePolicy(
+      [lens("market", 82, "advance")],
+      {
+        dealbreakerReasonCodes: [
+          "dealbreaker:crypto",
+          "dealbreaker:crypto",
+          "dealbreaker:gambling",
+        ],
+      },
+    );
+
+    expect(out.classification).toBe("reject");
+    expect(out.reasonCodes).toEqual(["dealbreaker:crypto", "dealbreaker:gambling"]);
+  });
+
+  it("decide rejects when a startup matches an active thesis dealbreaker", async () => {
+    const startupRow = {
+      pitchDeckUrl: "https://drive/deck.pdf",
+      pitchDeckPath: null,
+      productDescription: "We build a crypto payments platform for global merchants.",
+      description: "Crypto infrastructure",
+      teamMembers: [{ name: "A", role: "CEO", linkedinUrl: "https://example.com" }],
+      fundingTarget: 1_500_000,
+      valuation: 10_000_000,
+      raiseType: "equity",
+      website: "https://example.com",
+      industry: "Payments",
+      sectorIndustry: "Crypto Payments",
+      sectorIndustryGroup: "Fintech",
+    };
+    const { service, drizzle } = await buildService({
+      materialsRows: [startupRow],
+      thesisRows: [{ dealBreakers: ["crypto"] }],
+    });
+
+    const decision = await service.decide({
+      startupId: STARTUP_ID,
+      pipelineRunId: RUN_ID,
+      lensResults: [
+        lens("market", 90, "advance"),
+        lens("team", 88, "advance"),
+      ],
+      thesisFitScore: 90,
+    });
+
+    expect(decision.classification).toBe("reject");
+    expect(decision.reasonCodes).toEqual(["dealbreaker:crypto"]);
+    expect(decision.nextAction).toBe("stop");
+    expect(drizzle._capture.values?.classification).toBe("reject");
+    expect(drizzle._capture.values?.reasonCodes).toEqual(["dealbreaker:crypto"]);
+    expect(drizzle._capture.values?.policyVersion).toBe(POLICY_VERSION);
   });
 
   // ─── DS-E7-F2-S1 — no auto-advance without evidence ──────────────────

@@ -22,6 +22,7 @@ import { DynamicFlowCatalogService } from '../../ai/services/dynamic-flow-catalo
 import { EarlyAccessService } from '../../early-access';
 import { AdminInvestorService } from '../admin-investor.service';
 import { AiConfigService } from '../../ai/services/ai-config.service';
+import { AiModelOverrideService } from '../../ai/services/ai-model-override.service';
 import { UserRole } from '../../../auth/entities/auth.schema';
 import { StartupStatus } from '../../startup/entities/startup.schema';
 import { PipelinePhase } from '../../ai/interfaces/pipeline.interface';
@@ -38,6 +39,7 @@ describe('AdminController', () => {
   let _startupIntakeService: jest.Mocked<StartupIntakeService>;
   let adminMatchingService: jest.Mocked<AdminMatchingService>;
   let adminScreeningService: jest.Mocked<AdminScreeningService>;
+  let adminInvestorService: jest.Mocked<AdminInvestorService>;
   let aiPromptService: jest.Mocked<AiPromptService>;
   let aiPromptRuntimeService: jest.Mocked<AiPromptRuntimeService>;
   let agentConfigService: jest.Mocked<AgentConfigService>;
@@ -188,6 +190,14 @@ describe('AdminController', () => {
           },
         },
         {
+          provide: AiModelOverrideService,
+          useValue: {
+            listOverrides: jest.fn(),
+            setOverride: jest.fn(),
+            removeOverride: jest.fn(),
+          },
+        },
+        {
           provide: AgentConfigService,
           useValue: {
             listAll: jest.fn(),
@@ -235,6 +245,7 @@ describe('AdminController', () => {
           useValue: {
             getMonitorList: jest.fn(),
             getMonitorDetail: jest.fn(),
+            getCalibrationSummary: jest.fn(),
           },
         },
       ],
@@ -250,6 +261,7 @@ describe('AdminController', () => {
     _startupIntakeService = module.get(StartupIntakeService);
     adminMatchingService = module.get(AdminMatchingService);
     adminScreeningService = module.get(AdminScreeningService);
+    adminInvestorService = module.get(AdminInvestorService);
     aiPromptService = module.get(AiPromptService);
     aiPromptRuntimeService = module.get(AiPromptRuntimeService);
     agentConfigService = module.get(AgentConfigService);
@@ -312,6 +324,54 @@ describe('AdminController', () => {
         const result = await controller.getInvestorStats();
 
         expect(result).toEqual(mockStats);
+      });
+    });
+  });
+
+  describe('Investor Calibration Endpoints', () => {
+    const mockCalibration = {
+      totalDecisions: 4,
+      decisionsWithTriage: 3,
+      aligned: 1,
+      falsePositive: 1,
+      falseNegative: 1,
+      softMismatch: 0,
+      alignmentRate: 1 / 3,
+      topOverrideReasons: [
+        { reasonTag: 'pricing', count: 2 },
+        { reasonTag: 'team', count: 1 },
+      ],
+      recentMismatches: [
+        {
+          startupId: 'startup-1',
+          decidedAt: '2026-04-30T12:00:00.000Z',
+          mismatchType: 'false_positive',
+          modelVerdict: 'advance',
+          investorVerdict: 'pass',
+          reasonTags: ['pricing'],
+        },
+      ],
+    };
+
+    describe('GET /admin/investors/:userId/calibration', () => {
+      it('should return the investor calibration summary', async () => {
+        adminInvestorService.getCalibrationSummary.mockResolvedValueOnce(mockCalibration as never);
+
+        const result = await controller.getInvestorCalibrationSummary('user-1');
+
+        expect(result).toEqual(mockCalibration);
+        expect(adminInvestorService.getCalibrationSummary).toHaveBeenCalledWith('user-1');
+      });
+    });
+
+    describe('POST /admin/investors/:userId/calibration/recompute', () => {
+      it('should manually recompute the investor calibration summary', async () => {
+        adminInvestorService.getCalibrationSummary.mockResolvedValueOnce(mockCalibration as never);
+
+        const result = await controller.recomputeInvestorCalibrationSummary('user-1');
+
+        expect(result).toEqual(mockCalibration);
+        expect(adminInvestorService.getCalibrationSummary).toHaveBeenCalledWith('user-1');
       });
     });
   });

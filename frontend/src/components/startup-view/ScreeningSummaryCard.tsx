@@ -8,6 +8,7 @@ import { ClassificationBadge } from "@/components/deal-card/ClassificationBadge"
 import { summarizeReasonCodes, labelForReasonCode } from "@/lib/screening/reason-codes";
 import { useScreeningOutput } from "@/lib/screening/useScreeningOutput";
 import { useTriageDecision } from "@/lib/screening/useTriageDecision";
+import { resolveScreeningDisplayState } from "@/lib/screening/screening-state";
 import type { PipelineProgressData } from "@/types/pipeline-progress";
 
 const MISSING_MATERIAL_LABELS: Record<string, string> = {
@@ -96,18 +97,19 @@ export function ScreeningSummaryCard({
 
   const decision = triageDecision.data;
   const output = screeningOutput.data;
+  const screeningState = resolveScreeningDisplayState(output, decision);
 
-  const screeningSignal = output?.overall.signal ?? decision?.classification;
-  const screeningScore = output?.overall.score ?? decision?.overallScore;
-  const nextAction = output?.overall.nextAction ?? decision?.nextAction;
-  const reasonCodes = decision?.reasonCodes ?? [];
+  const screeningSignal = screeningState.signal;
+  const screeningScore = screeningState.score;
+  const nextAction = screeningState.nextAction;
+  const reasonCodes = screeningState.reasonCodes;
   const reasonSummary =
-    decision && decision.reasonCodes.length > 0
-      ? summarizeReasonCodes(decision.reasonCodes, 3)
+    reasonCodes.length > 0
+      ? summarizeReasonCodes(reasonCodes, 3)
       : decision
         ? "No flags raised"
         : null;
-  const missingMaterials = output?.overall.missingMaterials ?? [];
+  const missingMaterials = screeningState.missingMaterials;
   const lenses = useMemo(
     () => output?.lenses ?? decision?.lensSnapshot ?? [],
     [decision?.lensSnapshot, output?.lenses],

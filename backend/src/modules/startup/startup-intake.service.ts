@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { eq, ilike } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { DrizzleService } from '../../database';
 import {
   PipelineService,
@@ -9,6 +9,12 @@ import { NotificationService } from '../../notification/notification.service';
 import { NotificationType } from '../../notification/entities';
 import { startup, StartupStatus, StartupStage } from './entities/startup.schema';
 import { deriveStartupGeography } from '../geography';
+import {
+  findCanonicalStartupDuplicate,
+  normalizeScreeningCompanyNameCandidate,
+  normalizeScreeningIntakeCandidate,
+} from './screening-intake-normalization';
+import { extractWebsiteFromText } from '../ai/utils/startup-field-utils';
 
 export interface QuickCreateParams {
   adminUserId: string;
@@ -55,7 +61,13 @@ export class StartupIntakeService {
   async createStartup(params: StartupIntakeParams): Promise<StartupIntakeResult> {
     const { adminUserId, companyName, fromEmail, fromName, bodyText, pitchDeckPath, source } = params;
 
-    const duplicate = await this.findDuplicate(companyName);
+    const normalizedCompanyName =
+      normalizeScreeningCompanyNameCandidate(companyName) ?? companyName.trim();
+    const extractedWebsite = extractWebsiteFromText(bodyText);
+    const normalizedWebsite = extractedWebsite ?? undefined;
+    const normalizedDescription = bodyText ? bodyText.trim().slice(0, 5000) : undefined;
+
+    const duplicate = await this.findDuplicate(normalizedCompanyName, normalizedWebsite);
     if (duplicate) {
       return {
         startupId: duplicate.id,
@@ -67,17 +79,17 @@ export class StartupIntakeService {
 
     const location = 'Unknown';
     const geography = deriveStartupGeography(location);
-    const slug = this.generateSlug(companyName);
+    const slug = this.generateSlug(normalizedCompanyName);
 
     const [created] = await this.drizzle.db
       .insert(startup)
       .values({
         userId: adminUserId,
-        name: companyName,
+        name: normalizedCompanyName,
         slug,
         tagline: `Submitted via ${source} by ${fromEmail}`,
-        description: bodyText?.slice(0, 5000) || `Submitted via ${source}. Details will be extracted from the pitch deck.`,
-        website: '',
+        description: normalizedDescription || `Submitted via ${source}. Details will be extracted from the pitch deck.`,
+        website: normalizedWebsite ?? '',
         location,
         normalizedRegion: geography.normalizedRegion,
         geoCountryCode: geography.countryCode,
@@ -98,7 +110,7 @@ export class StartupIntakeService {
       .returning();
 
     await this.normalizeLegacyPlaceholderDefaults(created.id);
-    this.logger.log(`Created startup ${created.id} (${companyName}) from ${source} by ${fromEmail}`);
+    this.logger.log(`Created startup ${created.id} (${normalizedCompanyName}) from ${source} by ${fromEmail}`);
 
     if (created.pitchDeckPath || created.pitchDeckUrl) {
       try {
@@ -131,21 +143,22 @@ export class StartupIntakeService {
     await this.notifications.createAndBroadcast(
       adminUserId,
       `New startup submitted via ${source}`,
-      `${companyName} was submitted by ${fromEmail}`,
+      `${normalizedCompanyName} was submitted by ${fromEmail}`,
       NotificationType.INFO,
       `/admin/startup/${created.id}`,
     );
 
     return {
       startupId: created.id,
-      startupName: companyName,
+      startupName: normalizedCompanyName,
       isDuplicate: false,
       status: StartupStatus.SUBMITTED,
     };
   }
 
   async quickCreateStartup(params: QuickCreateParams): Promise<StartupIntakeResult> {
-    const duplicate = await this.findDuplicate(params.name);
+    const normalized = normalizeScreeningIntakeCandidate(params);
+    const duplicate = await this.findDuplicate(normalized.name, normalized.website || undefined);
     if (duplicate) {
       return {
         startupId: duplicate.id,
@@ -155,19 +168,19 @@ export class StartupIntakeService {
       };
     }
 
-    const geography = deriveStartupGeography(params.location);
-    const slug = this.generateSlug(params.name);
+    const geography = deriveStartupGeography(normalized.location || params.location);
+    const slug = this.generateSlug(normalized.name);
     const normalizedTeamMembers = (params.teamMembers ?? []).map((m) => ({
-      name: m.name,
-      role: m.role,
-      linkedinUrl: m.linkedinUrl ?? '',
+      name: m.name.trim(),
+      role: m.role.trim(),
+      linkedinUrl: m.linkedinUrl?.trim() ?? '',
     }));
     const teamMembersWithLinkedin = normalizedTeamMembers.filter((m) =>
       Boolean(m.linkedinUrl?.trim()),
     ).length;
 
     this.logger.debug(
-      `[QuickCreate] Input summary | name=${params.name} | website=${Boolean(params.website)} | pitchDeckUrl=${Boolean(params.pitchDeckUrl)} | stage=${params.stage} | fundingTarget=${params.fundingTarget} | teamSize=${params.teamSize} | teamMembers=${normalizedTeamMembers.length} | teamMembersWithLinkedin=${teamMembersWithLinkedin}`,
+      `[QuickCreate] Input summary | name=${normalized.name} | website=${Boolean(normalized.website)} | pitchDeckUrl=${Boolean(params.pitchDeckUrl)} | stage=${params.stage} | fundingTarget=${params.fundingTarget} | teamSize=${params.teamSize} | teamMembers=${normalizedTeamMembers.length} | teamMembersWithLinkedin=${teamMembersWithLinkedin}`,
     );
 
     if (!params.pitchDeckUrl) {
@@ -184,19 +197,19 @@ export class StartupIntakeService {
       .insert(startup)
       .values({
         userId: params.adminUserId,
-        name: params.name,
+        name: normalized.name,
         slug,
-        tagline: params.tagline,
-        description: params.description,
-        website: params.website,
-        location: params.location,
+        tagline: normalized.tagline,
+        description: normalized.description,
+        website: normalized.website,
+        location: normalized.location,
         normalizedRegion: geography.normalizedRegion,
         geoCountryCode: geography.countryCode,
         geoLevel1: geography.level1,
         geoLevel2: geography.level2,
         geoLevel3: geography.level3,
         geoPath: geography.path,
-        industry: params.industry,
+        industry: normalized.industry,
         stage: params.stage,
         fundingTarget: params.fundingTarget,
         teamSize: params.teamSize,
@@ -207,7 +220,7 @@ export class StartupIntakeService {
       })
       .returning();
 
-    this.logger.log(`Quick-created startup ${created.id} (${params.name}) by admin ${params.adminUserId}`);
+    this.logger.log(`Quick-created startup ${created.id} (${normalized.name}) by admin ${params.adminUserId}`);
     this.logger.debug(
       `[QuickCreate] Persisted startup ${created.id} | pitchDeckPath=${Boolean(created.pitchDeckPath)} | pitchDeckUrl=${Boolean(created.pitchDeckUrl)} | roundCurrency=${created.roundCurrency ?? "null"} | valuationKnown=${created.valuationKnown === null ? "null" : String(created.valuationKnown)} | valuationType=${created.valuationType ?? "null"} | raiseType=${created.raiseType ?? "null"} | contactEmail=${Boolean(created.contactEmail)} | productDescription=${Boolean(created.productDescription)}`,
     );
@@ -244,14 +257,14 @@ export class StartupIntakeService {
     };
   }
 
-  async findDuplicate(companyName: string): Promise<{ id: string; name: string; status: string } | null> {
-    const escaped = companyName.replace(/[%_\\]/g, (ch) => `\\${ch}`);
-    const [match] = await this.drizzle.db
-      .select({ id: startup.id, name: startup.name, status: startup.status })
-      .from(startup)
-      .where(ilike(startup.name, escaped))
-      .limit(1);
-    return match ?? null;
+  async findDuplicate(
+    companyName: string,
+    website?: string,
+  ): Promise<{ id: string; name: string; status: string } | null> {
+    return findCanonicalStartupDuplicate(this.drizzle.db, {
+      companyName,
+      website,
+    });
   }
 
   extractCompanyFromBody(body: string | null): string | null {

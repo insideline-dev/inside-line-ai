@@ -10,6 +10,7 @@
 
 import { useInvestorControllerGetCalibration } from "@/api/generated/investor/investor";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { GaugeCircle, AlertCircle, ThumbsUp, TrendingDown, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -21,6 +22,15 @@ interface CalibrationStats {
   falseNegative: number;
   softMismatch: number;
   alignmentRate: number | null;
+  topOverrideReasons: Array<{ reasonTag: string; count: number }>;
+  recentMismatches: Array<{
+    startupId: string;
+    decidedAt: string;
+    mismatchType: "false_positive" | "false_negative" | "soft_mismatch";
+    modelVerdict: "advance" | "review" | "reject";
+    investorVerdict: "advance" | "pass" | "hold";
+    reasonTags: string[];
+  }>;
 }
 
 function unwrap<T>(payload: unknown): T | undefined {
@@ -35,6 +45,14 @@ function unwrap<T>(payload: unknown): T | undefined {
 }
 
 const MIN_DECISIONS = 3;
+
+function formatMismatchType(type: string): string {
+  return type.replace(/_/g, " ");
+}
+
+function formatDecisionPath(mismatch: CalibrationStats["recentMismatches"][number]): string {
+  return `${mismatch.modelVerdict} → ${mismatch.investorVerdict}`;
+}
 
 function rateLabel(rate: number | null): string {
   if (rate === null) return "no data yet";
@@ -113,6 +131,31 @@ export function CalibrationCard({ className }: CalibrationCardProps) {
             hint="Model hedged (review), you didn't"
           />
         </div>
+
+        {stats.topOverrideReasons.length > 0 && (
+          <div className="mt-3 rounded-md border bg-muted/20 px-3 py-2">
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              Top override reasons
+            </p>
+            <div className="mt-2 flex flex-wrap gap-1">
+              {stats.topOverrideReasons.map((reason) => (
+                <Badge key={reason.reasonTag} variant="outline" className="gap-1 capitalize text-[10px]">
+                  {reason.reasonTag}
+                  <span className="text-muted-foreground">×{reason.count}</span>
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {stats.recentMismatches[0] && (
+          <p className="mt-3 text-xs text-muted-foreground">
+            Latest mismatch: {formatDecisionPath(stats.recentMismatches[0])} · {formatMismatchType(stats.recentMismatches[0].mismatchType)}
+            {stats.recentMismatches[0].reasonTags.length > 0
+              ? ` (${stats.recentMismatches[0].reasonTags.join(", ")})`
+              : ""}
+          </p>
+        )}
       </CardContent>
     </Card>
   );

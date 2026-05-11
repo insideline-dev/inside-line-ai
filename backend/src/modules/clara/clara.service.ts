@@ -35,6 +35,19 @@ import {
   type ScreeningFollowUpState,
 } from "./interfaces/clara.interface";
 
+type EmailMessageSnapshot = {
+  from: string;
+  to: string[];
+  subject: string;
+  text: string | null;
+  timestamp: Date;
+  attachments: Array<{
+    filename: string;
+    contentType: string;
+    attachmentId: string | null;
+  }>;
+};
+
 @Injectable()
 export class ClaraService {
   private readonly logger = new Logger(ClaraService.name);
@@ -104,6 +117,9 @@ export class ClaraService {
     inboxId: string,
     threadId: string,
     messageId: string,
+    options?: {
+      messageSnapshot?: EmailMessageSnapshot | null;
+    },
   ): Promise<void> {
     if (!this.claraInboxId || !this.adminUserId) {
       this.logger.warn("Clara not configured, skipping");
@@ -120,10 +136,9 @@ export class ClaraService {
     }
 
     try {
-      const message = await this.claraChannel.getEmailMessage(
-        inboxId,
-        messageId,
-      );
+      const message =
+        options?.messageSnapshot ??
+        (await this.claraChannel.getEmailMessage(inboxId, messageId));
 
       const rawFrom = message.from;
       const fromEmail = this.extractEmailAddress(rawFrom);
@@ -228,15 +243,15 @@ export class ClaraService {
         await this.conversationService.getRecentMessages(conversation.id);
       const startupContext = await this.getStartupExtra(conversation.startupId);
 
-      const attachments: AttachmentMeta[] = (message.attachments ?? []).map(
-        (a) => ({
+      const attachments: AttachmentMeta[] = (message.attachments ?? [])
+        .map<AttachmentMeta>((a) => ({
           filename: a.filename ?? "attachment",
           contentType: a.contentType ?? "application/octet-stream",
-          attachmentId: a.attachmentId,
+          attachmentId: a.attachmentId ?? "",
           isPitchDeck: this.isPitchDeckAttachment(a.filename, a.contentType),
-          status: "pending" as const,
-        }),
-      );
+          status: "pending",
+        }))
+        .filter((attachment) => attachment.attachmentId.trim().length > 0);
 
       const ctx: MessageContext = {
         channel: "email",

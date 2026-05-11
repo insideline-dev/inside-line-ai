@@ -18,6 +18,28 @@ export interface ScreeningEvidence {
   confidence: ScreeningEvidenceConfidence;
 }
 
+export interface ScreeningHandoffEvidenceV1 {
+  lensKey: string;
+  lensLabel: string;
+  claim: string;
+  source?: string;
+  confidence: ScreeningEvidenceConfidence;
+  lensScore: number;
+  signal: ScreeningSignal;
+}
+
+export interface ScreeningHandoffIssueV1 {
+  key: string;
+  label: string;
+  summary: string;
+  source: "screening-output" | "triage-decision";
+}
+
+export interface ScreeningHandoffV1 {
+  evidenceSeeds: ScreeningHandoffEvidenceV1[];
+  openIssues: ScreeningHandoffIssueV1[];
+}
+
 export interface ScreeningLensV1 {
   key: string;
   score: number;
@@ -47,6 +69,7 @@ export interface ScreeningOutputV1 {
   pipelineRunId: string | null;
   generatedAt: string;
   overall: ScreeningOverallV1;
+  handoff?: ScreeningHandoffV1;
   lenses: ScreeningLensV1[];
 }
 

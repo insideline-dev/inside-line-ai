@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { and, eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { DrizzleService } from "../../database";
 import { QueueService } from "../../queue";
 import { StorageService } from "../../storage";
@@ -25,6 +25,11 @@ import { NotificationService } from "../../notification/notification.service";
 import { NotificationType } from "../../notification/entities";
 import { ClaraAiService } from "./clara-ai.service";
 import { deriveStartupGeography } from "../geography";
+import {
+  findCanonicalStartupDuplicate,
+  isReliableCompanyNameForDuplicateMatching,
+  toTrustedScreeningCompanyNameCandidate,
+} from "../startup/screening-intake-normalization";
 import type {
   AttachmentMeta,
   ClassifiedDocumentSummary,
@@ -145,25 +150,26 @@ export class ClaraSubmissionService {
       return { noPitchDeck: true, startupId: "", startupName: "", isDuplicate: false, status: "" };
     }
 
-    const companyFromBody = this.toTrustedCompanyNameCandidate(
+    const companyFromBody = toTrustedScreeningCompanyNameCandidate(
       this.extractCompanyFromBody(ctx.bodyText),
     );
-    const companyFromClassifier = this.toTrustedCompanyNameCandidate(
+    const companyFromClassifier = toTrustedScreeningCompanyNameCandidate(
       extractedCompanyName,
     );
 
     const companyName = hasPitchDeckAttachment
       ? companyFromClassifier ?? companyFromBody ?? "Untitled Startup"
       : companyFromBody ?? companyFromClassifier ?? "Untitled Startup";
+    const websiteFromEmail = extractWebsiteFromText(ctx.bodyText);
 
     this.logger.debug(
       `[ClaraSubmission] Company name resolution | body=${companyFromBody ?? "none"} classifier=${companyFromClassifier ?? "none"} chosen=${companyName} hasDeck=${hasPitchDeckAttachment}`,
     );
 
     const shouldAttemptDuplicateMatch =
-      this.isReliableCompanyNameForDuplicateMatching(companyName);
+      isReliableCompanyNameForDuplicateMatching(companyName);
     const duplicate = shouldAttemptDuplicateMatch
-      ? await this.findExactDuplicate(companyName, ownerUserId)
+      ? await this.findExactDuplicate(companyName, websiteFromEmail ?? undefined)
       : null;
     if (!shouldAttemptDuplicateMatch) {
       this.logger.debug(
@@ -186,7 +192,6 @@ export class ClaraSubmissionService {
       };
     }
 
-    const websiteFromEmail = extractWebsiteFromText(ctx.bodyText);
     const stageFromEmail = extractStageFromText(ctx.bodyText);
     const location = "Unknown";
     const geography = deriveStartupGeography(location);
@@ -552,37 +557,22 @@ export class ClaraSubmissionService {
 
   private async findExactDuplicate(
     companyName: string,
-    ownerUserId: string,
+    website?: string,
   ): Promise<{ id: string; name: string; status: string } | null> {
-    const normalizedCompanyName =
-      this.normalizeCompanyNameForDuplicateMatching(companyName);
-    if (!normalizedCompanyName) {
+    const duplicate = await findCanonicalStartupDuplicate(this.drizzle.db, {
+      companyName,
+      website,
+    });
+
+    if (!duplicate) {
       return null;
     }
 
-    // Mirror the JS normalization in SQL for a single exact-match query,
-    // avoiding the previous approach of fetching 250 rows and filtering in memory.
-    const normalizedExpr = sql`trim(regexp_replace(
-      regexp_replace(
-        replace(lower(${startup.name}), '&', ' and '),
-        '\m(incorporated|inc|llc|ltd|limited|corp|corporation|co|company|plc|gmbh|sarl|sa|sas)\M',
-        ' ', 'gi'
-      ),
-      '[^a-z0-9]+', ' ', 'g'
-    ))`;
-
-    const [row] = await this.drizzle.db
-      .select({ id: startup.id, name: startup.name, status: startup.status })
-      .from(startup)
-      .where(
-        and(
-          eq(startup.userId, ownerUserId),
-          sql`${normalizedExpr} = ${normalizedCompanyName}`,
-        ),
-      )
-      .limit(1);
-
-    return row ?? null;
+    return {
+      id: duplicate.id,
+      name: duplicate.name,
+      status: duplicate.status,
+    };
   }
 
   private escapeForILike(value: string): string {
@@ -1265,169 +1255,6 @@ export class ClaraSubmissionService {
     return match?.[1]?.trim() || null;
   }
 
-  private normalizeCompanyNameCandidate(
-    value: string | null | undefined,
-  ): string | null {
-    if (!value) {
-      return null;
-    }
-
-    const normalized = value
-      .replace(/\.(pdf|pptx?|docx?)$/i, "")
-      .replace(/[_-]+/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-    if (!normalized) {
-      return null;
-    }
-
-    const strippedContext = normalized
-      .replace(
-        /\s+(?:is|are|was|were)\s+(?:seeking|raising|looking|building|developing)\b.*$/i,
-        "",
-      )
-      .replace(/\s+(?:seeking|raising)\s+(?:funding|investment|capital)\b.*$/i, "")
-      .trim();
-    if (!strippedContext) {
-      return null;
-    }
-
-    const lower = strippedContext.toLowerCase();
-    if (
-      lower === "unknown" ||
-      lower === "n/a" ||
-      lower === "untitled startup" ||
-      lower.includes("pending extraction")
-    ) {
-      return null;
-    }
-    if (this.isLikelyReportStyleCompanyName(strippedContext)) {
-      return null;
-    }
-
-    return strippedContext;
-  }
-
-  private normalizeCompanyNameForDuplicateMatching(
-    value: string | null | undefined,
-  ): string | null {
-    const candidate =
-      this.toTrustedCompanyNameCandidate(value) ??
-      this.normalizeCompanyNameCandidate(value);
-    if (!candidate) {
-      return null;
-    }
-
-    const normalized = candidate
-      .toLowerCase()
-      .replace(/&/g, " and ")
-      .replace(
-        /\b(incorporated|inc|llc|ltd|limited|corp|corporation|co|company|plc|gmbh|sarl|sa|sas)\b/g,
-        " ",
-      )
-      .replace(/[^a-z0-9]+/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-
-    return normalized || null;
-  }
-
-  private toTrustedCompanyNameCandidate(
-    value: string | null | undefined,
-  ): string | null {
-    const normalized = this.normalizeCompanyNameCandidate(value);
-    if (!normalized) {
-      return null;
-    }
-
-    if (this.isLikelyFilenameStyleName(normalized)) {
-      return null;
-    }
-    return normalized;
-  }
-
-  private isReliableCompanyNameForDuplicateMatching(
-    value: string | null | undefined,
-  ): boolean {
-    const normalized = this.normalizeCompanyNameCandidate(value);
-    if (!normalized) {
-      return false;
-    }
-
-    const lower = normalized.toLowerCase();
-    if (
-      lower === "untitled startup" ||
-      lower === "startup example" ||
-      lower.startsWith("startup ")
-    ) {
-      return false;
-    }
-
-    return !this.isLikelyFilenameStyleName(normalized);
-  }
-
-  private isLikelyFilenameStyleName(value: string): boolean {
-    const lower = value.trim().toLowerCase();
-    if (!lower) {
-      return true;
-    }
-
-    if (
-      /\b(pitch\s*deck|deck|presentation|slides?|final|draft|version|copy)\b/.test(
-        lower,
-      )
-    ) {
-      return true;
-    }
-    if (/\.(pdf|pptx?|docx?)$/i.test(lower)) {
-      return true;
-    }
-    if ((lower.includes("_") || lower.includes("-")) && /\d/.test(lower)) {
-      return true;
-    }
-    // Common artifact from renamed files like "uber2", "acme2024".
-    if (/^[a-z]{3,}\d{1,4}$/i.test(lower)) {
-      return true;
-    }
-    if (/^[a-z0-9&.'\s-]+\s(19|20)\d{2}$/i.test(lower)) {
-      return true;
-    }
-    if (/\b(v|ver|version)\s*\d+\b/i.test(lower)) {
-      return true;
-    }
-    if (this.isLikelyReportStyleCompanyName(lower)) {
-      return true;
-    }
-
-    return false;
-  }
-
-  private isLikelyReportStyleCompanyName(value: string): boolean {
-    const normalized = value.trim().toLowerCase();
-    if (!normalized) {
-      return false;
-    }
-
-    if (/^\d{4}\s+annual\s+report$/.test(normalized)) {
-      return true;
-    }
-    if (/\bannual\s+report\b/.test(normalized)) {
-      return true;
-    }
-    if (
-      /\b(quarterly|q[1-4]|earnings?|supplemental|financial|shareholder)\b/.test(
-        normalized,
-      ) &&
-      /\b(report|results?|data|statement|update)\b/.test(normalized)
-    ) {
-      return true;
-    }
-    if (/\bform\s*10[-\s]?[kq]\b/.test(normalized)) {
-      return true;
-    }
-
-    return false;
-  }
 
   private generateSlug(name: string): string {
     const base = name

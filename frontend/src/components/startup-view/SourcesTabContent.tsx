@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -8,11 +9,17 @@ import {
   Linkedin,
   Sparkles,
   FileText,
+  AlertTriangle,
 } from "lucide-react";
 import type { Startup } from "@/types/startup";
 import type { Evaluation } from "@/types/evaluation";
 import { roundUpScore } from "@/lib/round-score";
 import { getDisplayOverallScore, getDisplaySectionScore } from "@/lib/evaluation-display";
+import { useScreeningOutput } from "@/lib/screening/useScreeningOutput";
+import {
+  collectScreeningEvidenceSeeds,
+  collectScreeningFollowUpSeeds,
+} from "@/lib/screening/screening-evidence";
 
 interface SourceLike {
   name?: string;
@@ -124,6 +131,7 @@ function toAiAgentRowKey(agent?: string): AiAgentRowKey | null {
 function sectionTitleClass() {
   return "text-base flex items-center gap-2";
 }
+
 
 function SourceRow({
   url,
@@ -308,6 +316,15 @@ export function SourcesTabContent({
   showAiAgents = true,
   showDatabaseRecords = true,
 }: SourcesTabContentProps) {
+  const screeningOutput = useScreeningOutput(startup.id);
+  const screeningEvidenceRows = useMemo(
+    () => collectScreeningEvidenceSeeds(screeningOutput.data),
+    [screeningOutput.data],
+  );
+  const screeningFollowUpRows = useMemo(
+    () => collectScreeningFollowUpSeeds(screeningOutput.data),
+    [screeningOutput.data],
+  );
   const allSources = (evaluation?.sources as unknown as SourceLike[]) || [];
   const isDocumentSource = (source: SourceLike): boolean => {
     const t = (source.type || "").toLowerCase();
@@ -454,6 +471,63 @@ export function SourcesTabContent({
           </p>
         </CardHeader>
       </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className={sectionTitleClass()}>
+            <Sparkles className="h-4 w-4 text-violet-500" />
+            Screening Evidence Seeds
+          </CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Claim-level evidence carried forward from screening so DD can start with the same first-pass facts.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {screeningEvidenceRows.length > 0 ? (
+            screeningEvidenceRows.map((row, idx) => (
+              <SourceRow
+                key={`${row.lensKey}-${idx}`}
+                url={row.source?.startsWith("http") ? row.source : undefined}
+                title={row.claim}
+                subtitle={`${row.lensLabel} lens · ${row.confidence} confidence${row.source && !row.source.startsWith("http") ? ` · ${row.source}` : ""}`}
+                agentLabel="Screening"
+                timestamp={screeningOutput.data?.generatedAt}
+              />
+            ))
+          ) : (
+            <p className="text-sm text-muted-foreground">No screening evidence captured yet.</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {screeningFollowUpRows.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className={sectionTitleClass()}>
+              <AlertTriangle className="h-4 w-4 text-amber-500" />
+              Screening Open Issues
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Screening gaps and blockers that should travel into diligence alongside the memo synthesis.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {screeningFollowUpRows.map((row) => (
+              <div key={row.key} className="rounded-md bg-muted/25 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold">{row.label}</p>
+                    <p className="text-xs text-muted-foreground">{row.summary}</p>
+                  </div>
+                  <Badge variant="secondary" className="shrink-0 text-[11px] uppercase tracking-wide">
+                    {row.source === "triage-decision" ? "Decision" : "Output"}
+                  </Badge>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader className="pb-2">

@@ -121,8 +121,141 @@ describe("ScreeningOutputService", () => {
     expect(out.overall.signal).toBe("advance");
     expect(out.overall.nextAction).toBe("continue_evaluation");
     expect(out.overall.missingMaterials).toEqual([]);
+    expect(out.handoff.evidenceSeeds).toHaveLength(0);
+    expect(out.handoff.openIssues).toHaveLength(0);
     // generatedAt parses as a valid ISO datetime
     expect(Number.isNaN(Date.parse(out.generatedAt))).toBe(false);
+  });
+
+  it("builds screening DD handoff seeds from persisted screening rows", async () => {
+    const rows = [
+      row({
+        lensKey: "team",
+        score: 84,
+        signal: "advance",
+        evidence: [
+          {
+            claim:
+              "Founders have prior domain experience and complementary technical and commercial backgrounds.",
+            source: "https://example.com/team",
+            confidence: "high",
+          },
+          {
+            claim:
+              "Founders have prior domain experience and complementary technical and commercial backgrounds.",
+            source: "https://example.com/team",
+            confidence: "high",
+          },
+        ],
+      }),
+      row({
+        lensKey: "gtm",
+        score: 72,
+        signal: "review",
+        evidence: [
+          {
+            claim:
+              "Customer interviews show a repeatable outbound motion but limited conversion history.",
+            confidence: "medium",
+          },
+        ],
+      }),
+    ];
+    const startupRow = {
+      ...FULLY_RESOURCED,
+      pitchDeckUrl: null,
+      teamMembers: [],
+    };
+    const decisionRows = [
+      {
+        classification: "review",
+        overallScore: 78,
+        reasonCodes: [
+          "borderline_overall_score",
+          "lens.gtm.review",
+          "missing_materials",
+        ],
+      },
+    ];
+    const { service } = await buildService(rows, [startupRow], decisionRows);
+
+    const out = await service.buildForStartup(STARTUP_ID, RUN_ID);
+
+    expect(out.handoff.evidenceSeeds).toEqual([
+      expect.objectContaining({
+        lensKey: "team",
+        lensLabel: "Team",
+        claim:
+          "Founders have prior domain experience and complementary technical and commercial backgrounds.",
+        source: "https://example.com/team",
+        confidence: "high",
+        lensScore: 84,
+        signal: "advance",
+      }),
+      expect.objectContaining({
+        lensKey: "gtm",
+        lensLabel: "Go-to-Market",
+        claim:
+          "Customer interviews show a repeatable outbound motion but limited conversion history.",
+        source: undefined,
+        confidence: "medium",
+        lensScore: 72,
+        signal: "review",
+      }),
+    ]);
+
+    expect(out.handoff.openIssues).toEqual([
+      expect.objectContaining({
+        key: "missing:deck",
+        label: "Pitch deck",
+        summary: "Pitch deck is still missing from screening.",
+        source: "screening-output",
+      }),
+      expect.objectContaining({
+        key: "missing:team",
+        label: "Team info",
+        summary: "Team info is still missing from screening.",
+        source: "screening-output",
+      }),
+      expect.objectContaining({
+        key: "decision:borderline_overall_score",
+        label: "Borderline scores",
+        summary: "The overall screening score is still in the review band.",
+        source: "triage-decision",
+      }),
+      expect.objectContaining({
+        key: "decision:lens.gtm.review",
+        label: "Go-to-Market needs follow-up",
+        summary: "Go-to-Market still needs follow-up before DD can rely on it.",
+        source: "triage-decision",
+      }),
+    ]);
+  });
+
+  it("falls back to lens signals when no triage decision exists", async () => {
+    const rows = [
+      row({ lensKey: "market", score: 80, signal: "advance" }),
+      row({ lensKey: "team", score: 65, signal: "review" }),
+      row({ lensKey: "traction", score: 30, signal: "reject" }),
+    ];
+    const { service } = await buildService(rows, [FULLY_RESOURCED]);
+
+    const out = await service.buildForStartup(STARTUP_ID, RUN_ID);
+
+    expect(out.handoff.openIssues).toEqual([
+      expect.objectContaining({
+        key: "lens:team:review",
+        label: "Team",
+        summary: "Team still needs follow-up before DD can rely on it.",
+        source: "screening-output",
+      }),
+      expect.objectContaining({
+        key: "lens:traction:reject",
+        label: "Traction",
+        summary: "Traction is still a screening blocker.",
+        source: "screening-output",
+      }),
+    ]);
   });
 
   it("overall.signal = reject when any lens is reject", async () => {
@@ -186,6 +319,34 @@ describe("ScreeningOutputService", () => {
     expect(out.overall.signal).toBe("reject");
     expect(out.overall.nextAction).toBe("stop");
     expect(out.overall.score).toBe(88);
+  });
+
+  it("renders dealbreaker follow-up issues from triage decisions", async () => {
+    const rows = [
+      row({ lensKey: "market", score: 82, signal: "advance" }),
+      row({ lensKey: "team", score: 76, signal: "advance" }),
+    ];
+    const decisionRows = [
+      {
+        classification: "reject",
+        overallScore: 79,
+        reasonCodes: ["dealbreaker:crypto"],
+      },
+    ];
+    const { service } = await buildService(rows, [FULLY_RESOURCED], decisionRows);
+
+    const out = await service.buildForStartup(STARTUP_ID, RUN_ID);
+
+    expect(out.overall.signal).toBe("reject");
+    expect(out.overall.nextAction).toBe("stop");
+    expect(out.handoff.openIssues).toEqual([
+      expect.objectContaining({
+        key: "decision:dealbreaker:crypto",
+        label: "Dealbreaker hit: crypto",
+        summary: 'Investor thesis excludes "crypto".',
+        source: "triage-decision",
+      }),
+    ]);
   });
 
   it("latestForStartup returns null when no rows exist", async () => {

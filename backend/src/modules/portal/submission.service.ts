@@ -17,6 +17,10 @@ import {
 } from './entities';
 import { startup, StartupStatus } from '../startup/entities/startup.schema';
 import { deriveStartupGeography } from '../geography';
+import {
+  findCanonicalStartupDuplicate,
+  normalizeScreeningIntakeCandidate,
+} from '../startup/screening-intake-normalization';
 import { SubmitToPortal, GetSubmissionsQuery } from './dto';
 import { NotificationType } from '../../notification/entities';
 import { PipelineService } from '../ai/services/pipeline.service';
@@ -77,42 +81,57 @@ export class SubmissionService {
       throw new ForbiddenException('Founder email is required');
     }
 
-    const slug = this.generateSlug(dto.name);
-    const geography = deriveStartupGeography(dto.location);
+    const normalizedStartup = normalizeScreeningIntakeCandidate(dto);
+    const duplicate = await findCanonicalStartupDuplicate(this.drizzle.db, {
+      companyName: normalizedStartup.name,
+      website: normalizedStartup.website || undefined,
+    });
+    const slug = this.generateSlug(normalizedStartup.name);
+    const geography = deriveStartupGeography(normalizedStartup.location || dto.location);
 
     const result = await this.drizzle.db.transaction(async (tx) => {
-      const [createdStartup] = await tx
-        .insert(startup)
-        .values({
-          userId: foundUser.id,
-          slug,
-          name: dto.name,
-          tagline: dto.tagline,
-          description: dto.description,
-          website: dto.website,
-          location: dto.location,
-          normalizedRegion: geography.normalizedRegion,
-          geoCountryCode: geography.countryCode,
-          geoLevel1: geography.level1,
-          geoLevel2: geography.level2,
-          geoLevel3: geography.level3,
-          geoPath: geography.path,
-          industry: dto.industry,
-          stage: dto.stage,
-          fundingTarget: dto.fundingTarget,
-          teamSize: dto.teamSize,
-          pitchDeckUrl: dto.pitchDeckUrl,
-          demoUrl: dto.demoUrl,
-          status: StartupStatus.ANALYZING,
-          submittedAt: new Date(),
-        })
-        .returning();
+      let startupId: string;
+      let startupUserId = duplicate?.userId ?? foundUser.id;
+
+      if (duplicate) {
+        startupId = duplicate.id;
+      } else {
+        const [createdStartup] = await tx
+          .insert(startup)
+          .values({
+            userId: foundUser.id,
+            slug,
+            name: normalizedStartup.name,
+            tagline: normalizedStartup.tagline,
+            description: normalizedStartup.description,
+            website: normalizedStartup.website,
+            location: normalizedStartup.location,
+            normalizedRegion: geography.normalizedRegion,
+            geoCountryCode: geography.countryCode,
+            geoLevel1: geography.level1,
+            geoLevel2: geography.level2,
+            geoLevel3: geography.level3,
+            geoPath: geography.path,
+            industry: normalizedStartup.industry,
+            stage: dto.stage,
+            fundingTarget: dto.fundingTarget,
+            teamSize: dto.teamSize,
+            pitchDeckUrl: dto.pitchDeckUrl,
+            demoUrl: dto.demoUrl,
+            status: StartupStatus.ANALYZING,
+            submittedAt: new Date(),
+          })
+          .returning();
+
+        startupId = createdStartup.id;
+        startupUserId = foundUser.id;
+      }
 
       const [submission] = await tx
         .insert(portalSubmission)
         .values({
           portalId,
-          startupId: createdStartup.id,
+          startupId,
           status: PortalSubmissionStatus.PENDING,
         })
         .returning();
@@ -120,36 +139,41 @@ export class SubmissionService {
       await this.notification.create(
         portalData.userId,
         'New Portal Submission',
-        `New submission to "${portalData.name}": ${dto.name}`,
+        duplicate
+          ? `Existing startup linked from ${foundUser.email}: ${normalizedStartup.name}`
+          : `New submission to "${portalData.name}": ${normalizedStartup.name}`,
         NotificationType.INFO,
         `/portals/${portalId}/submissions`,
       );
 
       return {
         submission,
-        startupId: createdStartup.id,
-        startupUserId: foundUser.id,
+        startupId,
+        startupUserId,
+        reusedDuplicate: Boolean(duplicate),
       };
     });
 
-    if (this.aiConfig.isPipelineEnabled()) {
-      await this.aiPipeline.startPipeline(result.startupId, result.startupUserId);
-    } else {
-      await this.queue.addJob(
-        QUEUE_NAMES.TASK,
-        {
-          type: 'task',
-          userId: result.startupUserId,
-          name: 'score-startup',
-          priority: 1,
-          payload: { startupId: result.startupId },
-        },
-        { priority: 1 },
-      );
+    if (!result.reusedDuplicate) {
+      if (this.aiConfig.isPipelineEnabled()) {
+        await this.aiPipeline.startPipeline(result.startupId, result.startupUserId);
+      } else {
+        await this.queue.addJob(
+          QUEUE_NAMES.TASK,
+          {
+            type: 'task',
+            userId: result.startupUserId,
+            name: 'score-startup',
+            priority: 1,
+            payload: { startupId: result.startupId },
+          },
+          { priority: 1 },
+        );
+      }
     }
 
     this.logger.log(
-      `Created submission ${result.submission.id} to portal ${portalId} from ${foundUser.email} and started analysis`,
+      `Created submission ${result.submission.id} to portal ${portalId} from ${foundUser.email}${result.reusedDuplicate ? ' (linked existing startup)' : ' and started analysis'}`,
     );
     return result.submission;
   }

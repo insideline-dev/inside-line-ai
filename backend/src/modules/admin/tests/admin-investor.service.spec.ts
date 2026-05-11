@@ -303,4 +303,45 @@ describe('AdminInvestorService', () => {
       expect(result.scoringPreferences[0].stage).toBe('Seed');
     });
   });
+
+  describe('getCalibrationSummary', () => {
+    it('aggregates mismatch counts and override reasons', async () => {
+      mockDb._queue.push([
+        {
+          verdict: 'pass',
+          triage: 'advance',
+          reasonTags: ['pricing', 'team'],
+          startupId: 'startup-1',
+          decidedAt: new Date('2026-04-30T12:00:00Z'),
+        },
+        {
+          verdict: 'advance',
+          triage: 'reject',
+          reasonTags: ['team'],
+          startupId: 'startup-2',
+          decidedAt: new Date('2026-04-29T12:00:00Z'),
+        },
+        {
+          verdict: 'hold',
+          triage: 'review',
+          reasonTags: [],
+          startupId: 'startup-3',
+          decidedAt: new Date('2026-04-28T12:00:00Z'),
+        },
+      ]);
+
+      const result = await service.getCalibrationSummary(mockInvestorId);
+
+      expect(result.totalDecisions).toBe(3);
+      expect(result.falsePositive).toBe(1);
+      expect(result.falseNegative).toBe(1);
+      expect(result.softMismatch).toBe(0);
+      expect(result.topOverrideReasons).toEqual([
+        { reasonTag: 'team', count: 2 },
+        { reasonTag: 'pricing', count: 1 },
+      ]);
+      expect(result.recentMismatches).toHaveLength(2);
+      expect(result.recentMismatches[0].startupId).toBe('startup-1');
+    });
+  });
 });

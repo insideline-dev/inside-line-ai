@@ -135,7 +135,9 @@ export class AgentMailService {
     // Route to Clara if this is Clara's inbox
     if (this.claraService?.isClaraInbox(inboxId)) {
       this.logger.log(`Routing message ${messageId ?? '(unknown)'} to Clara`);
-      await this.claraService.handleIncomingMessage(inboxId, threadId, messageId ?? '');
+      await this.claraService.handleIncomingMessage(inboxId, threadId, messageId ?? '', {
+        messageSnapshot,
+      });
       return;
     }
 

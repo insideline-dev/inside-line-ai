@@ -15,6 +15,9 @@ import {
 import { resolveCanonicalScreeningOutcome } from "./screening-outcome";
 import type {
   ScreeningEvidence,
+  ScreeningHandoff,
+  ScreeningHandoffEvidence,
+  ScreeningHandoffIssue,
   ScreeningLensV1,
   ScreeningOutputV1,
   ScreeningOverallV1,
@@ -211,12 +214,14 @@ export class ScreeningOutputService {
     decision: { signal: ScreeningSignal; score: number; reasonCodes: string[] } | null,
   ): ScreeningOutputV1 {
     const lenses = rows.map((row) => this.toContractLens(row));
+    const overall = this.computeOverall(lenses, materials, decision);
     return {
       version: 1,
       startupId,
       pipelineRunId,
       generatedAt: new Date().toISOString(),
-      overall: this.computeOverall(lenses, materials, decision),
+      overall,
+      handoff: this.buildHandoff(lenses, overall, decision),
       lenses,
     };
   }
@@ -309,6 +314,212 @@ export class ScreeningOutputService {
       nextAction: canonical.nextAction,
       missingMaterials: canonical.missingMaterials,
     };
+  }
+
+  private buildHandoff(
+    lenses: ScreeningLensV1[],
+    overall: ScreeningOverallV1,
+    decision: { reasonCodes: string[] } | null,
+  ): ScreeningHandoff {
+    return {
+      evidenceSeeds: this.collectEvidenceSeeds(lenses),
+      openIssues: this.collectOpenIssues(lenses, overall, decision),
+    };
+  }
+
+  private collectEvidenceSeeds(
+    lenses: ScreeningLensV1[],
+  ): ScreeningHandoffEvidence[] {
+    const seen = new Set<string>();
+    const rows: ScreeningHandoffEvidence[] = [];
+
+    for (const lens of lenses) {
+      const lensLabel = this.formatLensLabel(lens.key);
+
+      for (const evidence of lens.evidence) {
+        const claim = evidence.claim.trim();
+        if (!claim) continue;
+
+        const source = evidence.source?.trim() || undefined;
+        const dedupeKey = [lens.key, claim.toLowerCase(), source?.toLowerCase() ?? ""].join("|");
+        if (seen.has(dedupeKey)) continue;
+        seen.add(dedupeKey);
+
+        rows.push({
+          lensKey: lens.key,
+          lensLabel,
+          claim,
+          source,
+          confidence: evidence.confidence,
+          lensScore: lens.score,
+          signal: lens.signal,
+        });
+      }
+    }
+
+    return rows;
+  }
+
+  private collectOpenIssues(
+    lenses: ScreeningLensV1[],
+    overall: ScreeningOverallV1,
+    decision: { reasonCodes: string[] } | null,
+  ): ScreeningHandoffIssue[] {
+    const seen = new Set<string>();
+    const rows: ScreeningHandoffIssue[] = [];
+    const push = (seed: ScreeningHandoffIssue) => {
+      const dedupeKey = `${seed.label.toLowerCase()}|${seed.summary.toLowerCase()}`;
+      if (seen.has(dedupeKey)) return;
+      seen.add(dedupeKey);
+      rows.push(seed);
+    };
+
+    for (const code of overall.missingMaterials) {
+      const label = this.formatMissingMaterialLabel(code);
+      push({
+        key: `missing:${code}`,
+        label,
+        summary: `${label} is still missing from screening.`,
+        source: "screening-output",
+      });
+    }
+
+    if (decision?.reasonCodes.length) {
+      for (const code of decision.reasonCodes) {
+        if (code === "missing_materials") continue;
+        push({
+          key: `decision:${code}`,
+          label: this.buildReasonCodeFollowUpLabel(code),
+          summary: this.buildReasonCodeFollowUpSummary(code),
+          source: "triage-decision",
+        });
+      }
+      return rows;
+    }
+
+    for (const lens of lenses) {
+      if (lens.signal === "advance") continue;
+      const label = this.formatLensLabel(lens.key);
+      push({
+        key: `lens:${lens.key}:${lens.signal}`,
+        label,
+        summary:
+          lens.signal === "reject"
+            ? `${label} is still a screening blocker.`
+            : `${label} still needs follow-up before DD can rely on it.`,
+        source: "screening-output",
+      });
+    }
+
+    return rows;
+  }
+
+  private formatLensLabel(value: string): string {
+    const normalized = value.toLowerCase().replace(/[^a-z]/g, "");
+    const overrides: Record<string, string> = {
+      team: "Team",
+      market: "Market",
+      product: "Product",
+      traction: "Traction",
+      businessmodel: "Business Model",
+      gtm: "Go-to-Market",
+      financials: "Financials",
+      competitiveadvantage: "Competitive Advantage",
+      legal: "Legal",
+      dealterms: "Deal Terms",
+      exitpotential: "Exit Potential",
+      synthesis: "Synthesis",
+    };
+    const override = overrides[normalized];
+    if (override) return override;
+
+    return value
+      .replace(/([a-z])([A-Z])/g, "$1 $2")
+      .replace(/[_-]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .replace(/\b\w/g, (char) => char.toUpperCase());
+  }
+
+  private formatMissingMaterialLabel(value: string): string {
+    const labels: Record<string, string> = {
+      deck: "Pitch deck",
+      product_description: "Product description",
+      team: "Team info",
+      deal_terms: "Deal terms",
+      website: "Website",
+    };
+
+    return labels[value] ?? this.formatLensLabel(value);
+  }
+
+  private buildReasonCodeFollowUpLabel(code: string): string {
+    const lensMatch = code.match(/^lens\.([^.]+)\.(reject|review|low_evidence)$/);
+    if (lensMatch) {
+      const lensLabel = this.formatLensLabel(lensMatch[1]);
+      const suffix =
+        lensMatch[2] === "reject"
+          ? "blocker"
+          : lensMatch[2] === "review"
+            ? "needs follow-up"
+            : "needs more evidence";
+      return `${lensLabel} ${suffix}`;
+    }
+
+    const dealbreakerMatch = code.match(/^dealbreaker:(.+)$/i);
+    if (dealbreakerMatch) {
+      return `Dealbreaker hit: ${dealbreakerMatch[1].trim()}`;
+    }
+
+    return this.labelForReasonCode(code);
+  }
+
+  private buildReasonCodeFollowUpSummary(code: string): string {
+    const lensMatch = code.match(/^lens\.([^.]+)\.(reject|review|low_evidence)$/);
+    if (lensMatch) {
+      const lensLabel = this.formatLensLabel(lensMatch[1]);
+      switch (lensMatch[2]) {
+        case "reject":
+          return `${lensLabel} remains a screening blocker.`;
+        case "review":
+          return `${lensLabel} still needs follow-up before DD can rely on it.`;
+        case "low_evidence":
+          return `${lensLabel} needs more evidence before DD can rely on it.`;
+      }
+    }
+
+    const dealbreakerMatch = code.match(/^dealbreaker:(.+)$/i);
+    if (dealbreakerMatch) {
+      const term = dealbreakerMatch[1].trim();
+      return `Investor thesis excludes ${term ? `"${term}"` : "this dealbreaker"}.`;
+    }
+
+    switch (code) {
+      case "low_overall_score":
+        return "The overall screening score is still too low to treat the deal as cleared.";
+      case "borderline_overall_score":
+        return "The overall screening score is still in the review band.";
+      case "missing_materials":
+        return "Screening still needs the missing materials before it can be treated as complete.";
+      case "out_of_thesis_scope":
+        return "Confirm whether this startup fits the current investment thesis.";
+      case "no_lens_signals":
+        return "Screening did not produce enough usable lens signals yet.";
+      default:
+        return `${this.labelForReasonCode(code)} still needs follow-up.`;
+    }
+  }
+
+  private labelForReasonCode(code: string): string {
+    const labels: Record<string, string> = {
+      low_overall_score: "Low overall score",
+      borderline_overall_score: "Borderline scores",
+      missing_materials: "Missing materials",
+      out_of_thesis_scope: "Out of thesis scope",
+      no_lens_signals: "No lens signals",
+    };
+
+    return labels[code] ?? code.replace(/[_-]+/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
   }
 
   private computeFallbackDecision(

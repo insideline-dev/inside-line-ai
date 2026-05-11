@@ -175,13 +175,79 @@ describe("StartupService", () => {
   });
 
   describe("create", () => {
-    it("should create a startup with draft status", async () => {
+    it("should normalize startup inputs before creating a draft startup", async () => {
       const dto = {
-        name: "Test Startup",
+        name: "  Test Startup, Inc.  ",
+        tagline: "  A test startup  ",
+        description:
+          "  This is a test startup description that is long enough to pass validation requirements.  ",
+        website: "https://www.test.com",
+        location: "  San Francisco  ",
+        industry: "  SaaS  ",
+        stage: StartupStage.SEED,
+        fundingTarget: 1000000,
+        teamSize: 5,
+      };
+
+      mockDb.limit
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+      mockDb.returning.mockResolvedValueOnce([
+        {
+          ...mockStartup,
+          name: "Test Startup, Inc.",
+          slug: "test-startup-inc",
+          tagline: "A test startup",
+          description:
+            "This is a test startup description that is long enough to pass validation requirements.",
+          website: "https://www.test.com/",
+          location: "San Francisco",
+          industry: "SaaS",
+        },
+      ]);
+
+      const result = await service.create(mockUserId, dto);
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          name: "Test Startup, Inc.",
+          slug: "test-startup-inc",
+          tagline: "A test startup",
+          description:
+            "This is a test startup description that is long enough to pass validation requirements.",
+          website: "https://www.test.com/",
+          location: "San Francisco",
+          industry: "SaaS",
+          status: StartupStatus.DRAFT,
+        }),
+      );
+      expect(drizzleService.withRLS).toHaveBeenCalledWith(
+        mockUserId,
+        expect.any(Function),
+      );
+      expect(mockDb.insert).toHaveBeenCalledWith(startup);
+      expect(mockDb.values).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "Test Startup, Inc.",
+          slug: "test-startup-inc",
+          tagline: "A test startup",
+          description:
+            "This is a test startup description that is long enough to pass validation requirements.",
+          website: "https://www.test.com/",
+          location: "San Francisco",
+          industry: "SaaS",
+          status: StartupStatus.DRAFT,
+        }),
+      );
+    });
+
+    it("should reuse a canonical duplicate for the same owner instead of inserting", async () => {
+      const dto = {
+        name: " ACME Inc. ",
         tagline: "A test startup",
         description:
           "This is a test startup description that is long enough to pass validation requirements.",
-        website: "https://test.com",
+        website: "https://acme.com",
         location: "San Francisco",
         industry: "SaaS",
         stage: StartupStage.SEED,
@@ -189,16 +255,31 @@ describe("StartupService", () => {
         teamSize: 5,
       };
 
-      mockDb.returning.mockResolvedValueOnce([mockStartup]);
+      const existingStartup = {
+        ...mockStartup,
+        name: "Acme, Inc.",
+        slug: "acme-inc",
+        website: "https://acme.com/",
+      };
+
+      mockDb.limit
+        .mockResolvedValueOnce([
+          {
+            id: existingStartup.id,
+            name: existingStartup.name,
+            status: existingStartup.status,
+            userId: existingStartup.userId,
+            matchedOn: "name",
+          },
+        ])
+        .mockResolvedValueOnce([existingStartup]);
 
       const result = await service.create(mockUserId, dto);
 
-      expect(result).toEqual(mockStartup);
-      expect(drizzleService.withRLS).toHaveBeenCalledWith(
-        mockUserId,
-        expect.any(Function),
-      );
-      expect(mockDb.insert).toHaveBeenCalled();
+      expect(result).toEqual(existingStartup);
+      expect(mockDb.insert).not.toHaveBeenCalled();
+      expect(mockDb.values).not.toHaveBeenCalled();
+      expect(mockDb.select).toHaveBeenCalledTimes(2);
     });
 
     it("should generate a slug from the name", async () => {
@@ -215,6 +296,9 @@ describe("StartupService", () => {
         teamSize: 5,
       };
 
+      mockDb.limit
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
       mockDb.returning.mockResolvedValueOnce([
         { ...mockStartup, slug: "test-startup-inc" },
       ]);

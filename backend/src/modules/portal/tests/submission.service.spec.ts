@@ -12,6 +12,7 @@ import { StartupStage, StartupStatus } from '../../startup/entities/startup.sche
 import { QueueService } from '../../../queue';
 import { PipelineService } from '../../ai/services/pipeline.service';
 import { AiConfigService } from '../../ai/services/ai-config.service';
+import { StartupMatchingPipelineService } from '../../ai/services/startup-matching-pipeline.service';
 
 describe('SubmissionService', () => {
   let service: SubmissionService;
@@ -25,7 +26,7 @@ describe('SubmissionService', () => {
       select: jest.fn().mockReturnThis(),
       from: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
-      limit: jest.fn().mockResolvedValue([]),
+      limit: jest.fn().mockReturnThis(),
       offset: jest.fn().mockResolvedValue([]),
       orderBy: jest.fn().mockReturnThis(),
       insert: jest.fn().mockReturnThis(),
@@ -149,6 +150,18 @@ describe('SubmissionService', () => {
             isPipelineEnabled: jest.fn().mockReturnValue(false),
           },
         },
+        {
+          provide: StartupMatchingPipelineService,
+          useValue: {
+            queueStartupMatching: jest.fn().mockResolvedValue({
+              startupId: mockStartupId,
+              analysisJobId: 'analysis-job-1',
+              queueJobId: 'queue-job-1',
+              status: 'queued',
+              triggerSource: 'approval',
+            }),
+          },
+        },
       ],
     }).compile();
 
@@ -172,7 +185,10 @@ describe('SubmissionService', () => {
         return callback(txMock);
       });
 
-      mockDb.limit.mockResolvedValueOnce([mockPortal]);
+      mockDb.limit
+        .mockResolvedValueOnce([mockPortal])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
       userAuthService.findUserByEmail.mockResolvedValue(mockFounder);
 
       const dto = {
@@ -217,7 +233,10 @@ describe('SubmissionService', () => {
         return callback(txMock);
       });
 
-      mockDb.limit.mockResolvedValueOnce([mockPortal]);
+      mockDb.limit
+        .mockResolvedValueOnce([mockPortal])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
       userAuthService.findUserByEmail.mockResolvedValue(undefined);
       userAuthService.createUser.mockResolvedValue(mockFounder);
 
@@ -286,6 +305,51 @@ describe('SubmissionService', () => {
         ForbiddenException,
       );
     });
+
+    it('links a portal submission to an existing startup when canonical dedupe matches', async () => {
+      mockDb.limit
+        .mockResolvedValueOnce([{ ...mockPortal }])
+        .mockResolvedValueOnce([
+          {
+            id: mockStartupId,
+            name: 'Test Startup, Inc.',
+            status: StartupStatus.SUBMITTED,
+            userId: mockFounderId,
+          },
+        ]);
+
+      const txMock = createMockDb();
+      txMock.returning.mockResolvedValueOnce([mockSubmission]);
+      mockDb.transaction.mockImplementation((callback) => callback(txMock));
+      userAuthService.findUserByEmail.mockResolvedValue(mockFounder);
+
+      const dto = {
+        name: '  Test Startup, Inc.  ',
+        tagline: '  A revolutionary startup  ',
+        description:
+          'This is a test startup description that is long enough to pass validation requirements.',
+        website: 'https://startup.com',
+        location: 'San Francisco',
+        industry: 'SaaS',
+        stage: StartupStage.SEED,
+        fundingTarget: 1000000,
+        teamSize: 5,
+        founderEmail: 'founder@startup.com',
+        founderName: 'Founder Name',
+      };
+
+      const result = await service.create(mockPortalId, dto);
+
+      expect(result).toEqual(mockSubmission);
+      expect(notificationService.create).toHaveBeenCalledWith(
+        mockPortalOwnerId,
+        'New Portal Submission',
+        'Existing startup linked from founder@startup.com: Test Startup, Inc.',
+        'info',
+        `/portals/${mockPortalId}/submissions`,
+      );
+      expect(txMock.insert).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('findAll', () => {
@@ -296,7 +360,7 @@ describe('SubmissionService', () => {
     });
 
     it('should throw NotFoundException if portal not found', async () => {
-      mockDb.returning.mockResolvedValueOnce([]);
+      mockDb.limit.mockResolvedValueOnce([]);
 
       const query = { page: 1, limit: 10 };
 

@@ -14,7 +14,11 @@ import {
   ScoutApplicationStatus,
   ScoutSubmission,
 } from './entities/scout.schema';
-import { startup } from '../startup/entities/startup.schema';
+import { startup, StartupStatus } from '../startup/entities/startup.schema';
+import {
+  findCanonicalStartupDuplicate,
+  normalizeScreeningIntakeCandidate,
+} from '../startup/screening-intake-normalization';
 import { startupMatch } from '../investor/entities/investor.schema';
 import { user, UserRole } from '../../auth/entities/auth.schema';
 import { StartupService } from '../startup/startup.service';
@@ -99,42 +103,71 @@ export class SubmissionService {
       );
     }
 
-    const createdStartup = await this.startupService.create(
-      scoutId,
-      dto.startupData,
-      UserRole.SCOUT,
-      { scoutId },
-    );
+    const normalizedStartup = normalizeScreeningIntakeCandidate(dto.startupData);
+    const normalizedStartupData = {
+      ...dto.startupData,
+      name: normalizedStartup.name,
+      tagline: normalizedStartup.tagline,
+      description: normalizedStartup.description,
+      website: normalizedStartup.website,
+      location: normalizedStartup.location,
+      industry: normalizedStartup.industry,
+      teamMembers: dto.startupData.teamMembers?.map((member) => ({
+        name: member.name.trim(),
+        role: member.role.trim(),
+        linkedinUrl: member.linkedinUrl?.trim(),
+      })),
+    };
+
+    const duplicate = await findCanonicalStartupDuplicate(this.drizzle.db, {
+      companyName: normalizedStartup.name,
+      website: normalizedStartup.website || undefined,
+    });
+
+    let startupRecord: typeof startup.$inferSelect;
+    let startupId: string;
+
+    if (duplicate) {
+      startupId = duplicate.id;
+      startupRecord =
+        duplicate.status === StartupStatus.DRAFT && duplicate.userId === scoutId
+          ? await this.startupService.submit(duplicate.id, scoutId)
+          : await this.startupService.adminFindOne(duplicate.id);
+    } else {
+      startupRecord = await this.startupService.create(
+        scoutId,
+        normalizedStartupData,
+        UserRole.SCOUT,
+        { scoutId },
+      );
+      startupId = startupRecord.id;
+      startupRecord = await this.startupService.submit(startupId, scoutId);
+    }
 
     const [submission] = await this.drizzle.db
       .insert(scoutSubmission)
       .values({
         scoutId,
-        startupId: createdStartup.id,
+        startupId,
         investorId: dto.investorId,
         commissionRate: DEFAULT_COMMISSION_RATE,
         notes: dto.notes || null,
       })
       .returning();
 
-    const submittedStartup = await this.startupService.submit(
-      createdStartup.id,
-      scoutId,
-    );
-
     await this.notification.create(
       dto.investorId,
       'New Scout Referral',
-      `Scout has submitted ${dto.startupData.name} for your review`,
+      `Scout has submitted ${normalizedStartup.name} for your review`,
       NotificationType.INFO,
       `/investor/submissions/${submission.id}`,
     );
 
     this.logger.log(
-      `Scout ${scoutId} submitted startup ${createdStartup.id} to investor ${dto.investorId}`,
+      `Scout ${scoutId} submitted startup ${startupId} to investor ${dto.investorId}${duplicate ? ' (linked existing startup)' : ''}`,
     );
 
-    return { startup: submittedStartup, submission };
+    return { startup: startupRecord, submission };
   }
 
   async findAll(

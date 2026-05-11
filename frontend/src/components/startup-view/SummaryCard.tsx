@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ConfidenceBadge } from "@/components/ConfidenceBadge";
@@ -9,7 +9,8 @@ import {
   AlertTriangle,
   ChevronRight,
   BarChart3,
-  Lightbulb
+  Lightbulb,
+  Sparkles,
 } from "lucide-react";
 import type { Startup } from "@/types/startup";
 import type { Evaluation } from "@/types/evaluation";
@@ -23,6 +24,11 @@ import {
 } from "@/lib/evaluation-display";
 import { extractKpiMetrics } from "@/lib/kpi-metrics";
 import { KpiGrid } from "@/components/startup-view/KpiGrid";
+import { useScreeningOutput } from "@/lib/screening/useScreeningOutput";
+import {
+  collectScreeningFollowUpSeeds,
+  getScreeningEvidencePreview,
+} from "@/lib/screening/screening-evidence";
 
 interface InvestorMemo {
   dealHighlights?: string[];
@@ -67,6 +73,15 @@ export function SummaryCard({
   showStrengthsAndRisks = true,
 }: SummaryCardProps) {
   const [animateBars, setAnimateBars] = useState(false);
+  const screeningOutput = useScreeningOutput(startup.id);
+  const screeningEvidence = useMemo(
+    () => getScreeningEvidencePreview(screeningOutput.data, 3),
+    [screeningOutput.data],
+  );
+  const screeningFollowUps = useMemo(
+    () => collectScreeningFollowUpSeeds(screeningOutput.data),
+    [screeningOutput.data],
+  );
   const overallScore = getDisplayOverallScore(evaluation, startup.overallScore);
   const percentileRank = getDisplayPercentileRank(evaluation, startup.percentileRank);
   const strengths = getDisplayStrengths(evaluation);
@@ -202,7 +217,7 @@ export function SummaryCard({
                     <span className="text-xs w-28 shrink-0" data-testid={`text-section-name-${sectionId}`}>{section.name}</span>
                     <span className="text-xs text-muted-foreground w-8 shrink-0 text-right" data-testid={`text-section-weight-${sectionId}`}>{section.weight}</span>
                     <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden min-w-0">
-                      <div 
+                      <div
                         className={`h-full rounded-full transition-[width] duration-700 ease-out ${getSectionBarClass(section.name, sectionScore)}`}
                         style={{
                           width: animateBars ? `${sectionScore}%` : "0%",
@@ -215,6 +230,92 @@ export function SummaryCard({
                 );
               })}
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {screeningEvidence.length > 0 && (
+        <Card data-testid="card-screening-evidence">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-violet-500" />
+              <span>Screening Evidence Seeds</span>
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Claim-level evidence lifted from screening so the memo starts from the same first-pass facts.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-3" data-testid="list-screening-evidence">
+              {screeningEvidence.map((item, index) => (
+                <li key={`${item.lensKey}-${index}`} className="rounded-lg border border-border/60 bg-muted/20 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <p className="text-sm font-medium text-foreground" data-testid="text-screening-evidence-claim">
+                        {item.claim}
+                      </p>
+                      <div className="flex flex-wrap gap-1.5 text-[11px] text-muted-foreground">
+                        <Badge variant="outline" className="text-[10px]">
+                          Lens: {item.lensLabel}
+                        </Badge>
+                        <Badge variant="outline" className="text-[10px]">
+                          Confidence: {item.confidence}
+                        </Badge>
+                        <Badge variant="outline" className="text-[10px]">
+                          Signal: {item.signal}
+                        </Badge>
+                      </div>
+                      {item.source && (
+                        <p className="text-xs text-muted-foreground break-all">
+                          Source: {item.source.startsWith("http") ? (
+                            <a href={item.source} target="_blank" rel="noopener noreferrer" className="text-violet-600 hover:underline">
+                              {item.source}
+                            </a>
+                          ) : (
+                            item.source
+                          )}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {screeningFollowUps.length > 0 && (
+        <Card data-testid="card-screening-follow-ups">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-500" />
+              <span data-testid="text-screening-follow-ups-title">Screening Open Issues</span>
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Screening gaps and blockers that should carry into diligence alongside the memo-generated questions.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-3" data-testid="list-screening-follow-ups">
+              {screeningFollowUps.map((item) => (
+                <li key={item.key} className="rounded-lg border border-border/60 bg-muted/20 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <p className="text-sm font-medium text-foreground" data-testid="text-screening-follow-up-label">
+                        {item.label}
+                      </p>
+                      <p className="text-xs text-muted-foreground" data-testid="text-screening-follow-up-summary">
+                        {item.summary}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
+                      {item.source === "triage-decision" ? "Decision" : "Output"}
+                    </Badge>
+                  </div>
+                </li>
+              ))}
+            </ul>
           </CardContent>
         </Card>
       )}

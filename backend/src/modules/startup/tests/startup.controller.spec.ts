@@ -209,7 +209,12 @@ describe('StartupController', () => {
       const result = await controller.update(mockUser, mockStartup.id, dto);
 
       expect(result).toEqual(updated);
-      expect(startupService.update).toHaveBeenCalledWith(mockStartup.id, mockUser.id, dto);
+      expect(startupService.update).toHaveBeenCalledWith(
+        mockStartup.id,
+        mockUser.id,
+        dto,
+        mockUser.role,
+      );
     });
   });
 

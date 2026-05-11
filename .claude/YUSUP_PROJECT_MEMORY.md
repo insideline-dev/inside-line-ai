@@ -325,3 +325,110 @@ Pasted into the PR body so it's reviewable there. Short version:
 2. Trigger a screening rerun on Path Robotics (`51c16a55-70d8-4fdb-9de2-88d9a7fc0602`).
 3. In Drizzle Studio, confirm `startup_lens_result.lens_version = '1'` (3 rows) and `screening_decision.lens_versions = {"market":"1","team":"1","traction":"1"}`.
 4. Optional: write a `TeamLensV2` placeholder per the workflow above, set `LENS_ACTIVE_VERSION_TEAM=2`, rerun, confirm the team row now reads `lens_version='2'`. Flip back to `'1'`, confirm the next run reverts.
+
+### DS-E7-F2-S1 — Evidence gate v2: tunable confidence floor (issue #7, stacked on #17)
+
+**What changed and why.** Policy v3 already short-circuits an `advance` lens
+into `review` when its evidence is thin (count rule + at-least-one-`high`
+guard). It works, but it's binary — borderline-confidence advances still slip
+through and funds have no A/B knob. This story bumps the triage policy to v4
+and adds a second, *independent* guard: a weighted evidence-confidence floor.
+
+- `POLICY_VERSION 3 → 4`, snapshot test enforces the new tuple.
+- `EVIDENCE_CONFIDENCE_WEIGHTS = { high: 1.0, medium: 0.5, low: 0.2 }`
+  exported as the canonical weighted-confidence formula. A lens's
+  `evidenceConfidence` is `sum(weights) / count` — empty evidence array
+  returns 0 (still a strong "no confidence" signal); a missing evidence
+  array returns null (caller-skip — keeps v1 backward compatibility).
+- `ADVANCE_CONFIDENCE_FLOOR = 0.6` default in `POLICY_SNAPSHOT`. A lens
+  with `signal === 'advance'` whose weighted confidence falls below the
+  floor is downgraded to `review` with reason
+  `lens.<key>.low_confidence_evidence`. The 0.6 cutoff ≈ "majority
+  medium-or-better with at least one strong claim" — a `[high, medium]`
+  pair just clears it (0.75) while `[medium, medium]` falls below (0.5).
+- Env override `SCREENING_ADVANCE_CONFIDENCE_FLOOR` added to
+  `env.schema.ts` (Zod `z.coerce.number().min(0).max(1).default(0.6)`).
+  `ScreeningTriageService` reads it **once** at construction via
+  `ConfigService` and threads it through `applyTriagePolicy()` as an
+  options arg — the pure function stays pure, the service is the only
+  config-aware boundary.
+- New reason code: `lens.<key>.low_confidence_evidence`. Surfaces through
+  the existing `ScreeningOutputV1.handoff.openIssues` list without a
+  contract bump — both backend (`screening-output.service.ts`) and
+  frontend (`lib/screening/reason-codes.ts`, `screening-evidence.ts`)
+  pattern-match it as a new lens-suffix alongside `reject|review|low_evidence`.
+
+**Ordering choice (the load-bearing decision).** The existing v3 evidence
+pre-pass mutates `lens.signal` from `advance` to `review`. If the new
+confidence-floor check ran after that mutation, it'd silently skip every
+already-downgraded lens — a lens that trips BOTH guards would only ever emit
+`low_evidence`. To make the two guards independent (per AC: "count *and*
+floor; either trips a downgrade"), both checks now run against the **original
+`lens.signal === 'advance'`** inside a single map step, collect their offending
+keys separately, and apply the downgrade only after both have answered. The
+result: a lens with one low-confidence item lands BOTH
+`lens.<key>.low_evidence` AND `lens.<key>.low_confidence_evidence` in
+`reason_codes`, exactly as the acceptance criteria specify.
+
+**Lens-version pinning verified.** PR #17 already wired
+`screening_decision.lens_versions` jsonb through `decide()`. I added an
+explicit test that the column is populated on the row insert, so policy v4
+can't silently re-evaluate against the wrong lens version.
+
+**Files touched.**
+- `backend/src/config/env.schema.ts` (new env var).
+- `backend/src/modules/ai/screening/triage/screening-triage.service.ts`
+  (v4 policy + ConfigService injection + new helpers
+  `computeEvidenceConfidenceScore`, `hasLowConfidenceEvidence`).
+- `backend/src/modules/ai/screening/triage/tests/screening-triage.service.spec.ts`
+  (snapshot tuple update + 9 new tests covering: weighted formula,
+  default-floor advance, default-floor downgrade, dual-trigger, raised-floor
+  override, env-driven override, fall-back default, `lens_versions`
+  persistence). Two existing tests updated to reflect the dual-trigger
+  semantic.
+- `backend/src/modules/ai/screening/triage/tests/screening-triage.controller.spec.ts`
+  (`buildDecision` fixture gains `lensVersions` to match the v4 row shape).
+- `backend/src/modules/ai/contracts/screening-output/screening-output.service.ts`
+  (reason-code label/summary builders learn `low_confidence_evidence`).
+- `backend/src/modules/ai/contracts/screening-output/tests/screening-output.service.spec.ts`
+  (new test asserts the reason code surfaces in `handoff.openIssues`).
+- `backend/src/modules/ai/tests/processors/screening.processor.spec.ts`
+  (mock decide() now returns `policyVersion: 4`).
+- `frontend/src/lib/screening/reason-codes.ts` (new label entries +
+  pattern alt).
+- `frontend/src/lib/screening/screening-evidence.ts` (label/summary
+  builders learn `low_confidence_evidence`).
+- `frontend/src/lib/screening/screening-evidence.test.ts` (new render test).
+
+**No migration.** This story consumes `screening_decision.lens_versions`
+from #17's 0017_icy_talos.sql; nothing new on the DB layer.
+
+**Test counts.** Backend: baseline 32 screening + 20 processor tests →
+post-change 42 screening + 20 processor tests + new contract test in
+screening-output. Frontend: baseline 8 screening tests → 9.
+`bunx tsc --noEmit` and `bun lint` clean on both sides. Pre-existing
+backend-wide failures (auth/Clara/synthesis-agent) are unchanged.
+
+**Manual verification (the acceptance criteria's reproducible proof).**
+1. `bun dev`. Default floor (no env override). Trigger a screening rerun
+   on Path Robotics. Decision row classification = `advance`, reason
+   codes = []. Confirm `policy_version = 4` and
+   `lens_versions = {"market":"1","team":"1","traction":"1"}` in Drizzle
+   Studio.
+2. Stop backend, set `SCREENING_ADVANCE_CONFIDENCE_FLOOR=0.9` in
+   `backend/.env`, restart. Trigger rerun again. Decision row
+   classification flips to `review`; reason codes contain at least one
+   `lens.<key>.low_confidence_evidence`. Pipeline Live screening card on
+   the admin startup view renders the new copy ("evidence too weak").
+3. Unset the env var, restart, rerun → back to `advance`.
+
+**Follow-ups for later stories.**
+- DS-E7-F1-S1 (deferred) will introduce per-stage thresholds. The
+  `applyTriagePolicy` options arg is the right place to thread that in —
+  current signature is forward-compatible.
+- DS-E11 will likely auto-tune the floor from calibration data. The env
+  override is the deployment surface; the calibration learner can publish
+  a new value there without touching the policy file.
+- The `MIN_ADVANCE_EVIDENCE_COUNT` constant is still hard-coded at 2 — if
+  funds want to A/B count vs. floor, hoisting that to the env layer is a
+  one-line follow-up that mirrors this story's pattern.

@@ -11,3 +11,4 @@ export * from "./ai-agent-config.dto";
 export * from "./quick-create-startup.dto";
 export * from "./pipeline-flow-config.dto";
 export * from "./calibration.dto";
+export * from "./bulk-upload.dto";

@@ -40,6 +40,7 @@ import { QueueManagementService } from './queue-management.service';
 import { IntegrationHealthService } from './integration-health.service';
 import { SystemConfigService } from './system-config.service';
 import { BulkDataService } from './bulk-data.service';
+import { BulkStartupIntakeService } from './bulk-startup-intake.service';
 import { AdminMatchingService } from './admin-matching.service';
 import { AdminScreeningService } from './admin-screening.service';
 import { AdminInvestorService } from './admin-investor.service';
@@ -83,6 +84,7 @@ import {
   PipelineFlowConfigListResponseDto,
   CalibrationSnapshotResponseDto,
   RecomputeCalibrationResponseDto,
+  BulkUploadResponseDto,
 } from './dto';
 import { GetStartupsQueryDto } from '../startup/dto';
 
@@ -112,6 +114,7 @@ export class AdminController {
     private integrationHealthService: IntegrationHealthService,
     private systemConfigService: SystemConfigService,
     private bulkDataService: BulkDataService,
+    private bulkStartupIntakeService: BulkStartupIntakeService,
     private adminMatchingService: AdminMatchingService,
     private adminScreeningService: AdminScreeningService,
     private aiPromptService: AiPromptService,
@@ -276,6 +279,40 @@ export class AdminController {
       adminUserId: admin.id,
       ...dto,
     });
+  }
+
+  @Post('startups/bulk-upload')
+  @ApiOperation({
+    summary:
+      'Bulk-upload a CSV of cohort startups (up to 100 rows, 1MB). Each row enters the intake pipeline.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Bulk upload summary with per-row results',
+    type: BulkUploadResponseDto,
+  })
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 1 * 1024 * 1024 } }),
+  )
+  async bulkUploadStartups(
+    @CurrentUser() admin: User,
+    @UploadedFile()
+    file: { buffer: Buffer; mimetype: string; originalname: string } | undefined,
+  ): Promise<BulkUploadResponseDto> {
+    if (!file) {
+      throw new BadRequestException('CSV file is required');
+    }
+    if (
+      !file.mimetype.includes('csv') &&
+      !file.originalname.toLowerCase().endsWith('.csv')
+    ) {
+      throw new BadRequestException('File must be a CSV');
+    }
+    const summary = await this.bulkStartupIntakeService.processCsv(
+      admin.id,
+      file.buffer,
+    );
+    return summary as BulkUploadResponseDto;
   }
 
   @Post('startups/:id/approve')

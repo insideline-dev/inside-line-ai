@@ -1,0 +1,6 @@
+company,website,founder_name,founder_email,deck_url,stage,funding_target
+Helios Labs,https://heliosbio.example,Alice Chen,alice@heliosbio.example,https://decks.example/helios.pdf,seed,1500000
+Quanta Voltage,https://quantavolt.example,Bob Singh,bob@quantavolt.example,,pre_seed,750000
+Path Robotics,https://pathrobotics.com,Carla Diaz,carla@pathrobotics.com,https://decks.example/path.pdf,series_a,15000000
+Maple Capital Notes,https://maplecap.example,Dan Park,,,seed,500000
+Northwind Health,https://northwindhealth.example,Eva Reed,eva@northwindhealth.example,https://decks.example/northwind.pdf,seed,2000000

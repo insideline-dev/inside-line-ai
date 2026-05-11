@@ -271,3 +271,57 @@ It should be updated after meaningful work so context accumulates inside the rep
 - Re-run the real reply flow and confirm `teamMembers` persists on the startup row after the email reply.
 - Then continue backlog mapping / progress writing for A1 Deal Screening.
 - After each meaningful milestone, append here.
+
+## 2026-05-11
+
+### DS-E2-F1-S2 — Versioned + hot-swappable lens workers (issue #8)
+
+**What changed and why.** The three screening lenses (`market`, `team`, `traction`) were singletons keyed by lens name only. Replacing a placeholder prompt required a code redeploy and silently invalidated historical decisions, because the persisted `startup_lens_result` row could be re-interpreted against the prompt-of-the-day. This story makes lens versions first-class:
+
+- Each lens class carries `version: string` (currently `"1"`).
+- `LensRegistryService` holds a `Map<"<key>@<version>", BaseLensAgent>` keyed pair, with `getActiveVersion(key)` reading `LENS_ACTIVE_VERSION_<KEY>` (env) and falling back to the highest registered version (numeric-aware compare).
+- `run('team@2', ctx)` targets an explicit version; `run('team', ctx)` and `runAll(ctx)` always go through the active version.
+- `asTools()` re-resolves the active version on every `execute()` call so a hot-swap doesn't require rebuilding the tool surface. Tool names stay `lens_team` / `lens_market` / `lens_traction` (no `@`) because the Vercel AI SDK tool-name regex doesn't allow it.
+- Lens registration moved to a multi-provider DI token `LENSES_REGISTRY_TOKEN` so adding a `TeamLensV2` is a two-line edit in `lenses.module.ts` instead of changing the registry constructor.
+- Prompt catalog entries gained optional `versions: Record<string, {systemPrompt, userPrompt}>` + `activeVersion`. `AiPromptService.resolve({ key, version? })` reads from `versions[version]` when supplied, else `versions[activeVersion]`, else falls back to the legacy flat `defaultSystemPrompt` / `defaultUserPrompt` pair.
+- `ResolvedPrompt` gained `version: string | null`. `LensRunResult` gained `lensVersion` + `promptVersion`. The screening processor writes both onto `startup_lens_result` and aggregates `{ market, team, traction } → version` into `screening_decision.lens_versions`.
+- New Drizzle migration (`drizzle/0017_icy_talos.sql`): `startup_lens_result.lens_version text not null default '1'`, `startup_lens_result.prompt_version text not null default '1'`, `screening_decision.lens_versions jsonb not null default '{}'::jsonb`. DATABASE_URL points to Neon — I generated the migration but did **not** run `bun db:push`; Yusuf needs to apply it.
+
+**Files touched.**
+- `backend/src/modules/ai/lenses/base-lens.agent.ts` (version field; LensRunResult shape; runtime threading of versions)
+- `backend/src/modules/ai/lenses/lens-registry.service.ts` (full rewrite for versioned routing + DI token)
+- `backend/src/modules/ai/lenses/lenses.module.ts` (multi-provider token wiring)
+- `backend/src/modules/ai/lenses/{market,team,traction}.lens.ts` (explicit `version = "1"`)
+- `backend/src/modules/ai/lenses/tests/lens-registry.service.spec.ts` (versioning coverage)
+- `backend/src/modules/ai/services/ai-prompt-catalog.ts` (PromptCatalogEntry.versions; lens entries populated for v1)
+- `backend/src/modules/ai/services/ai-prompt.service.ts` (resolve accepts version; version surfaces on ResolvedPrompt)
+- `backend/src/modules/ai/processors/screening.processor.ts` (persist lens_version + prompt_version; aggregate lensVersions into triage decide call)
+- `backend/src/modules/ai/screening/triage/screening-triage.service.ts` (decide() accepts lensVersions; persists into screening_decision; ScreeningDecisionSchema gains lensVersions)
+- `backend/src/modules/ai/entities/lens-result.schema.ts` (new columns)
+- `backend/src/modules/ai/entities/screening-decision.schema.ts` (new column + type)
+- `backend/src/config/env.schema.ts` (`LENS_ACTIVE_VERSION_MARKET|_TEAM|_TRACTION`)
+- `backend/src/modules/ai/tests/processors/screening.processor.spec.ts` (persistence assertion)
+- `backend/src/modules/ai/tests/services/ai-prompt.service.spec.ts` (versioned resolve)
+- `backend/drizzle/0017_icy_talos.sql` (generated migration — apply with `bun db:push`)
+
+**Version-flip workflow (how a future story adds TeamLensV2 + new prompt + env flip).**
+1. Write `TeamLensV2` next to `TeamLens` — same shape, `readonly version = "2" as const`.
+2. Add `TeamLensV2` to the `providers` array AND the `inject` + `useFactory` arrays in `backend/src/modules/ai/lenses/lenses.module.ts`. That's the only registry-side change.
+3. Add a `"2": { systemPrompt: "...", userPrompt: "..." }` entry under `AI_PROMPT_CATALOG["lens.team"].versions` (keep the v1 entry intact so historical replay still works).
+4. Set `LENS_ACTIVE_VERSION_TEAM=2` in `.env` (or just bump `activeVersion: "2"` in the catalog as the code default).
+5. Reload (no full redeploy required — `bun dev` hot-reload reads the env). Next `runAll()` produces `lens_version='2'` rows; tool-callers using `lens_team` route to v2 automatically.
+6. Roll back: unset the env var or set it to `"1"`. Historical rows from the v2 window keep their `lens_version='2'` audit trail.
+
+**`LENS_FALLBACK_RATIONALE_PREFIX` stays untouched** — it's an explicit downstream contract called out as a stable surface in `base-lens.agent.ts` line 18-20. The lens fallback path also threads `lensVersion`/`promptVersion` through so even synthetic fallback rows are version-tagged.
+
+**Surprising things found.**
+- The placeholder library files at `backend/src/modules/ai/prompts/library/lens/team/{system,user}.md` are dead — they're under `library/lens/` but the path builder looks for `library/global/lens/` (or `library/stages/<stage>/lens/`). The catalog defaults win for lenses today. Not my problem for this story, but worth flagging next time someone touches lens prompts: either move the placeholder files into `library/global/lens/` or delete them.
+- DATABASE_URL points to a remote Neon database (not the docker-compose Postgres I expected from the issue notes). I generated the migration cleanly but did not push it — that's a manual step Yusuf must run after reviewing.
+- Pre-existing baseline test fails on `dev`: 101 failures (1850 pass). My branch is identical (101 failures, 1861 pass — I added 11 new passing tests). The failures are auth/Clara/synthesis-related and unrelated to lens versioning.
+
+### Manual verification checklist (since I can't run the stack here)
+Pasted into the PR body so it's reviewable there. Short version:
+1. `cd backend && bun db:push` (or `bun db:migrate`) to apply 0017_icy_talos.sql.
+2. Trigger a screening rerun on Path Robotics (`51c16a55-70d8-4fdb-9de2-88d9a7fc0602`).
+3. In Drizzle Studio, confirm `startup_lens_result.lens_version = '1'` (3 rows) and `screening_decision.lens_versions = {"market":"1","team":"1","traction":"1"}`.
+4. Optional: write a `TeamLensV2` placeholder per the workflow above, set `LENS_ACTIVE_VERSION_TEAM=2`, rerun, confirm the team row now reads `lens_version='2'`. Flip back to `'1'`, confirm the next run reverts.

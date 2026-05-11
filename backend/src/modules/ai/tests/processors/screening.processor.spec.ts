@@ -31,6 +31,12 @@ function buildScreeningResult() {
     },
     modelId: "gpt-5.4",
     promptKey: "team-lens",
+    // DS-E2-F1-S2 — every LensRunResult carries the version pair that
+    // produced it. Hard-coded to "1" here since the registry stub returns
+    // a single fixture; multi-version routing is covered by the lens
+    // registry spec.
+    lensVersion: "1",
+    promptVersion: "1",
     latencyMs: 1200,
     usedFallback: false,
     error: undefined,
@@ -237,6 +243,45 @@ describe("ScreeningProcessor", () => {
       expect.objectContaining({
         startupId: STARTUP_ID,
         type: "screening.completed",
+      }),
+    );
+  });
+
+  it("persists lens_version + prompt_version on the lens row and lensVersions on the decision (DS-E2-F1-S2)", async () => {
+    // Re-mock triage so the persisted-lensVersions path is exercised — the
+    // default beforeEach rejects to drive the contract-fallback branch.
+    const decideMock = jest.fn().mockResolvedValue({
+      classification: "advance" as const,
+      nextAction: "advance" as const,
+      overallScore: 82,
+      reasonCodes: [],
+      policyVersion: 3,
+    });
+    screeningTriage.decide = decideMock;
+
+    const insertValuesMock = jest.fn().mockResolvedValue(undefined);
+    const insertMock = jest.fn().mockReturnValue({ values: insertValuesMock });
+    drizzle.db = {
+      ...drizzle.db,
+      insert: insertMock,
+    } as unknown as typeof drizzle.db;
+
+    await processor.runScreening(STARTUP_ID, RUN_ID);
+
+    // Lens row carries lens_version + prompt_version.
+    expect(insertValuesMock).toHaveBeenCalledTimes(1);
+    expect(insertValuesMock.mock.calls[0][0]).toMatchObject({
+      lensKey: "team",
+      lensVersion: "1",
+      promptVersion: "1",
+    });
+
+    // Triage receives the aggregated lensVersions map for the
+    // screening_decision row.
+    expect(decideMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startupId: STARTUP_ID,
+        lensVersions: { team: "1" },
       }),
     );
   });

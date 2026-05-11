@@ -170,6 +170,13 @@ export const envSchema = z.object({
   // <3 min and 1-2 orders of magnitude cheaper than evaluation. Override per
   // env to swap providers without code changes (DS-E2-F1-S1 acceptance).
   SCREENING_LENS_MODEL: z.string().default("gpt-5.4-mini"),
+  // DS-E2-F1-S2 — per-lens active-version flips. Optional strings; when
+  // unset, `LensRegistryService.getActiveVersion()` picks the highest
+  // registered version. Changing these activates a different lens worker
+  // for `runAll()` without a code redeploy.
+  LENS_ACTIVE_VERSION_MARKET: z.string().optional(),
+  LENS_ACTIVE_VERSION_TEAM: z.string().optional(),
+  LENS_ACTIVE_VERSION_TRACTION: z.string().optional(),
   AI_ENRICHMENT_ENABLED: z.coerce.boolean().default(true),
   AI_SOURCE_SANITIZATION_ENABLED: z.coerce.boolean().default(true),
   LINKEDIN_AI_VERIFIER_ENABLED: z.coerce.boolean().default(true),

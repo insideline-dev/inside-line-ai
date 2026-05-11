@@ -65,6 +65,18 @@ export const AI_PROMPT_KEYS = [
 export type AiPromptKey = (typeof AI_PROMPT_KEYS)[number];
 export type AiPromptSurface = "pipeline" | "clara";
 
+/**
+ * Per-version prompt body. DS-E2-F1-S2 — adding a new version of a lens
+ * prompt means appending a new `{ systemPrompt, userPrompt }` entry under the
+ * catalog's `versions` map and bumping `activeVersion`. The active flip is
+ * env-driven via `LENS_ACTIVE_VERSION_<KEY>` so no code redeploy is required
+ * to change the live version (see `AiPromptService.resolve()`).
+ */
+export interface PromptCatalogVersion {
+  systemPrompt: string;
+  userPrompt: string;
+}
+
 export interface PromptCatalogEntry {
   key: AiPromptKey;
   displayName: string;
@@ -74,6 +86,20 @@ export interface PromptCatalogEntry {
   defaultUserPrompt: string;
   allowedVariables: string[];
   requiredVariables: string[];
+  /**
+   * Optional version map. When present, `AiPromptService.resolve({ key,
+   * version })` returns the body keyed by `version`. When absent (the common
+   * case for non-versioned prompts), `defaultSystemPrompt` /
+   * `defaultUserPrompt` are used. DS-E2-F1-S2.
+   */
+  versions?: Record<string, PromptCatalogVersion>;
+  /**
+   * Active version for this entry. Required when `versions` is set; ignored
+   * otherwise. Acts as the code-default; the env flag
+   * `LENS_ACTIVE_VERSION_<KEY>` overrides at runtime for lens entries via
+   * `LensRegistryService.getActiveVersion()`. DS-E2-F1-S2.
+   */
+  activeVersion?: string;
 }
 
 export interface PromptVariableDefinition {
@@ -1572,6 +1598,19 @@ export const AI_PROMPT_CATALOG: Record<AiPromptKey, PromptCatalogEntry> = {
     ].join("\n"),
     allowedVariables: ["startupName", "sector", "stage", "startupDescription", "contextNotes"],
     requiredVariables: ["startupName"],
+    activeVersion: "1",
+    versions: {
+      "1": {
+        systemPrompt: "You are the Market Lens. Output structured LensOutput only.",
+        userPrompt: [
+          "Screen the market for {{startupName}}.",
+          "Sector: {{sector}}",
+          "Stage: {{stage}}",
+          "Description: {{startupDescription}}",
+          "Context notes: {{contextNotes}}",
+        ].join("\n"),
+      },
+    },
   },
   "lens.team": {
     key: "lens.team",
@@ -1588,6 +1627,19 @@ export const AI_PROMPT_CATALOG: Record<AiPromptKey, PromptCatalogEntry> = {
     ].join("\n"),
     allowedVariables: ["startupName", "sector", "stage", "startupDescription", "contextNotes"],
     requiredVariables: ["startupName"],
+    activeVersion: "1",
+    versions: {
+      "1": {
+        systemPrompt: "You are the Team Lens. Output structured LensOutput only.",
+        userPrompt: [
+          "Screen the team for {{startupName}}.",
+          "Sector: {{sector}}",
+          "Stage: {{stage}}",
+          "Description: {{startupDescription}}",
+          "Context notes: {{contextNotes}}",
+        ].join("\n"),
+      },
+    },
   },
   "lens.traction": {
     key: "lens.traction",
@@ -1604,6 +1656,19 @@ export const AI_PROMPT_CATALOG: Record<AiPromptKey, PromptCatalogEntry> = {
     ].join("\n"),
     allowedVariables: ["startupName", "sector", "stage", "startupDescription", "contextNotes"],
     requiredVariables: ["startupName"],
+    activeVersion: "1",
+    versions: {
+      "1": {
+        systemPrompt: "You are the Traction Lens. Output structured LensOutput only.",
+        userPrompt: [
+          "Screen traction for {{startupName}}.",
+          "Sector: {{sector}}",
+          "Stage: {{stage}}",
+          "Description: {{startupDescription}}",
+          "Context notes: {{contextNotes}}",
+        ].join("\n"),
+      },
+    },
   },
 };
 

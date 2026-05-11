@@ -321,6 +321,36 @@ describe("ScreeningOutputService", () => {
     expect(out.overall.score).toBe(88);
   });
 
+  // DS-E7-F2-S1 v4 — confidence-floor reason code surfaces through the
+  // public ScreeningOutputV1 contract's handoff.openIssues list.
+  it("renders low_confidence_evidence follow-up issues from triage decisions", async () => {
+    const rows = [
+      row({ lensKey: "market", score: 82, signal: "advance" }),
+      row({ lensKey: "team", score: 76, signal: "advance" }),
+    ];
+    const decisionRows = [
+      {
+        classification: "review",
+        overallScore: 79,
+        reasonCodes: ["lens.market.low_confidence_evidence"],
+      },
+    ];
+    const { service } = await buildService(rows, [FULLY_RESOURCED], decisionRows);
+
+    const out = await service.buildForStartup(STARTUP_ID, RUN_ID);
+
+    expect(out.overall.signal).toBe("review");
+    expect(out.handoff.openIssues).toEqual([
+      expect.objectContaining({
+        key: "decision:lens.market.low_confidence_evidence",
+        label: "Market needs stronger evidence",
+        summary:
+          "Market evidence is below the confidence floor — DD needs stronger-sourced claims before this advances.",
+        source: "triage-decision",
+      }),
+    ]);
+  });
+
   it("renders dealbreaker follow-up issues from triage decisions", async () => {
     const rows = [
       row({ lensKey: "market", score: 82, signal: "advance" }),

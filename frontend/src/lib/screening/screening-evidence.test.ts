@@ -213,4 +213,33 @@ describe("screening evidence helpers", () => {
       }),
     ]);
   });
+
+  // DS-E7-F2-S1 v4 — confidence-floor reason code renders through the same
+  // helper without a contract bump.
+  it("renders the low_confidence_evidence reason code with v4 copy", () => {
+    const decision: TriageDecision = {
+      ...triageDecision,
+      reasonCodes: ["lens.market.low_confidence_evidence"],
+    };
+
+    expect(collectScreeningFollowUpSeeds(legacyScreeningOutput, decision)).toEqual([
+      expect.objectContaining({
+        key: "missing:deck",
+        label: "Pitch deck",
+        source: "screening-output",
+      }),
+      expect.objectContaining({
+        key: "missing:team",
+        label: "Team info",
+        source: "screening-output",
+      }),
+      expect.objectContaining({
+        key: "decision:lens.market.low_confidence_evidence",
+        label: "Market needs stronger evidence",
+        summary:
+          "Market evidence is below the confidence floor — DD needs stronger-sourced claims before this advances.",
+        source: "triage-decision",
+      }),
+    ]);
+  });
 });

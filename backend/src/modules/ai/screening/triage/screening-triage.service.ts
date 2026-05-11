@@ -1,7 +1,9 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { DrizzleService } from "../../../../database";
+import type { Env } from "../../../../config/env.schema";
 import {
   screeningDecision,
   type ScreeningDecisionLensSnapshot,
@@ -23,15 +25,24 @@ import {
 } from "../../contracts/screening-output/missing-materials";
 
 /**
- * Triage policy v2 — deliberately simple, transparent, and pluggable.
+ * Triage policy v4 — deliberately simple, transparent, and pluggable.
  *
- *   PRE-PASS — applied to each lens before the main pipeline:
- *     a. If a lens has signal === 'advance' but its evidence is thin
- *        (DS-E7-F2-S1: no auto-advance without evidence), it is
- *        *downgraded* to signal === 'review' for the purposes of triage.
+ *   PRE-PASS — applied to each lens before the main pipeline. Both checks
+ *   run on the ORIGINAL, unmodified lens signals so a lens that trips both
+ *   the count rule AND the confidence rule emits both reason codes. The
+ *   downgrades are applied after both checks resolve.
+ *     a. **Evidence count** (DS-E7-F2-S1 v3): if a lens has
+ *        signal === 'advance' and its evidence is thin
+ *        (`evidenceCount < MIN_ADVANCE_EVIDENCE_COUNT` OR no item has
+ *        `confidence === 'high'`), it is downgraded to 'review'.
  *        Reason code `lens.<key>.low_evidence` is recorded.
- *        Thin = `evidenceCount < MIN_ADVANCE_EVIDENCE_COUNT` OR no
- *        evidence item has `confidence === 'high'`.
+ *     b. **Confidence floor** (DS-E7-F2-S1 v4): if a lens has
+ *        signal === 'advance' and its weighted evidence-confidence score
+ *        (sum of per-item weights / count) falls below
+ *        `ADVANCE_CONFIDENCE_FLOOR`, it is downgraded to 'review'.
+ *        Reason code `lens.<key>.low_confidence_evidence` is recorded.
+ *        Weights: `high=1.0`, `medium=0.5`, `low=0.2`. The floor is a
+ *        tunable knob — see `SCREENING_ADVANCE_CONFIDENCE_FLOOR` env var.
  *
  *   MAIN PASS — operates on the (possibly-downgraded) lens signals:
  *     1. If a structured dealbreaker matches the startup → 'reject'
@@ -59,12 +70,33 @@ import {
  * obvious — investors should be able to read the docstring above and predict
  * the output.
  *
- * Versioning: bumped 1 → 3 with the addition of the evidence pre-pass,
- * thesis-scope short-circuit, and backend-owned dealbreaker enforcement.
+ * Versioning:
+ *  - v1 → v3: evidence pre-pass + thesis-scope short-circuit +
+ *    backend-owned dealbreaker enforcement.
+ *  - v3 → v4 (DS-E7-F2-S1): tunable evidence-confidence floor + canonical
+ *    weighted-confidence formula; reason code `lens.<key>.low_confidence_evidence`
+ *    introduced as a sibling of `lens.<key>.low_evidence`.
+ *
  * Older `screening_decision` rows remain interpretable via their
  * `policyVersion` column.
  */
-export const POLICY_VERSION = 3 as const;
+export const POLICY_VERSION = 4 as const;
+
+/**
+ * Per-confidence-tier weights used by the evidence-confidence floor check.
+ * Exported so tests and admin tooling can reuse the canonical formula.
+ *
+ * Rationale (DS-E7-F2-S1): high = "directly observed, independently sourced",
+ * medium = "second-hand or partially attested", low = "self-reported,
+ * unverified". A medium-only lens earns 0.5 — just below the default floor of
+ * 0.6 so the gate downgrades it without further tuning. A mixed lens with at
+ * least one `high` per medium pulls back above the floor.
+ */
+export const EVIDENCE_CONFIDENCE_WEIGHTS = {
+  high: 1.0,
+  medium: 0.5,
+  low: 0.2,
+} as const satisfies Record<"low" | "medium" | "high", number>;
 
 /**
  * Snapshot of every constant that participates in the triage decision.
@@ -78,6 +110,14 @@ export const POLICY_SNAPSHOT = {
   ADVANCE_SCORE_THRESHOLD: 60,
   OUT_OF_SCOPE_THESIS_THRESHOLD: 30,
   MIN_ADVANCE_EVIDENCE_COUNT: 2,
+  /**
+   * Default weighted-evidence-confidence score below which an `advance`
+   * lens gets downgraded to `review`. Tunable via
+   * `SCREENING_ADVANCE_CONFIDENCE_FLOOR` env var; the value here is the
+   * documented fallback.
+   */
+  ADVANCE_CONFIDENCE_FLOOR: 0.6,
+  EVIDENCE_CONFIDENCE_WEIGHTS,
 } as const;
 
 const {
@@ -86,6 +126,9 @@ const {
   OUT_OF_SCOPE_THESIS_THRESHOLD,
   MIN_ADVANCE_EVIDENCE_COUNT,
 } = POLICY_SNAPSHOT;
+
+const DEFAULT_ADVANCE_CONFIDENCE_FLOOR =
+  POLICY_SNAPSHOT.ADVANCE_CONFIDENCE_FLOOR;
 
 export const TriageLensSignalSchema = ScreeningSignalSchema;
 export type TriageLensSignal = ScreeningSignal;
@@ -249,9 +292,10 @@ interface CanonicalTriageOutcome {
 }
 
 /**
- * Returns true when the lens's evidence is too thin to justify an `advance`
- * verdict. A lens with no `evidence` array supplied is trusted as-is (the
- * evidence gate is opt-in for callers that have evidence info).
+ * Returns true when the lens's evidence is too thin (by count + at-least-one-
+ * high-confidence rule) to justify an `advance` verdict. A lens with no
+ * `evidence` array supplied is trusted as-is (the evidence gate is opt-in for
+ * callers that have evidence info).
  */
 function hasThinEvidence(lens: TriageLensInput): boolean {
   if (!lens.evidence) return false;
@@ -261,16 +305,60 @@ function hasThinEvidence(lens: TriageLensInput): boolean {
 }
 
 /**
+ * Computes the weighted evidence-confidence score for a lens — `sum(weights) /
+ * count`, where each item's weight comes from `EVIDENCE_CONFIDENCE_WEIGHTS`.
+ * Returns `null` when the lens supplied no evidence array (caller decides what
+ * to do; the floor gate treats null as "skip this check"). Returns `0` when
+ * the array is empty, since "zero items" is itself a strong "no confidence"
+ * signal.
+ */
+export function computeEvidenceConfidenceScore(
+  lens: TriageLensInput,
+): number | null {
+  if (!lens.evidence) return null;
+  if (lens.evidence.length === 0) return 0;
+  const sum = lens.evidence.reduce(
+    (acc, item) => acc + EVIDENCE_CONFIDENCE_WEIGHTS[item.confidence],
+    0,
+  );
+  return sum / lens.evidence.length;
+}
+
+/**
+ * Returns true when an `advance` lens fails the weighted-confidence floor
+ * (DS-E7-F2-S1 v4). Lenses with no evidence array are trusted as-is so
+ * pre-evidence callers stay backward-compatible.
+ */
+function hasLowConfidenceEvidence(
+  lens: TriageLensInput,
+  floor: number,
+): boolean {
+  const score = computeEvidenceConfidenceScore(lens);
+  if (score === null) return false;
+  return score < floor;
+}
+
+/**
  * Pure triage policy — no I/O. Exported so unit tests and dry-runs can
  * exercise the formula without touching the DB.
  *
- * `thesisFitScore` (DS-E4-F1-S1) is optional. When supplied below the
- * out-of-scope threshold, the function short-circuits to a hard reject
- * regardless of lens signals.
+ *  - `thesisFitScore` (DS-E4-F1-S1) is optional; below
+ *    `OUT_OF_SCOPE_THESIS_THRESHOLD` short-circuits to reject.
+ *  - `advanceConfidenceFloor` (DS-E7-F2-S1 v4) is the per-lens weighted
+ *    evidence-confidence cutoff. Defaults to
+ *    `POLICY_SNAPSHOT.ADVANCE_CONFIDENCE_FLOOR`. Pass an explicit value to
+ *    A/B stricter or looser triage without touching the constant — the
+ *    `ScreeningTriageService` reads
+ *    `SCREENING_ADVANCE_CONFIDENCE_FLOOR` once at construction and threads
+ *    it through here.
  */
 export function applyTriagePolicy(
   lenses: TriageLensInput[],
-  options?: { thesisFitScore?: number | null; dealbreakerReasonCodes?: readonly string[] },
+  options?: {
+    thesisFitScore?: number | null;
+    dealbreakerReasonCodes?: readonly string[];
+    advanceConfidenceFloor?: number;
+  },
 ): TriageOutcome {
   const overallScore =
     lenses.length === 0
@@ -314,15 +402,21 @@ export function applyTriagePolicy(
     };
   }
 
-  // DS-E7-F2-S1 — evidence pre-pass. Any lens that says "advance" without
-  // enough or strong-enough evidence gets quietly downgraded to "review"
-  // before the main pipeline runs. This preserves auditability (the
-  // original lens row still shows signal=advance) while preventing the
-  // triage decision from auto-advancing on confident-but-empty output.
+  // DS-E7-F2-S1 — evidence pre-pass. Two parallel checks operate on the
+  // ORIGINAL `signal` (NOT the post-downgrade value) so a lens that trips
+  // BOTH the count rule and the confidence-floor rule emits BOTH reason
+  // codes. Apply the downgrade only after both checks resolve.
+  const floor =
+    options?.advanceConfidenceFloor ?? DEFAULT_ADVANCE_CONFIDENCE_FLOOR;
   const lowEvidenceKeys: string[] = [];
+  const lowConfidenceKeys: string[] = [];
   const effectiveLenses = lenses.map((lens) => {
-    if (lens.signal === "advance" && hasThinEvidence(lens)) {
-      lowEvidenceKeys.push(lens.key);
+    if (lens.signal !== "advance") return lens;
+    const thin = hasThinEvidence(lens);
+    const lowConfidence = hasLowConfidenceEvidence(lens, floor);
+    if (thin) lowEvidenceKeys.push(lens.key);
+    if (lowConfidence) lowConfidenceKeys.push(lens.key);
+    if (thin || lowConfidence) {
       return { ...lens, signal: "review" as const };
     }
     return lens;
@@ -346,20 +440,28 @@ export function applyTriagePolicy(
     };
   }
 
-  // Synthetically-downgraded lenses (low_evidence) are NOT reported as
-  // "lens.X.review" — the lens actually said advance; the downgrade is
-  // a triage-policy decision. Report `low_evidence` instead so the
-  // reason is unambiguous.
-  const lowEvidenceSet = new Set(lowEvidenceKeys);
+  // Synthetically-downgraded lenses (low_evidence / low_confidence_evidence)
+  // are NOT reported as "lens.X.review" — the lens actually said advance;
+  // the downgrade is a triage-policy decision. Report the explicit
+  // downgrade code instead so the reason is unambiguous.
+  const downgradedKeys = new Set([...lowEvidenceKeys, ...lowConfidenceKeys]);
   const reviewing = effectiveLenses.filter(
-    (l) => l.signal === "review" && !lowEvidenceSet.has(l.key),
+    (l) => l.signal === "review" && !downgradedKeys.has(l.key),
   );
   const borderline = overallScore < ADVANCE_SCORE_THRESHOLD;
 
-  if (reviewing.length > 0 || lowEvidenceKeys.length > 0 || borderline) {
+  if (
+    reviewing.length > 0 ||
+    lowEvidenceKeys.length > 0 ||
+    lowConfidenceKeys.length > 0 ||
+    borderline
+  ) {
     const reasonCodes: string[] = [
       ...reviewing.map((l) => `lens.${l.key}.review`),
       ...lowEvidenceKeys.map((key) => `lens.${key}.low_evidence`),
+      ...lowConfidenceKeys.map(
+        (key) => `lens.${key}.low_confidence_evidence`,
+      ),
     ];
     if (borderline) {
       reasonCodes.push("borderline_overall_score");
@@ -404,10 +506,27 @@ function buildMissingMaterials(
 @Injectable()
 export class ScreeningTriageService {
   private readonly logger = new Logger(ScreeningTriageService.name);
+  /**
+   * Resolved once at construction. Env-driven so funds can A/B stricter or
+   * looser triage without a code change; the value falls back to
+   * `POLICY_SNAPSHOT.ADVANCE_CONFIDENCE_FLOOR` when the env var is missing.
+   * Kept off the per-request path so the triage policy itself stays pure.
+   */
+  private readonly advanceConfidenceFloor: number;
 
   constructor(
     @Inject(DrizzleService) private readonly drizzle: DrizzleService,
-  ) {}
+    config: ConfigService<Env, true>,
+  ) {
+    const configured = config.get<number>(
+      "SCREENING_ADVANCE_CONFIDENCE_FLOOR",
+      { infer: true },
+    );
+    this.advanceConfidenceFloor =
+      typeof configured === "number" && Number.isFinite(configured)
+        ? configured
+        : DEFAULT_ADVANCE_CONFIDENCE_FLOOR;
+  }
 
   async decide(input: TriageDecideInput): Promise<ScreeningDecision> {
     const parsed = TriageDecideInputSchema.parse(input);
@@ -418,6 +537,7 @@ export class ScreeningTriageService {
     const outcome = applyTriagePolicy(parsed.lensResults, {
       thesisFitScore: parsed.thesisFitScore ?? null,
       dealbreakerReasonCodes,
+      advanceConfidenceFloor: this.advanceConfidenceFloor,
     });
     const materials = buildMissingMaterials(startupSnapshot);
     const canonical = canonicalizeDecision(outcome, materials);

@@ -255,7 +255,9 @@ describe("ScreeningProcessor", () => {
       nextAction: "advance" as const,
       overallScore: 82,
       reasonCodes: [],
-      policyVersion: 3,
+      // DS-E7-F2-S1 — bumped to 4 with the addition of the tunable
+      // evidence-confidence floor.
+      policyVersion: 4,
     });
     screeningTriage.decide = decideMock;
 

@@ -177,6 +177,16 @@ export const envSchema = z.object({
   LENS_ACTIVE_VERSION_MARKET: z.string().optional(),
   LENS_ACTIVE_VERSION_TEAM: z.string().optional(),
   LENS_ACTIVE_VERSION_TRACTION: z.string().optional(),
+  // DS-E7-F2-S1 — triage policy v4 evidence-gate confidence floor.
+  // Weighted evidence-confidence score required for a lens to keep an
+  // `advance` signal (high=1.0, medium=0.5, low=0.2; weighted-sum / count).
+  // Default 0.6 ≈ "majority medium-or-better, with at least one strong claim".
+  // Override per env to A/B stricter or looser triage without a code change.
+  SCREENING_ADVANCE_CONFIDENCE_FLOOR: z.coerce
+    .number()
+    .min(0)
+    .max(1)
+    .default(0.6),
   AI_ENRICHMENT_ENABLED: z.coerce.boolean().default(true),
   AI_SOURCE_SANITIZATION_ENABLED: z.coerce.boolean().default(true),
   LINKEDIN_AI_VERIFIER_ENABLED: z.coerce.boolean().default(true),

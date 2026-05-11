@@ -11,6 +11,7 @@ import { StartupIntakeService } from '../../startup/startup-intake.service';
 import { IntegrationHealthService } from '../integration-health.service';
 import { SystemConfigService } from '../system-config.service';
 import { BulkDataService } from '../bulk-data.service';
+import { BulkStartupIntakeService } from '../bulk-startup-intake.service';
 import { AdminMatchingService } from '../admin-matching.service';
 import { AdminScreeningService } from '../admin-screening.service';
 import { AiPromptService } from '../../ai/services/ai-prompt.service';
@@ -45,6 +46,7 @@ describe('AdminController', () => {
   let agentConfigService: jest.Mocked<AgentConfigService>;
   let dynamicFlowCatalogService: jest.Mocked<DynamicFlowCatalogService>;
   let _earlyAccessService: jest.Mocked<EarlyAccessService>;
+  let _bulkStartupIntakeService: jest.Mocked<BulkStartupIntakeService>;
 
   const mockAdmin = {
     id: 'admin-id',
@@ -146,6 +148,12 @@ describe('AdminController', () => {
           useValue: {
             importStartups: jest.fn(),
             exportStartups: jest.fn(),
+          },
+        },
+        {
+          provide: BulkStartupIntakeService,
+          useValue: {
+            processCsv: jest.fn(),
           },
         },
         {
@@ -268,6 +276,7 @@ describe('AdminController', () => {
     agentConfigService = module.get(AgentConfigService);
     dynamicFlowCatalogService = module.get(DynamicFlowCatalogService);
     _earlyAccessService = module.get(EarlyAccessService);
+    _bulkStartupIntakeService = module.get(BulkStartupIntakeService);
   });
 
   afterEach(() => {

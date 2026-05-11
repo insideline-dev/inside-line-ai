@@ -13,6 +13,7 @@ import { Clock, Sparkles, CheckCircle, XCircle, Users, Target, Building2, Eye } 
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { QuickAddStartupDialog } from "./-components/QuickAddStartupDialog";
+import { BulkUploadStartupsDialog } from "./-components/BulkUploadStartupsDialog";
 
 export const Route = createFileRoute("/_protected/admin/")({
   component: AdminDashboard,
@@ -302,7 +303,10 @@ function AdminDashboard() {
           <h1 className="text-2xl font-bold">Admin Dashboard</h1>
           <p className="text-muted-foreground">Review and manage startup submissions</p>
         </div>
-        <QuickAddStartupDialog />
+        <div className="flex items-center gap-2">
+          <BulkUploadStartupsDialog />
+          <QuickAddStartupDialog />
+        </div>
       </div>
 
       {/* Stats */}

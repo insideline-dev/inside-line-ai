@@ -12,6 +12,7 @@ import { CacheService } from './cache.service';
 import { IntegrationHealthService } from './integration-health.service';
 import { SystemConfigService } from './system-config.service';
 import { BulkDataService } from './bulk-data.service';
+import { BulkStartupIntakeService } from './bulk-startup-intake.service';
 import { AdminMatchingService } from './admin-matching.service';
 import { AdminScreeningService } from './admin-screening.service';
 import { AdminInvestorService } from './admin-investor.service';
@@ -58,6 +59,7 @@ import { InvestorModule } from '../investor/investor.module';
     IntegrationHealthService,
     SystemConfigService,
     BulkDataService,
+    BulkStartupIntakeService,
     AdminMatchingService,
     AdminScreeningService,
     AdminInvestorService,

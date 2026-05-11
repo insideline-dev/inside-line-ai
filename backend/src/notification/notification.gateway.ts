@@ -219,6 +219,10 @@ export class NotificationGateway
 // Investor-scoped events kept in a sibling map (rather than widening the
 // pipeline map) so the onboarding namespace can evolve independently of the
 // startup-pipeline contract — smaller blast radius for frontend listeners.
+//
+// DS-E11-F4-S1 added the `investor.calibration.recompute.*` events so the
+// admin Investors page can refresh its calibration card the moment the
+// background job lands a fresh snapshot.
 export interface InvestorEventPayloads {
   'investor.onboarding.completed': {
     userId: string;
@@ -228,6 +232,16 @@ export interface InvestorEventPayloads {
   'investor.onboarding.failed': {
     userId: string;
     website: string;
+    error: string;
+  };
+  'investor.calibration.recompute.completed': {
+    investorId: string;
+    jobId: string;
+    computedAt: string;
+  };
+  'investor.calibration.recompute.failed': {
+    investorId: string;
+    jobId: string;
     error: string;
   };
 }

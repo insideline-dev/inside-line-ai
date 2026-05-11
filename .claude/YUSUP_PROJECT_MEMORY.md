@@ -271,3 +271,61 @@ It should be updated after meaningful work so context accumulates inside the rep
 - Re-run the real reply flow and confirm `teamMembers` persists on the startup row after the email reply.
 - Then continue backlog mapping / progress writing for A1 Deal Screening.
 - After each meaningful milestone, append here.
+
+## 2026-05-11 — DS-E11-F4-S1: Manual calibration recompute trigger
+
+### What changed (issue #9, branch `feat/ds-e11-f4-s1-calibration-recompute`)
+
+- New table `investor_calibration_snapshots` persists the latest `CalibrationSummary` per investor.
+  - Schema: `backend/src/modules/investor/entities/investor-calibration-snapshot.schema.ts`.
+  - Migration: `backend/drizzle/0017_supreme_queen_noir.sql` (generated only — NOT pushed because `DATABASE_URL` points at the shared Neon DB; Yusuf will run `bun db:push` manually).
+  - Re-exported via `backend/src/modules/investor/entities/index.ts` → `backend/src/database/schema.ts`.
+
+- New `CalibrationRecomputeService` (`backend/src/modules/investor/calibration-recompute.service.ts`) owns the persisted side of the calibration loop:
+  - `getSnapshot(investorId)` reads the cached row (computes once inline on first read).
+  - `enqueueRecompute(investorId)` adds a BullMQ job on the shared TASK queue and dedupes per-investor within `CALIBRATION_RECOMPUTE_DEDUPE_WINDOW_MS` (10s). Returns `{ jobId, status: 'queued' | 'in_progress', dedupedToExistingJob }`.
+  - `runJob` is the actual job logic: marks `running`, recomputes via `summarizeCalibrationRows`, upserts as `completed`. On failure it flips status to `failed` and records `lastError` while leaving the prior `summary` intact.
+
+- New `CalibrationRecomputeProcessor` registers on the shared TASK queue (`investor.calibration.recompute` job name), runs the service, and emits WS events:
+  - `investor.calibration.recompute.completed` on success — payload `{ investorId, jobId, computedAt }`.
+  - `investor.calibration.recompute.failed` on error — payload `{ investorId, jobId, error }`.
+
+- Notification gateway widened: new event types in the `InvestorEventPayloads` map in `backend/src/notification/notification.gateway.ts`.
+
+- Admin controller updated:
+  - `GET /admin/investors/:userId/calibration` now returns the typed `CalibrationSnapshotResponseDto` (snapshot + last job state + cached summary).
+  - `POST /admin/investors/:userId/calibration/recompute` enqueues a job and returns `RecomputeCalibrationResponseDto` — no longer the stub from `b1775b9`.
+
+- `InvestorModule` ↔ `AdminModule` cycle resolved with `forwardRef` on both sides (`AdminModule` now imports `forwardRef(() => InvestorModule)`, `InvestorModule` already imported `forwardRef(() => InvestorOnboardingModule)` and now uses `forwardRef(() => AdminModule)` so the calibration service is reachable from `AdminInvestorService`).
+
+### Frontend
+
+- Added `frontend/src/lib/calibration/useCalibration.ts` with typed hooks: `useInvestorCalibration`, `useRecomputeInvestorCalibration`, `useInvestorCalibrationSocket`. They use the existing `customFetch` mutator from `@/api/client` (same code path as Orval-generated hooks — no second fetch implementation, satisfies "no raw fetch").
+- `frontend/src/routes/_protected/admin/investors.tsx` migrated off the raw `useQuery({ queryFn: fetch })` and `useMutation({ mutationFn: fetch })` block. Button now reflects `queued` / `running` / `Recompute` states, and a green/red banner shows when a WS event lands.
+
+### Orval status — INTERIM HOOK
+
+`bun generate:api` requires a running backend on :8080. I did not stand up the backend in this sandbox (the snapshot table doesn't exist in Neon yet, and DEV_DATABASE_URL is unset). The hook module under `frontend/src/lib/calibration/` is the interim path; once `bun db:push` lands and the backend is up, run `cd frontend && bun generate:api` to regenerate `frontend/src/api/generated/admin/admin.ts`, then either:
+1. Replace the interim hook bodies with calls to `useAdminControllerGetInvestorCalibrationSummary` / `useAdminControllerRecomputeInvestorCalibrationSummary`, or
+2. Delete `frontend/src/lib/calibration/` and update `investors.tsx` to use the generated hooks directly.
+
+The typed DTOs (`CalibrationSnapshotResponseDto`, `RecomputeCalibrationResponseDto`) are already wired into Swagger via `@ApiResponse({ type: ... })`, so Orval will pick up the right shapes on regen.
+
+### Dedupe semantics (for future reference)
+
+- A second click on Recompute within 10s of the prior enqueue returns the SAME `jobId` and `dedupedToExistingJob: true`. Status flips to `in_progress` if the prior job is still queued/running.
+- This is enforced by reading the snapshot row's `enqueuedAt` + `status` BEFORE adding to the queue. Belt and braces: the BullMQ `jobId` we pass also embeds the investor id, so even if the DB read races the queue still rejects duplicate ids.
+
+### Tests
+
+- `backend/src/modules/investor/tests/calibration-recompute.service.spec.ts` — 9 tests covering NotFound, snapshot computed-on-first-read, cache hit, fresh enqueue, in-flight dedupe, completed-within-window dedupe, expired-window non-dedupe, runJob persists.
+- `backend/src/modules/investor/tests/calibration-recompute.processor.spec.ts` — 4 tests covering handler registration, completed-event emission, failed-event emission, payload validation.
+- Updated `admin-investor.service.spec.ts` and `admin.controller.spec.ts` to match the new service shape.
+
+Baseline `bun test`: 1839 pass / 101 fail (pre-existing). After this change: **1854 pass / 101 fail** — no regressions, +15 net new tests on top of the existing suite.
+
+### Follow-ups / known gaps
+
+- `bun db:push` against Neon to actually create the table — Yusuf to run.
+- Orval regen against a live backend — Yusuf to run once #9 merges.
+- Out of scope for this story: the ML retune that *consumes* the snapshot (DS-E11-F3-S1).

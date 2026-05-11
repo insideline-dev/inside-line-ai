@@ -271,3 +271,51 @@ It should be updated after meaningful work so context accumulates inside the rep
 - Re-run the real reply flow and confirm `teamMembers` persists on the startup row after the email reply.
 - Then continue backlog mapping / progress writing for A1 Deal Screening.
 - After each meaningful milestone, append here.
+
+## 2026-05-11 — DG-E1-F1-S2: Section-scoped memo regeneration
+
+### What changed (issue #14, branch `feat/dg-e1-f1-s2-memo-section-regen`)
+
+`POST /startups/:startupId/memo/sections/:sectionKey/regenerate` now re-runs only the named section through the memo synthesis prompt. The other sections + executive summary + due-diligence areas + operator edits elsewhere all survive untouched. No schema migrations — the memo lives in `startup_evaluations.investor_memo` (jsonb), and we do a JSON-merge update on the targeted section.
+
+### Section-scoped pattern (re-use shape)
+
+- `MemoSynthesisAgent.regenerateSection(sectionKey, ctx)` — new public method on the existing agent. Uses the same `synthesis.memo` prompt config (system + user + variables + model resolution) but with a system-prompt suffix that constrains the model to a single `MemoChunkSectionSchema` element. No parallel prompt — the full-run prompt contract is the canon.
+- `MemoSectionRegenerationService` (new at `backend/src/modules/ai/services/memo-section-regeneration.service.ts`):
+  - Loads phase results via `PipelineStateService` (need extraction + scraping + research + evaluation — same prerequisites as the full memo run).
+  - Loads existing `investorMemo` from `startup_evaluations` and merges the regenerated section by `sectionKey` (preferred) or normalized title (legacy fallback). Other sections become `{...s}` copies — never reread from a partial payload.
+  - In-memory mutex map keyed by `(startupId, sectionKey)` blocks concurrent calls for the same key with 409 ConflictException. Different sections run in parallel for the same startup — operator UX > throughput here.
+  - Drops sources with empty / whitespace urls and reconciles `[N]` citation markers against the surviving sources (matches `dropUnlinkedEvidence` from `BaseLensAgent`).
+- `MemoController` (new at `backend/src/modules/ai/memo.controller.ts`):
+  - `@Controller('startups/:startupId/memo')` mounted under the AI module so the regeneration service stays close to the prompt.
+  - Auth re-uses `PdfService.verifyAccess(startupId, userId)` (same check as memo PDF download). Limited to `INVESTOR` + `ADMIN` via `RolesGuard`.
+- DTO at `backend/src/modules/ai/dto/memo-section-regenerate.dto.ts` via `createZodDto`. Carries `overwroteOperatorEdits: boolean` and `regeneratedAt: string` so the UI can warn before re-running on a section that already has operator-driven changes.
+
+### Evidence-linkage preservation
+
+Every persisted source on the regenerated section has a non-empty `url`. The reconciliation pass in `MemoSynthesisAgent.sanitizeSection` mirrors the full-run `sanitizeOutput` — same `reconcileCitationMarkers` + `sanitizeStringArrayValues` calls — so a regenerated section is shape-identical to a freshly-synthesized one. The service also filters again at persistence boundary in case the model output something weird.
+
+### Frontend
+
+- `frontend/src/lib/memo/useRegenerateMemoSection.ts` — manual TanStack Query `useMutation` wrapper around `customFetch`. On success it invalidates `getStartupControllerGetEvaluationByIdQueryKey(startupId)` so the memo tab re-renders only the affected section (TanStack diffs the rest). The Orval-generated hook will replace this once `bun generate:api` is re-run against a live backend.
+- `frontend/src/components/MemoSection.tsx` — gained an optional `regenerateSection` prop (button + spinner + "Regenerated" indicator). Existing `adminFeedback` prop coexists.
+- `frontend/src/components/startup-view/MemoTabContent.tsx` — wires the regenerate handler per section + an `AlertDialog` that warns before overwriting a previously-regenerated section. Toast feedback (sonner) on success / failure.
+
+### Idempotency
+
+Two-layer:
+1. Service-level in-memory mutex keyed by `(startupId, sectionKey)` returns 409 if a regeneration is in flight. Same-key dedupe is cheap and stops the UI from racing itself.
+2. Persistence path is `UPDATE startup_evaluations SET investor_memo = ... WHERE startup_id = ?` — non-blocking + idempotent regardless of duplicate calls.
+
+### Tests
+
+- `backend/src/modules/ai/tests/services/memo-section-regeneration.service.spec.ts` — 9 cases: only-target-section update, evidence-linkage filter, unknown section 404, concurrent-same-section 409, different-section parallel, overwroteOperatorEdits flag, fallback propagation, missing-prerequisites 404, missing-evaluation-row 404.
+- `backend/src/modules/ai/tests/memo.controller.spec.ts` — 3 cases: success path, unknown section key 404, propagation of service errors.
+- `frontend/src/lib/memo/useRegenerateMemoSection.test.ts` — 2 cases: URL/method correctness, error propagation.
+- Baseline before: 1866 pass / 101 fail. After: **1878 pass / 101 fail** — no regressions, +12 new backend tests.
+
+### Follow-ups / known gaps
+
+- Orval regen against a live backend — replace the interim manual hook in `frontend/src/lib/memo/` once `bun generate:api` is run, then delete the manual file.
+- Section history / diff view — out of scope (issue calls it explicitly out of scope).
+- Inline claim editing (DG-E1-F3-S1) will hook into the same `regenerateSection` AlertDialog confirm path — the `overwroteOperatorEdits` flag and the confirm-when-prior-regen check were designed with that successor story in mind.

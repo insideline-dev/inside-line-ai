@@ -34,6 +34,33 @@ export const ScreeningEvidenceSchema = z.object({
 });
 export type ScreeningEvidence = z.infer<typeof ScreeningEvidenceSchema>;
 
+export const ScreeningHandoffEvidenceSchema = z.object({
+  lensKey: z.string().min(1),
+  lensLabel: z.string().min(1),
+  claim: z.string().min(1),
+  source: z.string().optional(),
+  confidence: ScreeningEvidenceConfidenceSchema,
+  lensScore: z.number().int().min(0).max(100),
+  signal: ScreeningSignalSchema,
+});
+export type ScreeningHandoffEvidence = z.infer<
+  typeof ScreeningHandoffEvidenceSchema
+>;
+
+export const ScreeningHandoffIssueSchema = z.object({
+  key: z.string().min(1),
+  label: z.string().min(1),
+  summary: z.string().min(1),
+  source: z.enum(["screening-output", "triage-decision"]),
+});
+export type ScreeningHandoffIssue = z.infer<typeof ScreeningHandoffIssueSchema>;
+
+export const ScreeningHandoffSchema = z.object({
+  evidenceSeeds: z.array(ScreeningHandoffEvidenceSchema),
+  openIssues: z.array(ScreeningHandoffIssueSchema),
+});
+export type ScreeningHandoff = z.infer<typeof ScreeningHandoffSchema>;
+
 export const ScreeningLensV1Schema = z.object({
   key: z.string().min(1),
   score: z.number().int().min(0).max(100),
@@ -71,6 +98,7 @@ export const ScreeningOutputV1Schema = z.object({
   pipelineRunId: z.string().nullable(),
   generatedAt: z.string().datetime(),
   overall: ScreeningOverallV1Schema,
+  handoff: ScreeningHandoffSchema,
   lenses: z.array(ScreeningLensV1Schema),
 });
 export type ScreeningOutputV1 = z.infer<typeof ScreeningOutputV1Schema>;

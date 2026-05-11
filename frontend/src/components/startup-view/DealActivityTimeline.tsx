@@ -75,7 +75,17 @@ function readArray<T>(p: Record<string, unknown> | null | undefined, key: string
   return Array.isArray(v) ? (v as T[]) : [];
 }
 
-function formatEvent(event: DealEvent): FormattedEvent {
+function readRecord(
+  p: Record<string, unknown> | null | undefined,
+  key: string,
+): Record<string, unknown> | null {
+  const v = p?.[key];
+  return v && typeof v === "object" && !Array.isArray(v)
+    ? (v as Record<string, unknown>)
+    : null;
+}
+
+export function formatEvent(event: DealEvent): FormattedEvent {
   const p = event.payload;
   switch (event.type) {
     case "startup.submitted":
@@ -132,16 +142,31 @@ function formatEvent(event: DealEvent): FormattedEvent {
     case "decision.recorded": {
       const verdict = readString(p, "verdict");
       const tags = readArray<string>(p, "reasonTags");
+      const calibration = readRecord(p, "calibration");
+      const mismatchType = readString(calibration, "mismatchType");
+      const calibrationReasons = readArray<string>(calibration, "reasonTags");
+      const calibrationDetail =
+        mismatchType && mismatchType !== "aligned"
+          ? `${mismatchType.replace(/_/g, " ")} · ${readString(calibration, "modelVerdict") ?? "model"} → ${readString(calibration, "investorVerdict") ?? verdict ?? "recorded"}`
+          : undefined;
+      const detail =
+        calibrationDetail ?? (tags.length > 0 ? tags.join(", ") : undefined);
+      const tone =
+        mismatchType === "soft_mismatch"
+          ? "warn"
+          : mismatchType && mismatchType !== "aligned"
+            ? "bad"
+            : verdict === "advance"
+              ? "good"
+              : verdict === "pass"
+                ? "bad"
+                : "warn";
+      const reasons = calibrationReasons.length > 0 ? calibrationReasons : tags;
       return {
         icon: <CheckCircle2 className="h-3.5 w-3.5" />,
         label: `Investor decision: ${verdict ?? "recorded"}`,
-        detail: tags.length > 0 ? tags.join(", ") : undefined,
-        tone:
-          verdict === "advance"
-            ? "good"
-            : verdict === "pass"
-              ? "bad"
-              : "warn",
+        detail: reasons.length > 0 && detail ? `${detail} · ${reasons.join(", ")}` : detail ?? (reasons.length > 0 ? reasons.join(", ") : undefined),
+        tone,
       };
     }
     case "comment.added":

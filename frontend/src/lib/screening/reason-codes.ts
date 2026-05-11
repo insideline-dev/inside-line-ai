@@ -23,6 +23,7 @@ export const REASON_CODE_LABELS: Record<string, string> = {
 // surface forward-compatible when new lenses are registered (e.g. gtm,
 // product) without code changes here.
 const LENS_CODE_PATTERN = /^lens\.([^.]+)\.(reject|review|low_evidence)$/;
+const DEALBREAKER_CODE_PATTERN = /^dealbreaker:(.+)$/i;
 const LENS_SUFFIX_LABELS: Record<string, string> = {
   reject: "red flag",
   review: "unclear",
@@ -32,6 +33,10 @@ const LENS_SUFFIX_LABELS: Record<string, string> = {
 export function labelForReasonCode(code: string): string {
   const explicit = REASON_CODE_LABELS[code];
   if (explicit) return explicit;
+  const dealbreakerMatch = code.match(DEALBREAKER_CODE_PATTERN);
+  if (dealbreakerMatch) {
+    return `Dealbreaker hit: ${dealbreakerMatch[1].trim()}`;
+  }
   const match = code.match(LENS_CODE_PATTERN);
   if (match) {
     const lens = match[1].charAt(0).toUpperCase() + match[1].slice(1);

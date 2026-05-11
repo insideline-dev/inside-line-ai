@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Card,
   CardContent,
@@ -8,6 +8,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -33,6 +34,9 @@ import {
   TrendingUp,
   ShieldAlert,
   Scale,
+  Loader2,
+  RefreshCw,
+  AlertTriangle,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_protected/admin/investors")({
@@ -108,6 +112,25 @@ interface InvestorDetail {
   }>;
 }
 
+interface InvestorCalibrationSummary {
+  totalDecisions: number;
+  decisionsWithTriage: number;
+  aligned: number;
+  falsePositive: number;
+  falseNegative: number;
+  softMismatch: number;
+  alignmentRate: number | null;
+  topOverrideReasons: Array<{ reasonTag: string; count: number }>;
+  recentMismatches: Array<{
+    startupId: string;
+    decidedAt: string;
+    mismatchType: "false_positive" | "false_negative" | "soft_mismatch";
+    modelVerdict: "advance" | "review" | "reject";
+    investorVerdict: "advance" | "pass" | "hold";
+    reasonTags: string[];
+  }>;
+}
+
 // ---------- Helpers ----------
 
 function formatDate(dateStr: string | null | undefined) {
@@ -130,6 +153,14 @@ function formatCheckSize(min: number | null, max: number | null) {
   return `Up to ${fmt(max!)}`;
 }
 
+function formatMismatchType(mismatchType: string) {
+  return mismatchType.replace(/_/g, " ");
+}
+
+function formatCalibrationPath(item: InvestorCalibrationSummary["recentMismatches"][number]) {
+  return `${item.modelVerdict} → ${item.investorVerdict}`;
+}
+
 const statusColors: Record<string, string> = {
   new: "bg-blue-100 text-blue-800",
   reviewing: "bg-yellow-100 text-yellow-800",
@@ -143,6 +174,7 @@ const statusColors: Record<string, string> = {
 function AdminInvestorsPage() {
   const [search, setSearch] = useState("");
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   const {
     data: investors = [],
@@ -158,6 +190,30 @@ function AdminInvestorsPage() {
     queryFn: () =>
       customFetch<InvestorDetail>(`/admin/investors/${selectedUserId}`),
     enabled: !!selectedUserId,
+  });
+
+  const { data: calibration, isLoading: calibrationLoading, error: calibrationError } = useQuery({
+    queryKey: ["admin", "investors", selectedUserId, "calibration"],
+    queryFn: () =>
+      customFetch<InvestorCalibrationSummary>(
+        `/admin/investors/${selectedUserId}/calibration`,
+      ),
+    enabled: !!selectedUserId,
+  });
+
+  const recomputeCalibration = useMutation({
+    mutationFn: async () => {
+      if (!selectedUserId) return null;
+      return customFetch<InvestorCalibrationSummary>(
+        `/admin/investors/${selectedUserId}/calibration/recompute`,
+        { method: "POST" },
+      );
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["admin", "investors", selectedUserId, "calibration"],
+      });
+    },
   });
 
   const filtered = investors.filter((inv) => {
@@ -325,6 +381,7 @@ function AdminInvestorsPage() {
                     Matches ({detail.matches.length})
                   </TabsTrigger>
                   <TabsTrigger value="scoring">Scoring</TabsTrigger>
+                  <TabsTrigger value="calibration">Calibration</TabsTrigger>
                 </TabsList>
 
                 <ScrollArea className="flex-1">
@@ -630,6 +687,142 @@ function AdminInvestorsPage() {
                         ))}
                       </div>
                     )}
+                  </TabsContent>
+
+                  {/* ---- Tab: Calibration ---- */}
+                  <TabsContent value="calibration" className="px-6 pb-6">
+                    {!selectedUserId ? (
+                      <p className="text-sm text-muted-foreground py-4">
+                        Select an investor to review calibration.
+                      </p>
+                    ) : calibrationLoading ? (
+                      <div className="space-y-3">
+                        <Skeleton className="h-24 w-full" />
+                        <Skeleton className="h-32 w-full" />
+                      </div>
+                    ) : calibrationError ? (
+                      <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-3 text-sm text-destructive">
+                        <AlertTriangle className="h-4 w-4" />
+                        <span>
+                          Failed to load calibration: {(calibrationError as Error).message}
+                        </span>
+                      </div>
+                    ) : calibration ? (
+                      <div className="space-y-4">
+                        <Card>
+                          <CardContent className="space-y-4 pt-4">
+                            <div className="flex items-start justify-between gap-4">
+                              <div>
+                                <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                                  Calibration summary
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                  Screening vs. investor verdict deltas on {calibration.decisionsWithTriage} of {calibration.totalDecisions} decisions.
+                                </p>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => recomputeCalibration.mutate()}
+                                disabled={recomputeCalibration.isPending}
+                              >
+                                {recomputeCalibration.isPending ? (
+                                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                                ) : (
+                                  <RefreshCw className="mr-1.5 h-4 w-4" />
+                                )}
+                                Recompute
+                              </Button>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                              <div className="rounded-md border bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+                                <div className="text-[10px] uppercase tracking-wide opacity-80">
+                                  Aligned
+                                </div>
+                                <div className="text-lg font-semibold">{calibration.aligned}</div>
+                              </div>
+                              <div className="rounded-md border bg-rose-50 px-3 py-2 text-sm text-rose-900">
+                                <div className="text-[10px] uppercase tracking-wide opacity-80">
+                                  False positive
+                                </div>
+                                <div className="text-lg font-semibold">{calibration.falsePositive}</div>
+                              </div>
+                              <div className="rounded-md border bg-rose-50 px-3 py-2 text-sm text-rose-900">
+                                <div className="text-[10px] uppercase tracking-wide opacity-80">
+                                  False negative
+                                </div>
+                                <div className="text-lg font-semibold">{calibration.falseNegative}</div>
+                              </div>
+                              <div className="rounded-md border bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                                <div className="text-[10px] uppercase tracking-wide opacity-80">
+                                  Soft mismatch
+                                </div>
+                                <div className="text-lg font-semibold">{calibration.softMismatch}</div>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-wrap gap-2 text-xs">
+                              <Badge variant="secondary">Alignment {calibration.alignmentRate == null ? "—" : `${Math.round(calibration.alignmentRate * 100)}%`}</Badge>
+                              <Badge variant="outline">{calibration.decisionsWithTriage} decisions with triage</Badge>
+                            </div>
+                          </CardContent>
+                        </Card>
+
+                        <Card>
+                          <CardContent className="space-y-3 pt-4">
+                            <div>
+                              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                                Top override reasons
+                              </p>
+                              {calibration.topOverrideReasons.length > 0 ? (
+                                <div className="mt-2 flex flex-wrap gap-1.5">
+                                  {calibration.topOverrideReasons.map((reason) => (
+                                    <Badge key={reason.reasonTag} variant="outline" className="gap-1 capitalize text-xs">
+                                      {reason.reasonTag}
+                                      <span className="text-muted-foreground">×{reason.count}</span>
+                                    </Badge>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="mt-2 text-sm text-muted-foreground">
+                                  No override tags captured yet.
+                                </p>
+                              )}
+                            </div>
+
+                            <div>
+                              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                                Recent mismatches
+                              </p>
+                              {calibration.recentMismatches.length > 0 ? (
+                                <div className="mt-2 space-y-2">
+                                  {calibration.recentMismatches.map((item) => (
+                                    <div key={`${item.startupId}-${item.decidedAt}`} className="rounded-md border px-3 py-2 text-sm">
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <span className="font-medium">{formatCalibrationPath(item)}</span>
+                                        <Badge variant="secondary" className="capitalize">
+                                          {formatMismatchType(item.mismatchType)}
+                                        </Badge>
+                                      </div>
+                                      <div className="mt-1 text-xs text-muted-foreground">
+                                        {item.reasonTags.length > 0 ? item.reasonTags.join(", ") : "No reason tags"}
+                                        {" · "}
+                                        {formatDate(item.decidedAt)}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="mt-2 text-sm text-muted-foreground">
+                                  No mismatches recorded yet.
+                                </p>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </div>
+                    ) : null}
                   </TabsContent>
                 </ScrollArea>
               </Tabs>

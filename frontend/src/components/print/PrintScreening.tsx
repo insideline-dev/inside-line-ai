@@ -7,7 +7,10 @@
 // Layout target: A4 portrait, 1 page, headed by the Inside Line brand.
 
 import type { Startup } from "@/types/startup";
-import type { ScreeningOutputV1 } from "@/lib/screening/useScreeningOutput";
+import type {
+  ScreeningHandoffEvidenceV1,
+  ScreeningOutputV1,
+} from "@/lib/screening/useScreeningOutput";
 import { PrintLayout } from "./PrintLayout";
 import insideLineLogo from "@/assets/icon-insideline.svg";
 
@@ -72,6 +75,38 @@ function formatDate(iso: string): string {
 
 function nextActionLabel(action: string): string {
   return NEXT_ACTION_LABELS[action] ?? action;
+}
+
+function getPrintableEvidenceSeeds(
+  output: ScreeningOutputV1,
+): ScreeningHandoffEvidenceV1[] {
+  const handoffSeeds = output.handoff?.evidenceSeeds;
+  if (handoffSeeds) {
+    const seen = new Set<string>();
+    return handoffSeeds.filter((seed) => {
+      if (seen.has(seed.lensKey)) return false;
+      seen.add(seed.lensKey);
+      return true;
+    });
+  }
+
+  const rows: ScreeningHandoffEvidenceV1[] = [];
+  for (const lens of output.lenses) {
+    const evidence = lens.evidence[0];
+    if (!evidence) continue;
+
+    rows.push({
+      lensKey: lens.key,
+      lensLabel: lensName(lens.key),
+      claim: evidence.claim,
+      source: evidence.source,
+      confidence: evidence.confidence,
+      lensScore: lens.score,
+      signal: lens.signal,
+    });
+  }
+
+  return rows;
 }
 
 export function PrintScreening({
@@ -342,49 +377,43 @@ export function PrintScreening({
               gap: "6px",
             }}
           >
-            {output.lenses
-              .map((lens) => ({ lens, evidence: lens.evidence[0] }))
-              .filter(
-                (entry): entry is { lens: typeof entry.lens; evidence: NonNullable<typeof entry.evidence> } =>
-                  Boolean(entry.evidence),
-              )
-              .map(({ lens, evidence }) => (
-                <li
-                  key={`${lens.key}-claim`}
+            {getPrintableEvidenceSeeds(output).map((evidence) => (
+              <li
+                key={`${evidence.lensKey}-claim`}
+                style={{
+                  display: "flex",
+                  gap: "8px",
+                  fontSize: "11px",
+                  lineHeight: 1.4,
+                  color: "#334155",
+                }}
+              >
+                <span
                   style={{
-                    display: "flex",
-                    gap: "8px",
-                    fontSize: "11px",
-                    lineHeight: 1.4,
-                    color: "#334155",
+                    flexShrink: 0,
+                    fontWeight: 600,
+                    color: "#475569",
+                    width: "70px",
                   }}
                 >
-                  <span
-                    style={{
-                      flexShrink: 0,
-                      fontWeight: 600,
-                      color: "#475569",
-                      width: "70px",
-                    }}
-                  >
-                    {lensName(lens.key)}
-                  </span>
-                  <span style={{ flex: 1 }}>
-                    {evidence.claim}
-                    {evidence.source ? (
-                      <span
-                        style={{
-                          marginLeft: "6px",
-                          color: "#94A3B8",
-                          fontSize: "9px",
-                        }}
-                      >
-                        ({evidence.source})
-                      </span>
-                    ) : null}
-                  </span>
-                </li>
-              ))}
+                  {evidence.lensLabel}
+                </span>
+                <span style={{ flex: 1 }}>
+                  {evidence.claim}
+                  {evidence.source ? (
+                    <span
+                      style={{
+                        marginLeft: "6px",
+                        color: "#94A3B8",
+                        fontSize: "9px",
+                      }}
+                    >
+                      ({evidence.source})
+                    </span>
+                  ) : null}
+                </span>
+              </li>
+            ))}
           </ul>
         </section>
 

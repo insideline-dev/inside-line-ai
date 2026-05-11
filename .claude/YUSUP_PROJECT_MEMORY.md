@@ -139,10 +139,100 @@ It should be updated after meaningful work so context accumulates inside the rep
   - Clara email/deck forwarding intake path still needs reliability work
   - screening contract alignment still has at least one live inconsistency to resolve fully
 - Wrote a first-pass validation layer back into the shared workbook on the `A1 Deal Screening` sheet by adding non-destructive columns for:
-  - `Yusup Validation`
-  - `Yusup Notes`
-  - `Yusup How To Test`
+  - `Validation`
+  - `Notes`
+  - `How To Test`
 - Marked the key deal-screening story rows with implemented / partial / not implemented status and short notes based on branch work plus live validation.
+
+### Additional milestone — screening evidence seed into DD surfaces
+- Added a frontend bridge that converts screening lens evidence into DD-friendly evidence seed rows.
+- Surfaced those screening evidence seeds in DD-facing views:
+  - founder/admin Sources tab
+  - Summary card
+  - Memo tab
+- Re-ran focused frontend tests and typecheck for the evidence bridge.
+- This is a practical first implementation of DS-E10-F2-S1 without inventing a new backend evidence graph subsystem yet.
+
+### Additional milestone — screening open-issues handoff into DD surfaces
+- Added a frontend-derived open-issues bridge that turns screening missing materials and triage reason codes into DD-friendly follow-up items.
+- Surfaced those screening open issues next to existing DD-facing content so screening concerns complement memo due-diligence questions rather than replace them.
+- This advances DS-E10-F3-S1 in a practical frontend-first way, while a fuller backend-persisted graph/ledger can still come later.
+
+### Additional milestone — backend screening handoff payload
+- Extended the public `ScreeningOutputV1` contract with a backend-built `handoff` payload.
+- The handoff now carries:
+  - `evidenceSeeds`
+  - `openIssues`
+- These are built from persisted screening lens rows plus the latest triage decision, with evidence deduped and open issues following the same precedence model as the frontend helper logic.
+- This is a stronger backend-facing step for DS-E10-F2-S1 / DS-E10-F3-S1 because DD consumers no longer have to invent the handoff purely in the UI.
+
+### Additional milestone — frontend now consumes backend handoff
+- Switched the DD-facing frontend surfaces to prefer the backend-provided `ScreeningOutputV1.handoff` payload instead of composing screening evidence/open issues locally first.
+- Kept legacy fallback logic only for cases where the handoff is absent.
+- Re-ran targeted frontend tests and typecheck for the canonical handoff consumer path.
+- This closes one more consistency gap between backend screening state and frontend DD views.
+
+### Additional milestone — backlog workbook refresh
+- Refreshed the A1 Deal Screening sheet annotations in the shared workbook after the latest DS progress.
+- Uploaded the updated workbook back to the original Drive file.
+- Updated key rows to reflect the newest implemented / live-verified / note status changes after the latest intake, dealbreaker, calibration, and DD handoff work.
+
+### Additional milestone — strict remainder audit after core DS work
+- Reviewed the current branch against A1 Deal Screening with a stricter lens: what is truly must-have vs deferrable.
+- Main conclusion: the gate/operator flow is now mostly real and usable.
+- Highest-value remaining must-haves identified by the audit:
+  1. replace placeholder screening lens prompts with production-ready prompts
+  2. make the thesis-fit gate truthful on first screening runs (it still depends on existing match rows)
+  3. if dealbreakers are meant to be authoritative, move them from client-only hints into a server-owned screening rule path
+- Many other remaining items can safely defer compared with those three.
+
+### Additional milestone — first-run thesis-fit gate backfill
+- The screening processor no longer depends only on existing `startupMatch` rows for thesis-fit.
+- On a first run, if no persisted thesis-fit exists, screening now attempts a narrow backfill by seeding the investor-matching path from the current synthesis result and active investor-thesis pool.
+- If there are no active investor theses, or synthesis is unavailable, the gate still fails open instead of guessing.
+- Re-ran focused screening processor tests and backend typecheck coverage for this path.
+- This materially reduces the old correctness gap where out-of-thesis deals could slip through purely because matching rows had not yet been created.
+
+### Additional milestone — calibration loop slice
+- Added a reusable calibration snapshot / summary model for screening-vs-investor decision deltas.
+- Deal decisions now persist a reusable calibration snapshot payload instead of only a raw decision row.
+- Added admin-side calibration access and a manual recompute trigger.
+- Surfaced calibration drift signals in the investor/admin UI and deal activity timeline.
+- Re-ran targeted backend calibration tests, frontend mismatch rendering test, and backend/frontend typechecks.
+- This advances the practical calibration backlog without introducing a large ML retraining system yet.
+
+### Additional milestone — server-side dealbreakers
+- Added backend-owned dealbreaker enforcement to screening triage based on active investor thesis `dealBreakers`.
+- Dealbreaker matches now hard-reject before thesis-fit/lens logic and emit stable `dealbreaker:<term>` reason codes.
+- Screening output handoff now surfaces those dealbreaker reason codes in a readable way for downstream consumers.
+- Re-ran targeted triage/contract tests and backend/frontend typechecks for this path.
+
+### Additional milestone — canonical screening input + dedupe first pass
+- Added a shared backend normalization layer at `backend/src/modules/startup/screening-intake-normalization.ts`.
+- Unified company-name trust and duplicate matching logic so multiple intake paths can reuse the same screening-oriented normalization behavior.
+- Updated key intake paths to use the shared normalization / dedupe layer:
+  - Clara email intake
+  - portal submissions
+  - scout submissions
+  - startup intake helper path
+- Added stronger duplicate lookup by canonicalized company name and normalized website host.
+- Re-ran focused backend tests and backend typecheck for this intake layer.
+- Follow-up completed: the direct founder/investor manual `StartupService.create` path is now also on the shared normalization + same-owner dedupe path.
+- This means the main screening-relevant intake paths now share one dedupe/normalization approach, though cross-tenant merging remains intentionally out of scope for safety.
+
+### Additional milestone — intake reliability hardening
+- Improved the AgentMail investor inbox bridge so deck-forwarded submissions prefer the actual pitch-deck attachment as the primary artifact.
+- The bridge now puts the pitch-deck storage key first in the attachment list used for confirmation, instead of relying on whatever attachment arrived first.
+- Also uses the deck filename as a stronger company-name hint during intake.
+- Re-ran focused AgentMail inbox bridge tests and backend typecheck.
+- This is a targeted correctness fix for the important email/deck intake path, not a broad Clara/inbox redesign.
+
+### Additional milestone — screening consistency hardening
+- Hardened the screening processor so it now fails closed when triage throws: it falls back to the screening output contract’s canonical signal/score instead of leaving screening classification undefined.
+- Extended the internal screening phase result shape to carry `nextAction`, keeping internal pipeline state closer to the public screening contract.
+- Added a shared frontend screening-state resolver so DD/admin views prefer one canonical screening state model instead of drifting between decision/output sources.
+- Re-ran targeted backend screening tests, frontend screening tests, and both backend/frontend typechecks.
+- This closes one of the most important correctness gaps: screening state now stays trustworthy even under partial triage/contract failure conditions.
 
 ### Additional milestone — Clara screening follow-up first pass
 - Added Clara conversation memory for screening follow-up state.

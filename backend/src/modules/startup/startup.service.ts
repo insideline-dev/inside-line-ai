@@ -56,6 +56,10 @@ import {
 } from "../analysis/entities/analysis.schema";
 import { deriveStartupGeography } from "../geography";
 import { sanitizeNarrativeText } from "../ai/services/narrative-sanitizer";
+import {
+  findCanonicalStartupDuplicate,
+  normalizeScreeningIntakeCandidate,
+} from "./screening-intake-normalization";
 
 const GPT_5_4_INPUT_COST_PER_MILLION = 2.5;
 const GPT_5_4_OUTPUT_COST_PER_MILLION = 15;
@@ -289,8 +293,30 @@ export class StartupService {
     },
   ) {
     return this.drizzle.withRLS(userId, async (db) => {
-      const slug = this.generateSlug(dto.name);
-      const geography = deriveStartupGeography(dto.location);
+      const normalized = normalizeScreeningIntakeCandidate(dto);
+      const duplicate = await findCanonicalStartupDuplicate(db, {
+        companyName: normalized.name,
+        website: normalized.website || undefined,
+        ownerUserId: userId,
+      });
+
+      if (duplicate) {
+        const [existing] = await db
+          .select()
+          .from(startup)
+          .where(eq(startup.id, duplicate.id))
+          .limit(1);
+
+        if (existing) {
+          this.logger.log(
+            `Reused startup ${existing.id} for user ${userId} via canonical ${duplicate.matchedOn} match`,
+          );
+          return existing;
+        }
+      }
+
+      const slug = this.generateSlug(normalized.name);
+      const geography = deriveStartupGeography(normalized.location);
       const isInvestorSubmission = submittedByRole === UserRole.INVESTOR;
 
       const [created] = await db
@@ -302,6 +328,12 @@ export class StartupService {
           isPrivate: options?.isPrivate ?? isInvestorSubmission,
           slug,
           ...dto,
+          name: normalized.name,
+          tagline: normalized.tagline,
+          description: normalized.description,
+          website: normalized.website,
+          location: normalized.location,
+          industry: normalized.industry,
           normalizedRegion: geography.normalizedRegion,
           geoCountryCode: geography.countryCode,
           geoLevel1: geography.level1,

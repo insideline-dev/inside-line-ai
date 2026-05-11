@@ -64,7 +64,7 @@ export const dealEvent = pgTable(
      *  - startup.approved/rejected: { reason?: string }
      *  - screening.completed: { lensCount: number, failedKeys: string[] }
      *  - triage.decided: { classification, overallScore, reasonCodes }
-     *  - decision.recorded: { verdict, reasonTags, hasNotes }
+     *  - decision.recorded: { verdict, reasonTags, hasNotes, calibration }
      *  - comment.added: { snippet: string }
      *  - thesis.regenerated: { source: 'auto' | 'manual' }
      */

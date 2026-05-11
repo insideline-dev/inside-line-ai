@@ -69,7 +69,7 @@ describe("DealDecisionService", () => {
       limit: jest.fn().mockResolvedValueOnce(STARTUP_FOUND_ROW),
       returning: jest.fn().mockResolvedValueOnce([PERSISTED_ROW]),
     });
-    const { service, screeningTriage } = await build(db);
+    const { service, screeningTriage, dealEvents } = await build(db);
     screeningTriage.latestForStartup.mockResolvedValueOnce({ classification: "advance" });
 
     const out = await service.record(INVESTOR_ID, STARTUP_ID, {
@@ -88,6 +88,25 @@ describe("DealDecisionService", () => {
         reasonTags: ["pricing"],
         triageClassificationAtDecision: "advance",
         notes: null,
+      }),
+    );
+    expect(dealEvents.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startupId: STARTUP_ID,
+        actorUserId: INVESTOR_ID,
+        type: "decision.recorded",
+        payload: expect.objectContaining({
+          verdict: "pass",
+          reasonTags: ["pricing"],
+          triageClassificationAtDecision: "advance",
+          calibration: expect.objectContaining({
+            comparisonAvailable: true,
+            mismatchType: "false_positive",
+            modelVerdict: "advance",
+            investorVerdict: "pass",
+            reasonTags: ["pricing"],
+          }),
+        }),
       }),
     );
     expect(out).toEqual(PERSISTED_ROW);

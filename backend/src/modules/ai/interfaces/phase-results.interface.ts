@@ -249,6 +249,7 @@ export interface ScreeningResult {
   lenses: ScreeningLensSummary[];
   failedKeys: string[];
   classification?: "advance" | "review" | "reject";
+  nextAction?: "continue_evaluation" | "manual_review" | "request_materials" | "stop";
   overallScore?: number;
   reasonCodes?: string[];
   missingMaterials?: MissingMaterialCode[];

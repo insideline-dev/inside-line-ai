@@ -92,14 +92,17 @@ describe('SubmissionService', () => {
     };
 
     it('submits through StartupService pipeline and records scout submission', async () => {
-      mockDb.limit.mockResolvedValueOnce([
-        {
-          id: 'app-id',
-          userId: mockScoutId,
-          investorId: mockInvestorId,
-          status: ScoutApplicationStatus.APPROVED,
-        },
-      ]);
+      mockDb.limit
+        .mockResolvedValueOnce([
+          {
+            id: 'app-id',
+            userId: mockScoutId,
+            investorId: mockInvestorId,
+            status: ScoutApplicationStatus.APPROVED,
+          },
+        ])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
 
       const createdStartup = { id: mockStartupId };
       const submittedStartup = { id: mockStartupId, status: 'submitted' };
@@ -121,7 +124,18 @@ describe('SubmissionService', () => {
 
       expect(startupService.create).toHaveBeenCalledWith(
         mockScoutId,
-        submitDto.startupData,
+        expect.objectContaining({
+          name: 'Test Startup',
+          tagline: 'A test startup',
+          description:
+            'This is a test startup description that is long enough to pass validation requirements and provide meaningful context.',
+          website: 'https://test.com/',
+          location: 'San Francisco',
+          industry: 'SaaS',
+          stage: StartupStage.SEED,
+          fundingTarget: 1000000,
+          teamSize: 5,
+        }),
         UserRole.SCOUT,
         { scoutId: mockScoutId },
       );
@@ -141,6 +155,55 @@ describe('SubmissionService', () => {
         ForbiddenException,
       );
       expect(startupService.create).not.toHaveBeenCalled();
+    });
+
+    it('reuses an existing startup when canonical duplicate matching finds one', async () => {
+      mockDb.limit
+        .mockResolvedValueOnce([
+          {
+            id: 'app-id',
+            userId: mockScoutId,
+            investorId: mockInvestorId,
+            status: ScoutApplicationStatus.APPROVED,
+          },
+        ])
+        .mockResolvedValueOnce([
+          {
+            id: mockStartupId,
+            name: 'Test Startup, Inc.',
+            status: 'submitted',
+            userId: 'other-user',
+          },
+        ]);
+
+      const submission = {
+        id: mockSubmissionId,
+        scoutId: mockScoutId,
+        startupId: mockStartupId,
+        investorId: mockInvestorId,
+        commissionRate: 500,
+        notes: 'Great team',
+        createdAt: new Date(),
+      };
+
+      startupService.adminFindOne.mockResolvedValue({
+        id: mockStartupId,
+        name: 'Test Startup, Inc.',
+        status: 'submitted',
+      } as unknown);
+      mockDb.returning.mockResolvedValueOnce([submission]);
+
+      const result = await service.submit(mockScoutId, submitDto);
+
+      expect(startupService.create).not.toHaveBeenCalled();
+      expect(startupService.submit).not.toHaveBeenCalled();
+      expect(startupService.adminFindOne).toHaveBeenCalledWith(mockStartupId);
+      expect(result.submission).toEqual(submission);
+      expect(result.startup).toEqual({
+        id: mockStartupId,
+        name: 'Test Startup, Inc.',
+        status: 'submitted',
+      });
     });
   });
 

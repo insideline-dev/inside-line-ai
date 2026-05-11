@@ -364,7 +364,7 @@ describe("ClaraSubmissionService", () => {
     expect(resolution).toEqual({
       startupId: "existing-startup",
       startupName: "Acme Corp",
-      updatedFields: ["website", "stage"],
+      updatedFields: ["website"],
       remainingMissing: [],
       pipelineStarted: true,
     });

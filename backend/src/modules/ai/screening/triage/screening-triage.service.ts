@@ -8,6 +8,7 @@ import {
   type ScreeningDecisionRow,
 } from "../../entities/screening-decision.schema";
 import { startup } from "../../../startup/entities/startup.schema";
+import { investorThesis } from "../../../investor/entities/investor.schema";
 import {
   ScreeningNextActionSchema,
   ScreeningSignalSchema,
@@ -33,18 +34,20 @@ import {
  *        evidence item has `confidence === 'high'`.
  *
  *   MAIN PASS — operates on the (possibly-downgraded) lens signals:
- *     1. If `thesisFitScore` is provided AND below
+ *     1. If a structured dealbreaker matches the startup → 'reject'
+ *        (reason codes `dealbreaker:<term>`). Short-circuits everything else.
+ *     2. If `thesisFitScore` is provided AND below
  *        `OUT_OF_SCOPE_THESIS_THRESHOLD` (DS-E4-F1-S1) → 'reject' with
  *        reason `out_of_thesis_scope`. Short-circuits everything else.
- *     2. If ANY lens has signal === 'reject' → 'reject'
+ *     3. If ANY lens has signal === 'reject' → 'reject'
  *        (reasonCode `lens.<key>.reject` per offending lens).
- *     3. Else compute `overallScore` = round(mean(lens.score)).
- *     4. If `overallScore < 40`              → 'reject'  (`low_overall_score`).
- *     5. Else if any lens.signal === 'review' → 'review'
+ *     4. Else compute `overallScore` = round(mean(lens.score)).
+ *     5. If `overallScore < 40`              → 'reject'  (`low_overall_score`).
+ *     6. Else if any lens.signal === 'review' → 'review'
  *        (reasonCode `lens.<key>.review` per such lens).
- *     6. Else if 40 <= overallScore < 60      → 'review'
+ *     7. Else if 40 <= overallScore < 60      → 'review'
  *        (reasonCode `borderline_overall_score`).
- *     7. Else                                 → 'advance'  (no reason codes).
+ *     8. Else                                 → 'advance'  (no reason codes).
  *
  * Edge cases:
  *  - Empty lens list → 'review' with reason `no_lens_signals`.
@@ -56,11 +59,12 @@ import {
  * obvious — investors should be able to read the docstring above and predict
  * the output.
  *
- * Versioning: bumped 1 → 2 with the addition of the evidence pre-pass and
- * thesis-scope short-circuit. Older `screening_decision` rows remain
- * interpretable via their `policyVersion` column.
+ * Versioning: bumped 1 → 3 with the addition of the evidence pre-pass,
+ * thesis-scope short-circuit, and backend-owned dealbreaker enforcement.
+ * Older `screening_decision` rows remain interpretable via their
+ * `policyVersion` column.
  */
-export const POLICY_VERSION = 2 as const;
+export const POLICY_VERSION = 3 as const;
 
 /**
  * Snapshot of every constant that participates in the triage decision.
@@ -128,6 +132,75 @@ export const TriageDecideInputSchema = z.object({
 });
 export type TriageDecideInput = z.infer<typeof TriageDecideInputSchema>;
 
+interface ScreeningStartupSnapshot {
+  industry: string | null;
+  sectorIndustry: string | null;
+  sectorIndustryGroup: string | null;
+  pitchDeckUrl: string | null;
+  pitchDeckPath: string | null;
+  productDescription: string | null;
+  description: string | null;
+  teamMembers: { name: string; role: string; linkedinUrl?: string }[] | null;
+  fundingTarget: number | null;
+  valuation: number | null;
+  raiseType: string | null;
+  website: string | null;
+}
+
+interface ActiveInvestorThesisSnapshot {
+  dealBreakers: string[] | null;
+}
+
+const DEALBREAKER_REASON_PREFIX = "dealbreaker:";
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function matchesTermInField(field: string, term: string): boolean {
+  const trimmedTerm = term.trim();
+  if (!trimmedTerm) return false;
+  const pattern = new RegExp(`\\b${escapeRegex(trimmedTerm)}\\b`, "i");
+  return pattern.test(field);
+}
+
+function dedupeStrings(values: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const value of values) {
+    const key = value.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(value);
+  }
+  return out;
+}
+
+function collectDealbreakerReasonCodes(
+  startupSnapshot: ScreeningStartupSnapshot | null,
+  theses: ActiveInvestorThesisSnapshot[],
+): string[] {
+  if (!startupSnapshot) return [];
+  const fields = [
+    startupSnapshot.industry,
+    startupSnapshot.sectorIndustry,
+    startupSnapshot.sectorIndustryGroup,
+  ].filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+  if (fields.length === 0) return [];
+
+  const matches: string[] = [];
+  for (const thesis of theses) {
+    for (const breaker of thesis.dealBreakers ?? []) {
+      const trimmedBreaker = breaker.trim();
+      if (!trimmedBreaker) continue;
+      if (!fields.some((field) => matchesTermInField(field, trimmedBreaker))) continue;
+      matches.push(`${DEALBREAKER_REASON_PREFIX}${trimmedBreaker}`);
+    }
+  }
+
+  return dedupeStrings(matches);
+}
+
 export const ScreeningDecisionSchema = z.object({
   id: z.string().uuid(),
   startupId: z.string().uuid(),
@@ -176,8 +249,26 @@ function hasThinEvidence(lens: TriageLensInput): boolean {
  */
 export function applyTriagePolicy(
   lenses: TriageLensInput[],
-  options?: { thesisFitScore?: number | null },
+  options?: { thesisFitScore?: number | null; dealbreakerReasonCodes?: readonly string[] },
 ): TriageOutcome {
+  const overallScore =
+    lenses.length === 0
+      ? 0
+      : Math.round(lenses.reduce((sum, l) => sum + l.score, 0) / lenses.length);
+
+  const dealbreakerReasonCodes = dedupeStrings(
+    (options?.dealbreakerReasonCodes ?? [])
+      .map((code) => code.trim())
+      .filter((code) => code.length > 0),
+  );
+  if (dealbreakerReasonCodes.length > 0) {
+    return {
+      classification: "reject",
+      overallScore,
+      reasonCodes: dealbreakerReasonCodes,
+    };
+  }
+
   // DS-E4-F1-S1 — short-circuit out-of-scope deals before lens evaluation
   // even runs. Caller may pass null to opt out (e.g. when no investor
   // thesis is registered yet).
@@ -189,11 +280,7 @@ export function applyTriagePolicy(
   ) {
     return {
       classification: "reject",
-      overallScore: lenses.length === 0
-        ? 0
-        : Math.round(
-            lenses.reduce((sum, l) => sum + l.score, 0) / lenses.length,
-          ),
+      overallScore,
       reasonCodes: ["out_of_thesis_scope"],
     };
   }
@@ -201,7 +288,7 @@ export function applyTriagePolicy(
   if (lenses.length === 0) {
     return {
       classification: "review",
-      overallScore: 0,
+      overallScore,
       reasonCodes: ["no_lens_signals"],
     };
   }
@@ -221,10 +308,6 @@ export function applyTriagePolicy(
   });
 
   const rejecting = effectiveLenses.filter((l) => l.signal === "reject");
-  const overallScore = Math.round(
-    effectiveLenses.reduce((sum, l) => sum + l.score, 0) /
-      effectiveLenses.length,
-  );
 
   if (rejecting.length > 0) {
     return {
@@ -252,11 +335,7 @@ export function applyTriagePolicy(
   );
   const borderline = overallScore < ADVANCE_SCORE_THRESHOLD;
 
-  if (
-    reviewing.length > 0 ||
-    lowEvidenceKeys.length > 0 ||
-    borderline
-  ) {
+  if (reviewing.length > 0 || lowEvidenceKeys.length > 0 || borderline) {
     const reasonCodes: string[] = [
       ...reviewing.map((l) => `lens.${l.key}.review`),
       ...lowEvidenceKeys.map((key) => `lens.${key}.low_evidence`),
@@ -311,12 +390,15 @@ export class ScreeningTriageService {
 
   async decide(input: TriageDecideInput): Promise<ScreeningDecision> {
     const parsed = TriageDecideInputSchema.parse(input);
+    const startupSnapshot = await this.fetchMaterialsInput(parsed.startupId);
+    const dealbreakerReasonCodes = await this.fetchDealbreakerReasonCodes(
+      startupSnapshot,
+    );
     const outcome = applyTriagePolicy(parsed.lensResults, {
       thesisFitScore: parsed.thesisFitScore ?? null,
+      dealbreakerReasonCodes,
     });
-    const materials = buildMissingMaterials(
-      await this.fetchMaterialsInput(parsed.startupId),
-    );
+    const materials = buildMissingMaterials(startupSnapshot);
     const canonical = canonicalizeDecision(outcome, materials);
     const snapshot: ScreeningDecisionLensSnapshot[] = parsed.lensResults.map(
       ({ key, score, signal }) => ({ key, score, signal }),
@@ -364,9 +446,12 @@ export class ScreeningTriageService {
 
   private async fetchMaterialsInput(
     startupId: string,
-  ): Promise<MaterialsInput | null> {
+  ): Promise<ScreeningStartupSnapshot | null> {
     const [row] = await this.drizzle.db
       .select({
+        industry: startup.industry,
+        sectorIndustry: startup.sectorIndustry,
+        sectorIndustryGroup: startup.sectorIndustryGroup,
         pitchDeckUrl: startup.pitchDeckUrl,
         pitchDeckPath: startup.pitchDeckPath,
         productDescription: startup.productDescription,
@@ -381,6 +466,21 @@ export class ScreeningTriageService {
       .where(eq(startup.id, startupId))
       .limit(1);
     return row ?? null;
+  }
+
+  private async fetchDealbreakerReasonCodes(
+    startupSnapshot: ScreeningStartupSnapshot | null,
+  ): Promise<string[]> {
+    if (!startupSnapshot) return [];
+
+    const rows = await this.drizzle.db
+      .select({ dealBreakers: investorThesis.dealBreakers })
+      .from(investorThesis)
+      .where(eq(investorThesis.isActive, true))
+      .orderBy(desc(investorThesis.createdAt))
+      .limit(1000);
+
+    return collectDealbreakerReasonCodes(startupSnapshot, rows);
   }
 
   private toDecision(

@@ -5,7 +5,7 @@ import {
   OnModuleInit,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { Job } from "bullmq";
 import {
   AiScreeningJobData,
@@ -20,8 +20,11 @@ import { DrizzleService } from "../../../database";
 import { NotificationGateway } from "../../../notification/notification.gateway";
 import { startup } from "../../startup/entities";
 import { DealEventService } from "../../startup/deal-event.service";
-import { startupMatch } from "../../investor/entities/investor.schema";
+import { user, UserRole } from "../../../auth/entities/auth.schema";
+import { investorThesis, startupMatch } from "../../investor/entities/investor.schema";
 import { startupLensResult } from "../entities";
+import type { SynthesisResult } from "../interfaces/phase-results.interface";
+import { InvestorMatchingService } from "../services/investor-matching.service";
 import { PipelinePhase } from "../interfaces/pipeline.interface";
 import type {
   ScreeningLensSummary,
@@ -64,6 +67,7 @@ export class ScreeningProcessor
     private screeningOutput: ScreeningOutputService,
     private screeningTriage: ScreeningTriageService,
     private dealEvents: DealEventService,
+    private investorMatching: InvestorMatchingService,
   ) {
     const redisUrl = config.get<string>("REDIS_URL", "redis://localhost:6379");
     const queuePrefix = config.get<string>("QUEUE_PREFIX");
@@ -312,9 +316,11 @@ export class ScreeningProcessor
     return {
       lenses,
       failedKeys,
-      classification: triageDecision?.classification,
-      overallScore: triageDecision?.overallScore,
-      reasonCodes: triageDecision?.reasonCodes,
+      classification:
+        triageDecision?.classification ?? screeningContract?.overall.signal ?? "review",
+      nextAction: screeningContract?.overall.nextAction,
+      overallScore: triageDecision?.overallScore ?? screeningContract?.overall.score ?? 0,
+      reasonCodes: triageDecision?.reasonCodes ?? [],
       missingMaterials:
         (screeningContract?.overall.missingMaterials as ScreeningResult["missingMaterials"]) ?? [],
     };
@@ -322,15 +328,64 @@ export class ScreeningProcessor
 
   /**
    * Returns the highest `thesisFitScore` recorded across all investors for
-   * this startup, or null if no matches exist yet. The triage policy treats
-   * null as "skip the out-of-scope check" — never reject for lack of data.
+   * this startup, or null if no matches exist yet.
    *
-   * Aggregation choice: MAX. If even one investor's thesis loosely matches,
-   * the deal isn't out-of-scope platform-wide. That keeps reruns useful in
-   * dev because once matches exist, a SCREENING rerun can apply the thesis
-   * gate against the persisted investor pool without re-uploading.
+   * If the persisted matches are missing on a first run, we opportunistically
+   * backfill them from the live investor-thesis pool and synthesis result so
+   * the out-of-thesis gate can still make a truthful decision on that same
+   * screening pass.
    */
   private async maxThesisFitScore(
+    startupId: string,
+  ): Promise<number | null> {
+    const persistedScore = await this.getPersistedThesisFitScore(startupId);
+    if (persistedScore !== null) {
+      return persistedScore;
+    }
+
+    const hasActiveThesis = await this.hasActiveInvestorThesis();
+    if (!hasActiveThesis) {
+      return null;
+    }
+
+    const synthesis = (await this.pipelineState.getPhaseResult(
+      startupId,
+      PipelinePhase.SYNTHESIS,
+    )) as SynthesisResult | null;
+    if (!synthesis) {
+      this.logger.debug(
+        `[ScreeningProcessor] No synthesis result available yet for ${startupId}; thesis-fit gate remains unseeded`,
+      );
+      return null;
+    }
+
+    const startupForMatching = await this.loadStartupForMatching(startupId);
+    if (!startupForMatching) {
+      return null;
+    }
+
+    try {
+      const seeded = await this.investorMatching.matchStartup({
+        startupId,
+        startup: startupForMatching,
+        synthesis,
+      });
+
+      if (seeded.candidatesEvaluated === 0) {
+        return 0;
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.warn(
+        `[ScreeningProcessor] Thesis-fit backfill failed for ${startupId}: ${message}`,
+      );
+      return null;
+    }
+
+    return this.getPersistedThesisFitScore(startupId);
+  }
+
+  private async getPersistedThesisFitScore(
     startupId: string,
   ): Promise<number | null> {
     const rows = await this.drizzle.db
@@ -340,6 +395,46 @@ export class ScreeningProcessor
       .orderBy(desc(startupMatch.thesisFitScore))
       .limit(1);
     return rows[0]?.score ?? null;
+  }
+
+  private async hasActiveInvestorThesis(): Promise<boolean> {
+    const rows = await this.drizzle.db
+      .select({ userId: user.id })
+      .from(user)
+      .leftJoin(investorThesis, eq(investorThesis.userId, user.id))
+      .where(
+        and(
+          inArray(user.role, [UserRole.INVESTOR, UserRole.ADMIN]),
+          eq(investorThesis.isActive, true),
+        ),
+      )
+      .limit(1);
+
+    return rows.length > 0;
+  }
+
+  private async loadStartupForMatching(startupId: string): Promise<{
+    industry: string;
+    sectorIndustryGroup?: string | null;
+    stage: string;
+    fundingTarget?: number;
+    location: string;
+    geoPath?: string[] | null;
+  } | null> {
+    const [row] = await this.drizzle.db
+      .select({
+        industry: startup.industry,
+        sectorIndustryGroup: startup.sectorIndustryGroup,
+        stage: startup.stage,
+        fundingTarget: startup.fundingTarget,
+        location: startup.location,
+        geoPath: startup.geoPath,
+      })
+      .from(startup)
+      .where(eq(startup.id, startupId))
+      .limit(1);
+
+    return row ?? null;
   }
 
   private async buildContext(startupId: string): Promise<LensInput> {

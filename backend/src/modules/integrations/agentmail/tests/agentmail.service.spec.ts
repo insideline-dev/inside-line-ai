@@ -188,6 +188,26 @@ describe('AgentMailService', () => {
       expect(notificationService.create).toHaveBeenCalled();
     });
 
+    it('should pass the webhook message snapshot to Clara intake without refetching', async () => {
+      claraService.isClaraInbox.mockReturnValueOnce(true);
+
+      await service.handleWebhook(mockWebhookEnvelopePayload as unknown);
+
+      expect(agentMailClient.getMessage).not.toHaveBeenCalled();
+      expect(claraService.handleIncomingMessage).toHaveBeenCalledWith(
+        'inbox-1',
+        'ext-thread-123',
+        'msg-envelope-123',
+        expect.objectContaining({
+          messageSnapshot: expect.objectContaining({
+            from: 'founder@startup.com',
+            subject: 'Pitch from email',
+            text: 'Pitch content',
+          }),
+        }),
+      );
+    });
+
     it('should skip if no user found for inbox', async () => {
       drizzleService.db.limit.mockResolvedValueOnce([]);
 

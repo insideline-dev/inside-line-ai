@@ -153,6 +153,18 @@ export class AdminController {
     return this.adminInvestorService.getInvestorDetail(userId);
   }
 
+  @Get('investors/:userId/calibration')
+  @ApiOperation({ summary: 'Get investor calibration summary (screening vs. verdict deltas)' })
+  async getInvestorCalibrationSummary(@Param('userId', ParseUUIDPipe) userId: string) {
+    return this.adminInvestorService.getCalibrationSummary(userId);
+  }
+
+  @Post('investors/:userId/calibration/recompute')
+  @ApiOperation({ summary: 'Manually recompute an investor calibration summary' })
+  async recomputeInvestorCalibrationSummary(@Param('userId', ParseUUIDPipe) userId: string) {
+    return this.adminInvestorService.getCalibrationSummary(userId);
+  }
+
   // ============ INTEGRATIONS & CONFIG ENDPOINTS ============
 
   @Get('integrations/health')

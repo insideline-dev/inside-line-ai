@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { eq, desc, sql } from 'drizzle-orm';
 import { DrizzleService } from '../../database';
 import { user, UserRole } from '../../auth/entities/auth.schema';
@@ -9,11 +9,11 @@ import {
   investorScoringPreference,
 } from '../investor/entities/investor.schema';
 import { startup } from '../startup/entities/startup.schema';
+import { summarizeCalibrationRows, type CalibrationSummary } from '../investor/calibration.service';
+import { investorDealDecision } from '../investor/entities/investor-deal-decision.schema';
 
 @Injectable()
 export class AdminInvestorService {
-  private readonly logger = new Logger(AdminInvestorService.name);
-
   constructor(private drizzle: DrizzleService) {}
 
   async listInvestors() {
@@ -117,5 +117,20 @@ export class AdminInvestorService {
       matches,
       scoringPreferences: scoringPrefs,
     };
+  }
+
+  async getCalibrationSummary(userId: string): Promise<CalibrationSummary> {
+    const rows = await this.drizzle.db
+      .select({
+        verdict: investorDealDecision.verdict,
+        triage: investorDealDecision.triageClassificationAtDecision,
+        reasonTags: investorDealDecision.reasonTags,
+        startupId: investorDealDecision.startupId,
+        decidedAt: investorDealDecision.decidedAt,
+      })
+      .from(investorDealDecision)
+      .where(eq(investorDealDecision.investorId, userId));
+
+    return summarizeCalibrationRows(rows);
   }
 }

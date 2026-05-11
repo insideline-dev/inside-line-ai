@@ -9,6 +9,7 @@ import {
   type InvestorDealDecisionRow,
 } from "./entities/investor-deal-decision.schema";
 import type { RecordDealDecision } from "./dto/record-deal-decision.dto";
+import { buildDecisionCalibrationSnapshot } from "./calibration.service";
 
 /**
  * DS-E11-F1-S1 — the investor's actual close/pass verdict on a deal.
@@ -47,6 +48,11 @@ export class DealDecisionService {
 
     const latestTriage = await this.screeningTriage.latestForStartup(startupId);
     const triageClassificationAtDecision = latestTriage?.classification ?? null;
+    const calibration = buildDecisionCalibrationSnapshot({
+      verdict: input.verdict,
+      triageClassificationAtDecision,
+      reasonTags: input.reasonTags,
+    });
 
     const [row] = await this.drizzle.db
       .insert(investorDealDecision)
@@ -78,6 +84,7 @@ export class DealDecisionService {
         reasonTags: input.reasonTags ?? [],
         hasNotes: Boolean(input.notes && input.notes.trim().length > 0),
         triageClassificationAtDecision,
+        calibration,
       },
     });
 

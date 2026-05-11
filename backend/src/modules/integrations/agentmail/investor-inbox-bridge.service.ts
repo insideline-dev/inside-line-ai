@@ -32,12 +32,32 @@ export class InvestorInboxBridgeService {
   async evaluate(params: EvaluateParams): Promise<void> {
     const { userId, threadId, messageId, inboxId, subject, bodyText, fromEmail, attachments } = params;
 
-    const hasPitchDeck = attachments.some(att =>
+    const pitchDeckAttachment = attachments.find(att =>
       this.attachmentService.isPitchDeck(att.filename, att.contentType),
     );
+    const hasPitchDeck = Boolean(pitchDeckAttachment);
     const hasSignals = this.hasSubmissionSignals(subject, bodyText);
 
     if (!hasPitchDeck && !hasSignals) {
+      return;
+    }
+
+    const existingSubmission = await this.drizzle.db
+      .select({ id: investorInboxSubmission.id, status: investorInboxSubmission.status })
+      .from(investorInboxSubmission)
+      .where(
+        and(
+          eq(investorInboxSubmission.userId, userId),
+          eq(investorInboxSubmission.inboxId, inboxId),
+          eq(investorInboxSubmission.messageId, messageId),
+        ),
+      )
+      .limit(1);
+
+    if (existingSubmission.length > 0) {
+      this.logger.debug(
+        `Skipping duplicate investor inbox submission for message ${messageId} in inbox ${inboxId}`,
+      );
       return;
     }
 
@@ -45,12 +65,17 @@ export class InvestorInboxBridgeService {
 
     const suggestedName =
       this.startupIntake.extractCompanyFromBody(bodyText) ??
-      this.startupIntake.extractCompanyFromFilename(
-        attachments.find(att => this.attachmentService.isPitchDeck(att.filename, att.contentType))?.filename,
-      ) ??
+      this.startupIntake.extractCompanyFromFilename(pitchDeckAttachment?.filename) ??
       null;
 
-    const storageKeys = attachments.map(att => att.storageKey);
+    const storageKeys = pitchDeckAttachment
+      ? [
+          pitchDeckAttachment.storageKey,
+          ...attachments
+            .filter(att => att !== pitchDeckAttachment)
+            .map(att => att.storageKey),
+        ]
+      : attachments.map(att => att.storageKey);
 
     await this.drizzle.db.insert(investorInboxSubmission).values({
       userId,
@@ -82,9 +107,9 @@ export class InvestorInboxBridgeService {
     }
 
     const companyName = submission.suggestedCompanyName ?? 'Untitled Startup';
-
-    // Find pitch deck from stored attachment keys
-    const pitchDeckPath = (submission.attachmentKeys as string[])?.[0] ?? undefined;
+    const pitchDeckPath = (submission.attachmentKeys as string[])?.find(
+      (key) => typeof key === 'string' && key.trim().length > 0,
+    );
 
     const result = await this.startupIntake.createStartup({
       adminUserId: userId,

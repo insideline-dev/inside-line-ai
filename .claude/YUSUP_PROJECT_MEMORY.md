@@ -376,3 +376,82 @@ Baseline pre-#19: 1854 pass / 101 fail (carried from #18). After this change: **
 - `bun db:push` against Neon — Yusuf to run.
 - Orval regen — Yusuf to run once stack is up.
 - The ML retune that *consumes* the lens deltas (out of scope, sibling DS-E11-F3-S1).
+
+## 2026-05-11
+
+### DS-E11-F3-S1: Investor calibration proposal + approval flow (`investor_event`)
+
+Stacked on PR #26 (DD lens deltas) → #18 (recompute infra) → `dev`.
+
+### Architectural decision — calibration audit lives on a NEW `investor_event` table
+
+`deal_events.startupId` is a non-nullable FK — every deal event ties to a deal. Calibration proposals are investor-scoped (no `startupId` to attach), so widening `deal_events` would break the invariant globally. Solution: a parallel `investor_event` table mirrors the `deal_events` pattern, opens a path for future investor-scoped audit needs (thesis updates, weight overrides, dealbreaker changes).
+
+- Schema: `backend/src/modules/investor/entities/investor-event.schema.ts` — `(id, investor_user_id fk → users.id NOT NULL, type, payload jsonb default '{}', created_at)`. Indexed on `(investor_user_id, created_at desc)` and `(type, created_at desc)` (the dedupe lookup uses both).
+- Constant tuple `INVESTOR_EVENT_TYPES` starts with `calibration_proposal_created`, `calibration_proposal_approved`, `calibration_proposal_rejected`.
+- Migration: `backend/drizzle/0019_faulty_ravenous.sql` (generated, not pushed — Yusuf to `bun db:push` against Neon).
+
+### Proposal heuristic (lives in `calibration-proposal.constants.ts`)
+
+A proposal fires when EITHER rule trips on the latest snapshot:
+
+1. **Override-tag focus** — any `topOverrideReasons` entry with `count >= OVERRIDE_COUNT_THRESHOLD` (3) is surfaced. 3 was the AC's example — small enough to surface real signal early, large enough to filter a one-off mismatch.
+2. **Lens-delta drift** — any lens with `count >= LENS_DELTA_MIN_COUNT` (2) AND `abs(meanDelta) >= LENS_DELTA_DRIFT_THRESHOLD` (10) contributes a `lensAdjustments` entry. Sign convention: positive `adjustment` = increase that lens's weight (mirrors `meanDelta` sign — DD higher than screening means screening is under-weighting the lens).
+
+Suggestion shape (stored on the event payload):
+```
+{
+  lensAdjustments: [{ lensKey: "team"|"market"|"traction", adjustment: number }],
+  overrideTagFocus: string[]
+}
+```
+
+### Idempotency
+
+- `idempotencyKey = sha256(JSON.stringify({investorUserId, delta, snapshotHash}))`.
+- `snapshotHash = sha256(<sorted topOverrideReasons fingerprint>::<sorted lensDeltas fingerprint>)`.
+- Dedupe window: 7 days (`PROPOSAL_DEDUPE_WINDOW_MS`). Before emitting, the service queries `investor_event` for any `calibration_proposal_created` row in the same investor's stream within the window with the same `payload->>idempotencyKey`. Match → skip silently.
+
+### Strict ordering inside `CalibrationRecomputeService.runJob()`
+
+Per AC + sibling stories:
+
+1. compute summary (decision aggregate) — `summarizeCalibrationRows`
+2. fold lens deltas (#10, DS-E11-F2-S1) — `summarizeLensDeltas`
+3. write snapshot — `upsertSnapshot` (status `completed`)
+4. generate proposals (this story) — `proposals.maybeGenerateProposal`
+
+Step 4 wraps in a try/catch so a proposal-hook failure does NOT fail the snapshot recompute (it's already persisted; the investor-visible recompute is "done").
+
+### Endpoints (investor, NOT admin)
+
+- `GET /investor/calibration/proposals?status=pending` — defaults to `pending`; `approved`/`rejected` also valid.
+- `POST /investor/calibration/proposals/:id/approve` — writes `calibration_proposal_approved` event.
+- `POST /investor/calibration/proposals/:id/reject` — optional `{ reason }` body, writes `calibration_proposal_rejected` event with reason on payload.
+
+All three guarded by `RolesGuard` with `INVESTOR`/`ADMIN`. The service's `findOwnedProposal` re-verifies (a) the user is investor/admin and (b) the proposal belongs to them.
+
+### WS event
+
+`investor.calibration.proposal.created` (payload `{ investorId, proposalId, createdAt }`) fires inside `maybeGenerateProposal` after the event row is inserted. Frontend `useCalibrationProposals` subscribes via `useSocket` and invalidates the pending-list cache so the panel refreshes without a page reload. Approve/reject stay HTTP-only — the click already round-trips through the API.
+
+### Frontend wiring
+
+- `useCalibrationProposals(status)`, `useApproveCalibrationProposal`, `useRejectCalibrationProposal` added to the existing interim hook layer at `frontend/src/lib/calibration/useCalibration.ts` (same `customFetch` mutator path as the admin hooks — single auth/refresh/backoff path, no second fetch implementation).
+- `CalibrationCard` (investor) extended with a `CalibrationProposalsPanel` sub-section. Shows lens nudges, focus reasons, evidence summary, approve/reject buttons + an optional reject-reason input per proposal.
+
+### Tests
+
+- New: `calibration-proposal.service.spec.ts` — 12 tests across `buildSuggestedDelta` (heuristic edges), `maybeGenerateProposal` (no-fire, fire+WS, dedupe within window), `listForInvestor` (event folding), `approve`/`reject` (event emission + RBAC).
+- Updated: `calibration-recompute.service.spec.ts` — adds 2 ordering tests (`maybeGenerateProposal` called AFTER snapshot upsert; recompute does not fail on proposal-hook error).
+- Updated: `investor.controller.spec.ts` — adds 6 tests covering list (with status filter), approve, reject (with + without reason), and NotFound surface.
+- New: `frontend/src/lib/calibration/useCalibration.test.ts` — 2 tests covering the proposal-list query-key forks.
+
+Baseline post-#19: 1867 pass / 101 fail. After this change: **1900 pass / 90 fail** — net +33 passing, -11 failing (no regressions; the 11 fewer fails are from removed legacy `controller.spec.ts` skeleton coverage being repaired in the same edit pass).
+
+### Out of scope (flagged for next iteration)
+
+- Auto-applying approved suggestedDelta to live thesis row / scoring preferences. Approve writes the event only — a follow-up story can wire the live update.
+- Multi-partner consensus / multi-approval thresholds. v1 = one investor per proposal.
+- The reject-reason currently captured as free text; a future tagging step could feed it back into the heuristic.
+

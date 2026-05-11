@@ -6,6 +6,7 @@ import { QueueService } from "../../../queue/queue.service";
 import { UserRole } from "../../../auth/entities/auth.schema";
 import { CalibrationRecomputeService } from "../calibration-recompute.service";
 import { LensDeltaService } from "../lens-delta.service";
+import { CalibrationProposalService } from "../calibration-proposal.service";
 import {
   CALIBRATION_RECOMPUTE_DEDUPE_WINDOW_MS,
   CALIBRATION_RECOMPUTE_JOB,
@@ -167,10 +168,20 @@ function buildLensDeltaMock(rows: Array<{
   };
 }
 
+function buildProposalsMock() {
+  return {
+    maybeGenerateProposal: jest.fn().mockResolvedValue(null),
+    listForInvestor: jest.fn().mockResolvedValue([]),
+    approve: jest.fn(),
+    reject: jest.fn(),
+  };
+}
+
 async function buildService(
   drizzleMock: ReturnType<typeof buildDrizzleMock>,
   queue: { getQueue: jest.Mock },
   lensDelta: ReturnType<typeof buildLensDeltaMock> = buildLensDeltaMock(),
+  proposals: ReturnType<typeof buildProposalsMock> = buildProposalsMock(),
 ) {
   const moduleRef = await Test.createTestingModule({
     providers: [
@@ -178,6 +189,7 @@ async function buildService(
       { provide: DrizzleService, useValue: drizzleMock },
       { provide: QueueService, useValue: queue },
       { provide: LensDeltaService, useValue: lensDelta },
+      { provide: CalibrationProposalService, useValue: proposals },
     ],
   }).compile();
   return moduleRef.get(CalibrationRecomputeService);
@@ -413,6 +425,87 @@ describe("CalibrationRecomputeService", () => {
         meanAbsDelta: 0,
       });
       expect(drizzle.db._insertedRow?.status).toBe("completed");
+    });
+
+    it("calls maybeGenerateProposal after the snapshot upsert (strict ordering)", async () => {
+      const drizzle = buildDrizzleMock({
+        selectsToSkip: 2,
+        decisionRows: [
+          {
+            verdict: "advance",
+            triage: "advance",
+            reasonTags: [],
+            startupId: "s-1",
+            decidedAt: new Date("2026-04-29T12:00:00Z"),
+          },
+        ],
+      });
+      const queue = buildQueueMock();
+      const lensDelta = buildLensDeltaMock();
+      const callOrder: string[] = [];
+      const insertSpy = drizzle.db.insert;
+      insertSpy.mockClear();
+      insertSpy.mockImplementation(() => {
+        callOrder.push("snapshot.upsert");
+        const chain: {
+          values: jest.Mock;
+          onConflictDoUpdate: jest.Mock;
+          returning: jest.Mock;
+        } = {
+          values: jest.fn().mockReturnValue(undefined),
+          onConflictDoUpdate: jest.fn().mockReturnValue(undefined),
+          returning: jest.fn().mockResolvedValue([
+            { investorId: INVESTOR_ID, status: "completed" },
+          ]),
+        };
+        chain.values.mockReturnValue(chain);
+        chain.onConflictDoUpdate.mockReturnValue(chain);
+        return chain;
+      });
+      const proposals = buildProposalsMock();
+      proposals.maybeGenerateProposal.mockImplementation(async () => {
+        callOrder.push("proposals.maybeGenerate");
+        return null;
+      });
+
+      const svc = await buildService(drizzle, queue.mock, lensDelta, proposals);
+      await svc.runJob(INVESTOR_ID, "test-job-ordering");
+
+      expect(callOrder).toEqual(["snapshot.upsert", "proposals.maybeGenerate"]);
+      expect(proposals.maybeGenerateProposal).toHaveBeenCalledWith(
+        INVESTOR_ID,
+        expect.objectContaining({ totalDecisions: 1 }),
+      );
+    });
+
+    it("does not fail the recompute when the proposal hook throws", async () => {
+      const drizzle = buildDrizzleMock({
+        selectsToSkip: 2,
+        decisionRows: [
+          {
+            verdict: "advance",
+            triage: "advance",
+            reasonTags: [],
+            startupId: "s-1",
+            decidedAt: new Date("2026-04-29T12:00:00Z"),
+          },
+        ],
+      });
+      const queue = buildQueueMock();
+      const proposals = buildProposalsMock();
+      proposals.maybeGenerateProposal.mockRejectedValueOnce(
+        new Error("downstream blew up"),
+      );
+      const svc = await buildService(
+        drizzle,
+        queue.mock,
+        buildLensDeltaMock(),
+        proposals,
+      );
+
+      const result = await svc.runJob(INVESTOR_ID, "test-job-proposal-fail");
+      expect(result.summary.totalDecisions).toBe(1);
+      expect(proposals.maybeGenerateProposal).toHaveBeenCalled();
     });
 
     it("marks running, recomputes, and upserts a completed snapshot", async () => {

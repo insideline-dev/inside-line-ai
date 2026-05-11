@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { MulterModule } from '@nestjs/platform-express';
@@ -21,6 +21,7 @@ import { DatabaseModule } from '../../database';
 import { QueueModule } from '../../queue';
 import { EarlyAccessModule } from '../early-access';
 import { NotificationModule } from '../../notification/notification.module';
+import { InvestorModule } from '../investor/investor.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { NotificationModule } from '../../notification/notification.module';
     UnipileModule,
     EarlyAccessModule,
     NotificationModule,
+    forwardRef(() => InvestorModule),
     MulterModule.register({
       limits: {
         fileSize: 10 * 1024 * 1024, // 10MB limit

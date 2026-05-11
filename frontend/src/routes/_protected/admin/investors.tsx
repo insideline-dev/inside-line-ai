@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
   Card,
   CardContent,
@@ -28,6 +28,12 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { DataTable } from "@/components/DataTable";
 import { customFetch } from "@/api/client";
 import {
+  useInvestorCalibration,
+  useInvestorCalibrationSocket,
+  useRecomputeInvestorCalibration,
+  type InvestorCalibrationSummary,
+} from "@/lib/calibration/useCalibration";
+import {
   Users as UsersIcon,
   Globe,
   DollarSign,
@@ -37,6 +43,8 @@ import {
   Loader2,
   RefreshCw,
   AlertTriangle,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_protected/admin/investors")({
@@ -112,25 +120,6 @@ interface InvestorDetail {
   }>;
 }
 
-interface InvestorCalibrationSummary {
-  totalDecisions: number;
-  decisionsWithTriage: number;
-  aligned: number;
-  falsePositive: number;
-  falseNegative: number;
-  softMismatch: number;
-  alignmentRate: number | null;
-  topOverrideReasons: Array<{ reasonTag: string; count: number }>;
-  recentMismatches: Array<{
-    startupId: string;
-    decidedAt: string;
-    mismatchType: "false_positive" | "false_negative" | "soft_mismatch";
-    modelVerdict: "advance" | "review" | "reject";
-    investorVerdict: "advance" | "pass" | "hold";
-    reasonTags: string[];
-  }>;
-}
-
 // ---------- Helpers ----------
 
 function formatDate(dateStr: string | null | undefined) {
@@ -174,7 +163,10 @@ const statusColors: Record<string, string> = {
 function AdminInvestorsPage() {
   const [search, setSearch] = useState("");
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
-  const queryClient = useQueryClient();
+  const [recomputeNotice, setRecomputeNotice] = useState<
+    | { kind: "completed" | "failed"; message: string }
+    | null
+  >(null);
 
   const {
     data: investors = [],
@@ -192,29 +184,34 @@ function AdminInvestorsPage() {
     enabled: !!selectedUserId,
   });
 
-  const { data: calibration, isLoading: calibrationLoading, error: calibrationError } = useQuery({
-    queryKey: ["admin", "investors", selectedUserId, "calibration"],
-    queryFn: () =>
-      customFetch<InvestorCalibrationSummary>(
-        `/admin/investors/${selectedUserId}/calibration`,
-      ),
-    enabled: !!selectedUserId,
+  const {
+    data: calibrationSnapshot,
+    isLoading: calibrationLoading,
+    error: calibrationError,
+  } = useInvestorCalibration(selectedUserId);
+
+  const recomputeCalibration = useRecomputeInvestorCalibration(selectedUserId);
+
+  useInvestorCalibrationSocket(selectedUserId, {
+    onCompleted: () =>
+      setRecomputeNotice({
+        kind: "completed",
+        message: "Calibration recompute completed.",
+      }),
+    onFailed: (event) =>
+      setRecomputeNotice({
+        kind: "failed",
+        message: `Calibration recompute failed: ${event.error}`,
+      }),
   });
 
-  const recomputeCalibration = useMutation({
-    mutationFn: async () => {
-      if (!selectedUserId) return null;
-      return customFetch<InvestorCalibrationSummary>(
-        `/admin/investors/${selectedUserId}/calibration/recompute`,
-        { method: "POST" },
-      );
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: ["admin", "investors", selectedUserId, "calibration"],
-      });
-    },
-  });
+  const calibration: InvestorCalibrationSummary | undefined =
+    calibrationSnapshot?.summary;
+  const recomputeStatus = calibrationSnapshot?.status ?? null;
+  const recomputeInFlight =
+    recomputeCalibration.isPending ||
+    recomputeStatus === "queued" ||
+    recomputeStatus === "running";
 
   const filtered = investors.filter((inv) => {
     if (!search) return true;
@@ -719,21 +716,60 @@ function AdminInvestorsPage() {
                                 <p className="text-sm text-muted-foreground">
                                   Screening vs. investor verdict deltas on {calibration.decisionsWithTriage} of {calibration.totalDecisions} decisions.
                                 </p>
+                                {calibrationSnapshot?.computedAt && (
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    Last computed {formatDate(calibrationSnapshot.computedAt)}
+                                  </p>
+                                )}
                               </div>
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => recomputeCalibration.mutate()}
-                                disabled={recomputeCalibration.isPending}
+                                onClick={() => {
+                                  setRecomputeNotice(null);
+                                  recomputeCalibration.mutate();
+                                }}
+                                disabled={recomputeInFlight}
                               >
-                                {recomputeCalibration.isPending ? (
+                                {recomputeInFlight ? (
                                   <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
                                 ) : (
                                   <RefreshCw className="mr-1.5 h-4 w-4" />
                                 )}
-                                Recompute
+                                {recomputeStatus === "running"
+                                  ? "Running"
+                                  : recomputeStatus === "queued"
+                                    ? "Queued"
+                                    : "Recompute"}
                               </Button>
                             </div>
+
+                            {recomputeNotice && (
+                              <div
+                                className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm ${
+                                  recomputeNotice.kind === "completed"
+                                    ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                                    : "border-rose-200 bg-rose-50 text-rose-900"
+                                }`}
+                              >
+                                {recomputeNotice.kind === "completed" ? (
+                                  <CheckCircle2 className="h-4 w-4" />
+                                ) : (
+                                  <XCircle className="h-4 w-4" />
+                                )}
+                                <span>{recomputeNotice.message}</span>
+                              </div>
+                            )}
+
+                            {calibrationSnapshot?.status === "failed" &&
+                              calibrationSnapshot.lastError && (
+                                <div className="flex items-center gap-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">
+                                  <AlertTriangle className="h-4 w-4" />
+                                  <span>
+                                    Last recompute failed: {calibrationSnapshot.lastError}
+                                  </span>
+                                </div>
+                              )}
 
                             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                               <div className="rounded-md border bg-emerald-50 px-3 py-2 text-sm text-emerald-900">

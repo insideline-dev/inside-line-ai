@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { AdminInvestorService } from '../admin-investor.service';
 import { DrizzleService } from '../../../database';
+import { CalibrationRecomputeService } from '../../investor/calibration-recompute.service';
 
 describe('AdminInvestorService', () => {
   let service: AdminInvestorService;
@@ -27,6 +28,10 @@ describe('AdminInvestorService', () => {
   };
 
   let mockDb: ReturnType<typeof createMockDb>;
+  let calibrationRecomputeMock: {
+    getSnapshot: jest.Mock;
+    enqueueRecompute: jest.Mock;
+  };
 
   const mockInvestorId = 'investor-uuid-001';
 
@@ -53,6 +58,10 @@ describe('AdminInvestorService', () => {
 
   beforeEach(async () => {
     mockDb = createMockDb();
+    calibrationRecomputeMock = {
+      getSnapshot: jest.fn(),
+      enqueueRecompute: jest.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -60,6 +69,10 @@ describe('AdminInvestorService', () => {
         {
           provide: DrizzleService,
           useValue: { db: mockDb },
+        },
+        {
+          provide: CalibrationRecomputeService,
+          useValue: calibrationRecomputeMock,
         },
       ],
     }).compile();
@@ -305,43 +318,49 @@ describe('AdminInvestorService', () => {
   });
 
   describe('getCalibrationSummary', () => {
-    it('aggregates mismatch counts and override reasons', async () => {
-      mockDb._queue.push([
-        {
-          verdict: 'pass',
-          triage: 'advance',
-          reasonTags: ['pricing', 'team'],
-          startupId: 'startup-1',
-          decidedAt: new Date('2026-04-30T12:00:00Z'),
+    it('delegates to CalibrationRecomputeService.getSnapshot', async () => {
+      const snapshot = {
+        investorId: mockInvestorId,
+        status: 'completed' as const,
+        summary: {
+          totalDecisions: 3,
+          decisionsWithTriage: 3,
+          aligned: 1,
+          falsePositive: 1,
+          falseNegative: 1,
+          softMismatch: 0,
+          alignmentRate: 1 / 3,
+          topOverrideReasons: [],
+          recentMismatches: [],
         },
-        {
-          verdict: 'advance',
-          triage: 'reject',
-          reasonTags: ['team'],
-          startupId: 'startup-2',
-          decidedAt: new Date('2026-04-29T12:00:00Z'),
-        },
-        {
-          verdict: 'hold',
-          triage: 'review',
-          reasonTags: [],
-          startupId: 'startup-3',
-          decidedAt: new Date('2026-04-28T12:00:00Z'),
-        },
-      ]);
+        computedAt: '2026-05-01T12:00:00.000Z',
+        lastJobId: null,
+        lastError: null,
+        enqueuedAt: null,
+      };
+      calibrationRecomputeMock.getSnapshot.mockResolvedValueOnce(snapshot);
 
       const result = await service.getCalibrationSummary(mockInvestorId);
 
-      expect(result.totalDecisions).toBe(3);
-      expect(result.falsePositive).toBe(1);
-      expect(result.falseNegative).toBe(1);
-      expect(result.softMismatch).toBe(0);
-      expect(result.topOverrideReasons).toEqual([
-        { reasonTag: 'team', count: 2 },
-        { reasonTag: 'pricing', count: 1 },
-      ]);
-      expect(result.recentMismatches).toHaveLength(2);
-      expect(result.recentMismatches[0].startupId).toBe('startup-1');
+      expect(result).toBe(snapshot);
+      expect(calibrationRecomputeMock.getSnapshot).toHaveBeenCalledWith(mockInvestorId);
+    });
+  });
+
+  describe('recomputeCalibrationSummary', () => {
+    it('delegates to CalibrationRecomputeService.enqueueRecompute', async () => {
+      const recompute = {
+        investorId: mockInvestorId,
+        jobId: 'job-1',
+        status: 'queued' as const,
+        dedupedToExistingJob: false,
+      };
+      calibrationRecomputeMock.enqueueRecompute.mockResolvedValueOnce(recompute);
+
+      const result = await service.recomputeCalibrationSummary(mockInvestorId);
+
+      expect(result).toBe(recompute);
+      expect(calibrationRecomputeMock.enqueueRecompute).toHaveBeenCalledWith(mockInvestorId);
     });
   });
 });

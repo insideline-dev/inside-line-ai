@@ -67,19 +67,28 @@ function LensBadge({
 }) {
   const tone =
     lens.signal === "advance"
-      ? "text-green-700 border-green-300 bg-green-50 dark:bg-green-900/25 dark:text-green-200 dark:border-green-800"
+      ? "border-green-300 bg-green-50 text-green-900 dark:border-green-800 dark:bg-green-900/25 dark:text-green-100"
       : lens.signal === "review"
-        ? "text-amber-700 border-amber-300 bg-amber-50 dark:bg-amber-900/25 dark:text-amber-200 dark:border-amber-800"
+        ? "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-900/25 dark:text-amber-100"
         : lens.signal === "reject"
-          ? "text-red-700 border-red-300 bg-red-50 dark:bg-red-900/25 dark:text-red-200 dark:border-red-800"
-          : "text-muted-foreground border-border bg-muted/40";
+          ? "border-red-300 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-900/25 dark:text-red-100"
+          : "border-border bg-muted/40 text-foreground";
 
   return (
-    <Badge variant="outline" className={cn("gap-1.5 text-[11px] font-medium", tone)}>
-      <span className="font-semibold">{formatLabel(lens.key)}</span>
-      <span className="tabular-nums">{lens.score}</span>
-      <span className="opacity-80">{signalLabel(lens.signal)}</span>
-    </Badge>
+    <div className={cn("rounded-md border px-3 py-2", tone)}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-[11px] font-medium uppercase tracking-wide opacity-70">
+            {formatLabel(lens.key)}
+          </div>
+          <div className="text-sm font-semibold">{signalLabel(lens.signal)}</div>
+        </div>
+        <div className="text-right">
+          <div className="text-lg font-semibold tabular-nums leading-none">{lens.score}</div>
+          <div className="text-[11px] opacity-70">/100</div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -102,14 +111,18 @@ export function ScreeningSummaryCard({
   const screeningSignal = screeningState.signal;
   const screeningScore = screeningState.score;
   const nextAction = screeningState.nextAction;
-  const reasonCodes = screeningState.reasonCodes;
-  const reasonSummary =
-    reasonCodes.length > 0
-      ? summarizeReasonCodes(reasonCodes, 3)
-      : decision
-        ? "No flags raised"
-        : null;
   const missingMaterials = screeningState.missingMaterials;
+  const displayReasonCodes = screeningState.reasonCodes.filter(
+    (code) => !(code === "missing_materials" && missingMaterials.length > 0),
+  );
+  const reasonSummary =
+    displayReasonCodes.length > 0
+      ? summarizeReasonCodes(displayReasonCodes, 3)
+      : decision
+        ? missingMaterials.length > 0
+          ? `${missingMaterials.length} material${missingMaterials.length === 1 ? "" : "s"} needed before evaluation can continue.`
+          : "No flags raised"
+        : null;
   const lenses = useMemo(
     () => output?.lenses ?? decision?.lensSnapshot ?? [],
     [decision?.lensSnapshot, output?.lenses],
@@ -129,41 +142,47 @@ export function ScreeningSummaryCard({
   return (
     <Card className={cn(className)}>
       <CardHeader className="pb-3">
-        <CardTitle className="flex flex-wrap items-center gap-2 text-base">
-          <ShieldCheck className="h-4 w-4 text-primary" />
-          Screening
-          {screeningSignal ? (
-            decision ? (
-              <ClassificationBadge classification={decision.classification} size="sm" />
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-1">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <ShieldCheck className="h-4 w-4 text-primary" />
+              Screening
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Latest screening decision, what blocked it, and what happens next.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {screeningSignal ? (
+              decision ? (
+                <ClassificationBadge classification={decision.classification} size="sm" />
+              ) : (
+                <Badge variant="outline" className={cn("gap-1.5 border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide", signalToneClass)}>
+                  {signalLabel(screeningSignal)}
+                </Badge>
+              )
             ) : (
-              <Badge variant="outline" className={cn("gap-1.5 border font-semibold uppercase tracking-wide px-2 py-0.5 text-[10px]", signalToneClass)}>
-                {signalLabel(screeningSignal)}
+              <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                Not screened yet
               </Badge>
-            )
-          ) : (
-            <Badge variant="outline" className="text-[10px] text-muted-foreground">
-              Not screened yet
-            </Badge>
-          )}
-          {typeof screeningScore === "number" && (
-            <Badge variant="outline" className="text-[10px] text-muted-foreground">
-              {Math.round(screeningScore)}/100
-            </Badge>
-          )}
-          {nextAction && (
-            <Badge variant="outline" className="text-[10px] text-muted-foreground">
-              Next: {nextActionLabel(nextAction)}
-            </Badge>
-          )}
-          {screeningPhaseStatus && (
-            <Badge variant="outline" className="text-[10px] text-muted-foreground">
-              Phase {phaseStatusLabel(screeningPhaseStatus)}
-            </Badge>
-          )}
-        </CardTitle>
-        <p className="text-xs text-muted-foreground">
-          Latest screening decision, the reasons behind it, and what happened next.
-        </p>
+            )}
+            {typeof screeningScore === "number" && (
+              <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                Score {Math.round(screeningScore)}/100
+              </Badge>
+            )}
+            {nextAction && (
+              <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                Next {nextActionLabel(nextAction)}
+              </Badge>
+            )}
+            {screeningPhaseStatus && (
+              <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                Phase {phaseStatusLabel(screeningPhaseStatus)}
+              </Badge>
+            )}
+          </div>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         {isLoading && !decision && !output ? (
@@ -174,45 +193,28 @@ export function ScreeningSummaryCard({
           </div>
         ) : (
           <>
-            <div className="space-y-1.5">
-              <div className="flex flex-wrap items-center gap-2 text-sm">
-                <span className="font-medium text-foreground">Outcome</span>
-                <span className="text-muted-foreground">
-                  {screeningSignal
-                    ? `${signalLabel(screeningSignal)}${nextAction ? ` · Next: ${nextActionLabel(nextAction)}` : ""}`
-                    : output
-                      ? output.overall.missingMaterials.length > 0
-                        ? `${output.lenses.length} lens result${output.lenses.length === 1 ? "" : "s"} with ${output.overall.missingMaterials.length} missing material${output.overall.missingMaterials.length === 1 ? "" : "s"}`
-                        : `${output.lenses.length} lens result${output.lenses.length === 1 ? "" : "s"} · no missing materials`
-                      : "No screening data available yet."}
-                </span>
+            <div className="rounded-md border bg-muted/20 px-3 py-2.5">
+              <div className="text-sm font-medium text-foreground">
+                {screeningSignal
+                  ? `${signalLabel(screeningSignal)}${nextAction ? ` · ${nextActionLabel(nextAction)}` : ""}`
+                  : output
+                    ? output.overall.missingMaterials.length > 0
+                      ? `${output.overall.missingMaterials.length} missing material${output.overall.missingMaterials.length === 1 ? "" : "s"} need review`
+                      : `${output.lenses.length} lens result${output.lenses.length === 1 ? "" : "s"} available`
+                    : "No screening data available yet."}
               </div>
-              {decision && reasonSummary && (
-                <div className="text-xs text-muted-foreground">{reasonSummary}</div>
-              )}
-              {decision && decision.reasonCodes.length > 0 && (
-                <div className="space-y-1.5">
-                  <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    Reason codes
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {reasonCodes.map((code) => (
-                      <Badge key={code} variant="outline" className="border-border bg-muted/40 text-[11px] text-muted-foreground">
-                        {labelForReasonCode(code)}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
+              {reasonSummary && (
+                <div className="mt-1 text-xs text-muted-foreground">{reasonSummary}</div>
               )}
             </div>
 
             {missingMaterials.length > 0 && (
-              <div className="space-y-1.5 rounded-md border border-sky-300/60 bg-sky-50 px-3 py-2 text-xs text-sky-900 dark:border-sky-800/60 dark:bg-sky-950/30 dark:text-sky-100">
+              <div className="rounded-md border border-sky-300/60 bg-sky-50 px-3 py-2.5 text-xs text-sky-900 dark:border-sky-800/60 dark:bg-sky-950/30 dark:text-sky-100">
                 <div className="flex items-center gap-1.5 font-medium">
                   <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                  Missing materials ({missingMaterials.length})
+                  Missing materials
                 </div>
-                <div className="flex flex-wrap gap-1.5">
+                <div className="mt-2 flex flex-wrap gap-1.5">
                   {missingMaterials.map((code) => (
                     <Badge key={code} variant="outline" className="border-sky-400 bg-white text-[10px] text-sky-900 dark:border-sky-700 dark:bg-sky-950/50 dark:text-sky-100">
                       {missingMaterialLabel(code)}
@@ -222,13 +224,28 @@ export function ScreeningSummaryCard({
               </div>
             )}
 
-            {lenses.length > 0 && (
+            {displayReasonCodes.length > 0 && (
               <div className="space-y-1.5">
+                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Flags
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {displayReasonCodes.map((code) => (
+                    <Badge key={code} variant="outline" className="border-border bg-muted/40 text-[11px] text-muted-foreground">
+                      {labelForReasonCode(code)}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {lenses.length > 0 && (
+              <div className="space-y-2">
                 <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   <Sparkles className="h-3.5 w-3.5" />
                   Lens scores
                 </div>
-                <div className="flex flex-wrap gap-1.5">
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                   {lenses.map((lens) => (
                     <LensBadge
                       key={lens.key}
@@ -245,7 +262,7 @@ export function ScreeningSummaryCard({
 
             {hasDownstreamInfo && (
               <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                <span className="font-medium text-foreground">Downstream phases</span>
+                <span className="font-medium text-foreground">Downstream</span>
                 <span className="ml-2">
                   {downstreamPhases
                     .filter((phase) => phase.status)

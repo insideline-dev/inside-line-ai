@@ -5,6 +5,7 @@
  * Inside Line API Documentation
  * OpenAPI spec version: 2.0
  */
+import type { ScreeningOutputResponseDtoOverallNextAction } from './screeningOutputResponseDtoOverallNextAction';
 import type { ScreeningOutputResponseDtoOverallSignal } from './screeningOutputResponseDtoOverallSignal';
 
 export type ScreeningOutputResponseDtoOverall = {
@@ -14,5 +15,6 @@ export type ScreeningOutputResponseDtoOverall = {
    */
   score: number;
   signal: ScreeningOutputResponseDtoOverallSignal;
+  nextAction: ScreeningOutputResponseDtoOverallNextAction;
   missingMaterials: string[];
 };

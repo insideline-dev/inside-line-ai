@@ -5,6 +5,7 @@
  * Inside Line API Documentation
  * OpenAPI spec version: 2.0
  */
+import type { CreatePortalDtoLinkIntegrity } from './createPortalDtoLinkIntegrity';
 
 export interface CreatePortalDto {
   /**
@@ -26,4 +27,5 @@ export interface CreatePortalDto {
   logoUrl?: string;
   /** @pattern ^#[0-9A-Fa-f]{6}$ */
   brandColor: string;
+  linkIntegrity?: CreatePortalDtoLinkIntegrity;
 }

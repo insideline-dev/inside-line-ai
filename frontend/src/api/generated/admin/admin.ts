@@ -44,6 +44,8 @@ import type {
   AiPromptFlowResponseDto,
   AiPromptPreviewResponseDto,
   AiPromptRevisionsResponseDto,
+  BulkUploadResponseDto,
+  CalibrationSnapshotResponseDto,
   CreateAiAgentConfigDto,
   CreateEarlyAccessInviteDto,
   CreatePipelineFlowConfigDto,
@@ -52,6 +54,7 @@ import type {
   PreviewAiPipelineContextRequestDto,
   PreviewAiPromptRequestDto,
   QuickCreateStartupDto,
+  RecomputeCalibrationResponseDto,
   RetryAgentDto,
   RetryPhaseDto,
   UpdateAiAgentConfigDto,
@@ -607,7 +610,198 @@ export function useAdminControllerGetInvestorDetail<TData = Awaited<ReturnType<t
 
 
 
-export type adminControllerGetIntegrationHealthResponse200 = {
+/**
+ * @summary Get investor calibration snapshot (cached summary + last job state)
+ */
+export type adminControllerGetInvestorCalibrationSummaryResponse200 = {
+  data: CalibrationSnapshotResponseDto
+  status: 200
+}
+    
+export type adminControllerGetInvestorCalibrationSummaryResponseSuccess = (adminControllerGetInvestorCalibrationSummaryResponse200) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerGetInvestorCalibrationSummaryResponse = (adminControllerGetInvestorCalibrationSummaryResponseSuccess)
+
+export const getAdminControllerGetInvestorCalibrationSummaryUrl = (userId: string,) => {
+
+
+  
+
+  return `/admin/investors/${userId}/calibration`
+}
+
+export const adminControllerGetInvestorCalibrationSummary = async (userId: string, options?: RequestInit): Promise<adminControllerGetInvestorCalibrationSummaryResponse> => {
+  
+  return customFetch<adminControllerGetInvestorCalibrationSummaryResponse>(getAdminControllerGetInvestorCalibrationSummaryUrl(userId),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getAdminControllerGetInvestorCalibrationSummaryQueryKey = (userId: string,) => {
+    return [
+    `/admin/investors/${userId}/calibration`
+    ] as const;
+    }
+
+    
+export const getAdminControllerGetInvestorCalibrationSummaryQueryOptions = <TData = Awaited<ReturnType<typeof adminControllerGetInvestorCalibrationSummary>>, TError = ErrorType<unknown>>(userId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetInvestorCalibrationSummary>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAdminControllerGetInvestorCalibrationSummaryQueryKey(userId);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminControllerGetInvestorCalibrationSummary>>> = ({ signal }) => adminControllerGetInvestorCalibrationSummary(userId, { signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(userId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetInvestorCalibrationSummary>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type AdminControllerGetInvestorCalibrationSummaryQueryResult = NonNullable<Awaited<ReturnType<typeof adminControllerGetInvestorCalibrationSummary>>>
+export type AdminControllerGetInvestorCalibrationSummaryQueryError = ErrorType<unknown>
+
+
+export function useAdminControllerGetInvestorCalibrationSummary<TData = Awaited<ReturnType<typeof adminControllerGetInvestorCalibrationSummary>>, TError = ErrorType<unknown>>(
+ userId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetInvestorCalibrationSummary>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerGetInvestorCalibrationSummary>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerGetInvestorCalibrationSummary>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerGetInvestorCalibrationSummary<TData = Awaited<ReturnType<typeof adminControllerGetInvestorCalibrationSummary>>, TError = ErrorType<unknown>>(
+ userId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetInvestorCalibrationSummary>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerGetInvestorCalibrationSummary>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerGetInvestorCalibrationSummary>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerGetInvestorCalibrationSummary<TData = Awaited<ReturnType<typeof adminControllerGetInvestorCalibrationSummary>>, TError = ErrorType<unknown>>(
+ userId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetInvestorCalibrationSummary>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get investor calibration snapshot (cached summary + last job state)
+ */
+
+export function useAdminControllerGetInvestorCalibrationSummary<TData = Awaited<ReturnType<typeof adminControllerGetInvestorCalibrationSummary>>, TError = ErrorType<unknown>>(
+ userId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetInvestorCalibrationSummary>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getAdminControllerGetInvestorCalibrationSummaryQueryOptions(userId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+/**
+ * @summary Enqueue a BullMQ job to recompute an investor calibration snapshot (in-flight requests within 10s are deduped)
+ */
+export type adminControllerRecomputeInvestorCalibrationSummaryResponse201 = {
+  data: RecomputeCalibrationResponseDto
+  status: 201
+}
+    
+export type adminControllerRecomputeInvestorCalibrationSummaryResponseSuccess = (adminControllerRecomputeInvestorCalibrationSummaryResponse201) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerRecomputeInvestorCalibrationSummaryResponse = (adminControllerRecomputeInvestorCalibrationSummaryResponseSuccess)
+
+export const getAdminControllerRecomputeInvestorCalibrationSummaryUrl = (userId: string,) => {
+
+
+  
+
+  return `/admin/investors/${userId}/calibration/recompute`
+}
+
+export const adminControllerRecomputeInvestorCalibrationSummary = async (userId: string, options?: RequestInit): Promise<adminControllerRecomputeInvestorCalibrationSummaryResponse> => {
+  
+  return customFetch<adminControllerRecomputeInvestorCalibrationSummaryResponse>(getAdminControllerRecomputeInvestorCalibrationSummaryUrl(userId),
+  {      
+    ...options,
+    method: 'POST'
+    
+    
+  }
+);}
+
+
+
+
+export const getAdminControllerRecomputeInvestorCalibrationSummaryMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerRecomputeInvestorCalibrationSummary>>, TError,{userId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminControllerRecomputeInvestorCalibrationSummary>>, TError,{userId: string}, TContext> => {
+
+const mutationKey = ['adminControllerRecomputeInvestorCalibrationSummary'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminControllerRecomputeInvestorCalibrationSummary>>, {userId: string}> = (props) => {
+          const {userId} = props ?? {};
+
+          return  adminControllerRecomputeInvestorCalibrationSummary(userId,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminControllerRecomputeInvestorCalibrationSummaryMutationResult = NonNullable<Awaited<ReturnType<typeof adminControllerRecomputeInvestorCalibrationSummary>>>
+    
+    export type AdminControllerRecomputeInvestorCalibrationSummaryMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Enqueue a BullMQ job to recompute an investor calibration snapshot (in-flight requests within 10s are deduped)
+ */
+export const useAdminControllerRecomputeInvestorCalibrationSummary = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerRecomputeInvestorCalibrationSummary>>, TError,{userId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof adminControllerRecomputeInvestorCalibrationSummary>>,
+        TError,
+        {userId: string},
+        TContext
+      > => {
+      return useMutation(getAdminControllerRecomputeInvestorCalibrationSummaryMutationOptions(options), queryClient);
+    }
+    export type adminControllerGetIntegrationHealthResponse200 = {
   data: void
   status: 200
 }
@@ -2000,6 +2194,87 @@ export const useAdminControllerQuickCreateStartup = <TError = ErrorType<unknown>
         TContext
       > => {
       return useMutation(getAdminControllerQuickCreateStartupMutationOptions(options), queryClient);
+    }
+    /**
+ * @summary Bulk-upload a CSV of cohort startups (up to 100 rows, 1MB). Each row enters the intake pipeline.
+ */
+export type adminControllerBulkUploadStartupsResponse200 = {
+  data: BulkUploadResponseDto
+  status: 200
+}
+    
+export type adminControllerBulkUploadStartupsResponseSuccess = (adminControllerBulkUploadStartupsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerBulkUploadStartupsResponse = (adminControllerBulkUploadStartupsResponseSuccess)
+
+export const getAdminControllerBulkUploadStartupsUrl = () => {
+
+
+  
+
+  return `/admin/startups/bulk-upload`
+}
+
+export const adminControllerBulkUploadStartups = async ( options?: RequestInit): Promise<adminControllerBulkUploadStartupsResponse> => {
+  
+  return customFetch<adminControllerBulkUploadStartupsResponse>(getAdminControllerBulkUploadStartupsUrl(),
+  {      
+    ...options,
+    method: 'POST'
+    
+    
+  }
+);}
+
+
+
+
+export const getAdminControllerBulkUploadStartupsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerBulkUploadStartups>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminControllerBulkUploadStartups>>, TError,void, TContext> => {
+
+const mutationKey = ['adminControllerBulkUploadStartups'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminControllerBulkUploadStartups>>, void> = () => {
+          
+
+          return  adminControllerBulkUploadStartups(requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminControllerBulkUploadStartupsMutationResult = NonNullable<Awaited<ReturnType<typeof adminControllerBulkUploadStartups>>>
+    
+    export type AdminControllerBulkUploadStartupsMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Bulk-upload a CSV of cohort startups (up to 100 rows, 1MB). Each row enters the intake pipeline.
+ */
+export const useAdminControllerBulkUploadStartups = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerBulkUploadStartups>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof adminControllerBulkUploadStartups>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getAdminControllerBulkUploadStartupsMutationOptions(options), queryClient);
     }
     export type adminControllerApproveStartupResponse201 = {
   data: void

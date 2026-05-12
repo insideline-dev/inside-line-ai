@@ -30,7 +30,9 @@ import type {
   CreateTeamInviteDto,
   CreateThesisDto,
   InvestorControllerGetMatchesParams,
+  InvestorControllerListCalibrationProposalsParams,
   RecordDealDecisionDto,
+  RejectCalibrationProposalDto,
   UpdateMatchStatusDto,
   UpdateNoteDto,
   UpdateScoringPreferencesDto
@@ -763,7 +765,270 @@ export function useInvestorControllerGetCalibration<TData = Awaited<ReturnType<t
 
 
 
-export type investorControllerGetMatchesResponse200 = {
+export type investorControllerListCalibrationProposalsResponse200 = {
+  data: void
+  status: 200
+}
+    
+export type investorControllerListCalibrationProposalsResponseSuccess = (investorControllerListCalibrationProposalsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type investorControllerListCalibrationProposalsResponse = (investorControllerListCalibrationProposalsResponseSuccess)
+
+export const getInvestorControllerListCalibrationProposalsUrl = (params?: InvestorControllerListCalibrationProposalsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/investor/calibration/proposals?${stringifiedParams}` : `/investor/calibration/proposals`
+}
+
+export const investorControllerListCalibrationProposals = async (params?: InvestorControllerListCalibrationProposalsParams, options?: RequestInit): Promise<investorControllerListCalibrationProposalsResponse> => {
+  
+  return customFetch<investorControllerListCalibrationProposalsResponse>(getInvestorControllerListCalibrationProposalsUrl(params),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getInvestorControllerListCalibrationProposalsQueryKey = (params?: InvestorControllerListCalibrationProposalsParams,) => {
+    return [
+    `/investor/calibration/proposals`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+    
+export const getInvestorControllerListCalibrationProposalsQueryOptions = <TData = Awaited<ReturnType<typeof investorControllerListCalibrationProposals>>, TError = ErrorType<unknown>>(params?: InvestorControllerListCalibrationProposalsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerListCalibrationProposals>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getInvestorControllerListCalibrationProposalsQueryKey(params);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof investorControllerListCalibrationProposals>>> = ({ signal }) => investorControllerListCalibrationProposals(params, { signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof investorControllerListCalibrationProposals>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type InvestorControllerListCalibrationProposalsQueryResult = NonNullable<Awaited<ReturnType<typeof investorControllerListCalibrationProposals>>>
+export type InvestorControllerListCalibrationProposalsQueryError = ErrorType<unknown>
+
+
+export function useInvestorControllerListCalibrationProposals<TData = Awaited<ReturnType<typeof investorControllerListCalibrationProposals>>, TError = ErrorType<unknown>>(
+ params: undefined |  InvestorControllerListCalibrationProposalsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerListCalibrationProposals>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof investorControllerListCalibrationProposals>>,
+          TError,
+          Awaited<ReturnType<typeof investorControllerListCalibrationProposals>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useInvestorControllerListCalibrationProposals<TData = Awaited<ReturnType<typeof investorControllerListCalibrationProposals>>, TError = ErrorType<unknown>>(
+ params?: InvestorControllerListCalibrationProposalsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerListCalibrationProposals>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof investorControllerListCalibrationProposals>>,
+          TError,
+          Awaited<ReturnType<typeof investorControllerListCalibrationProposals>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useInvestorControllerListCalibrationProposals<TData = Awaited<ReturnType<typeof investorControllerListCalibrationProposals>>, TError = ErrorType<unknown>>(
+ params?: InvestorControllerListCalibrationProposalsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerListCalibrationProposals>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useInvestorControllerListCalibrationProposals<TData = Awaited<ReturnType<typeof investorControllerListCalibrationProposals>>, TError = ErrorType<unknown>>(
+ params?: InvestorControllerListCalibrationProposalsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerListCalibrationProposals>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getInvestorControllerListCalibrationProposalsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+export type investorControllerApproveCalibrationProposalResponse201 = {
+  data: void
+  status: 201
+}
+    
+export type investorControllerApproveCalibrationProposalResponseSuccess = (investorControllerApproveCalibrationProposalResponse201) & {
+  headers: Headers;
+};
+;
+
+export type investorControllerApproveCalibrationProposalResponse = (investorControllerApproveCalibrationProposalResponseSuccess)
+
+export const getInvestorControllerApproveCalibrationProposalUrl = (id: string,) => {
+
+
+  
+
+  return `/investor/calibration/proposals/${id}/approve`
+}
+
+export const investorControllerApproveCalibrationProposal = async (id: string, options?: RequestInit): Promise<investorControllerApproveCalibrationProposalResponse> => {
+  
+  return customFetch<investorControllerApproveCalibrationProposalResponse>(getInvestorControllerApproveCalibrationProposalUrl(id),
+  {      
+    ...options,
+    method: 'POST'
+    
+    
+  }
+);}
+
+
+
+
+export const getInvestorControllerApproveCalibrationProposalMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof investorControllerApproveCalibrationProposal>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof investorControllerApproveCalibrationProposal>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['investorControllerApproveCalibrationProposal'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof investorControllerApproveCalibrationProposal>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  investorControllerApproveCalibrationProposal(id,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type InvestorControllerApproveCalibrationProposalMutationResult = NonNullable<Awaited<ReturnType<typeof investorControllerApproveCalibrationProposal>>>
+    
+    export type InvestorControllerApproveCalibrationProposalMutationError = ErrorType<unknown>
+
+    export const useInvestorControllerApproveCalibrationProposal = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof investorControllerApproveCalibrationProposal>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof investorControllerApproveCalibrationProposal>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getInvestorControllerApproveCalibrationProposalMutationOptions(options), queryClient);
+    }
+    export type investorControllerRejectCalibrationProposalResponse201 = {
+  data: void
+  status: 201
+}
+    
+export type investorControllerRejectCalibrationProposalResponseSuccess = (investorControllerRejectCalibrationProposalResponse201) & {
+  headers: Headers;
+};
+;
+
+export type investorControllerRejectCalibrationProposalResponse = (investorControllerRejectCalibrationProposalResponseSuccess)
+
+export const getInvestorControllerRejectCalibrationProposalUrl = (id: string,) => {
+
+
+  
+
+  return `/investor/calibration/proposals/${id}/reject`
+}
+
+export const investorControllerRejectCalibrationProposal = async (id: string,
+    rejectCalibrationProposalDto: RejectCalibrationProposalDto, options?: RequestInit): Promise<investorControllerRejectCalibrationProposalResponse> => {
+  
+  return customFetch<investorControllerRejectCalibrationProposalResponse>(getInvestorControllerRejectCalibrationProposalUrl(id),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      rejectCalibrationProposalDto,)
+  }
+);}
+
+
+
+
+export const getInvestorControllerRejectCalibrationProposalMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof investorControllerRejectCalibrationProposal>>, TError,{id: string;data: BodyType<RejectCalibrationProposalDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof investorControllerRejectCalibrationProposal>>, TError,{id: string;data: BodyType<RejectCalibrationProposalDto>}, TContext> => {
+
+const mutationKey = ['investorControllerRejectCalibrationProposal'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof investorControllerRejectCalibrationProposal>>, {id: string;data: BodyType<RejectCalibrationProposalDto>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  investorControllerRejectCalibrationProposal(id,data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type InvestorControllerRejectCalibrationProposalMutationResult = NonNullable<Awaited<ReturnType<typeof investorControllerRejectCalibrationProposal>>>
+    export type InvestorControllerRejectCalibrationProposalMutationBody = BodyType<RejectCalibrationProposalDto>
+    export type InvestorControllerRejectCalibrationProposalMutationError = ErrorType<unknown>
+
+    export const useInvestorControllerRejectCalibrationProposal = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof investorControllerRejectCalibrationProposal>>, TError,{id: string;data: BodyType<RejectCalibrationProposalDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof investorControllerRejectCalibrationProposal>>,
+        TError,
+        {id: string;data: BodyType<RejectCalibrationProposalDto>},
+        TContext
+      > => {
+      return useMutation(getInvestorControllerRejectCalibrationProposalMutationOptions(options), queryClient);
+    }
+    export type investorControllerGetMatchesResponse200 = {
   data: void
   status: 200
 }

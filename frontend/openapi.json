@@ -1307,6 +1307,34 @@
         ]
       }
     },
+    "/startups/{id}/screening.pdf": {
+      "get": {
+        "operationId": "StartupController_downloadScreening",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "tags": [
+          "Startups"
+        ]
+      }
+    },
     "/startups/{id}/data-room": {
       "post": {
         "operationId": "StartupController_uploadToDataRoom",
@@ -2303,6 +2331,81 @@
         ]
       }
     },
+    "/startups/{startupId}/funding-history": {
+      "get": {
+        "operationId": "FundingEnrichmentController_list",
+        "parameters": [
+          {
+            "name": "startupId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FundingHistoryListResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "List canonical funding-history rows",
+        "tags": [
+          "startups/funding-history"
+        ]
+      }
+    },
+    "/startups/{startupId}/enrichment/funding": {
+      "post": {
+        "operationId": "FundingEnrichmentController_enrich",
+        "parameters": [
+          {
+            "name": "startupId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrichFundingResponseDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No funding-history providers configured"
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Manually re-trigger funding enrichment",
+        "tags": [
+          "startups/funding-history"
+        ]
+      }
+    },
     "/portals": {
       "post": {
         "operationId": "PortalController_create",
@@ -2553,6 +2656,45 @@
         ],
         "responses": {
           "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Portal"
+        ]
+      }
+    },
+    "/portals/{id}/submission-audit": {
+      "get": {
+        "operationId": "PortalController_listSubmissionAudit",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "since",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
             "description": ""
           }
         },
@@ -3338,6 +3480,68 @@
         ]
       }
     },
+    "/admin/investors/{userId}/calibration": {
+      "get": {
+        "operationId": "AdminController_getInvestorCalibrationSummary",
+        "parameters": [
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalibrationSnapshotResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get investor calibration snapshot (cached summary + last job state)",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/investors/{userId}/calibration/recompute": {
+      "post": {
+        "operationId": "AdminController_recomputeInvestorCalibrationSummary",
+        "parameters": [
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecomputeCalibrationResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Enqueue a BullMQ job to recompute an investor calibration snapshot (in-flight requests within 10s are deduped)",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
     "/admin/integrations/health": {
       "get": {
         "operationId": "AdminController_getIntegrationHealth",
@@ -3820,6 +4024,28 @@
           }
         },
         "summary": "Quick-create a startup and trigger the AI pipeline",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/startups/bulk-upload": {
+      "post": {
+        "operationId": "AdminController_bulkUploadStartups",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Bulk upload summary with per-row results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkUploadResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Bulk-upload a CSV of cohort startups (up to 100 rows, 1MB). Each row enters the intake pipeline.",
         "tags": [
           "Admin"
         ]
@@ -5507,6 +5733,91 @@
         ]
       }
     },
+    "/investor/calibration/proposals": {
+      "get": {
+        "operationId": "InvestorController_listCalibrationProposals",
+        "parameters": [
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "pending",
+              "type": "string",
+              "enum": [
+                "pending",
+                "approved",
+                "rejected"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      }
+    },
+    "/investor/calibration/proposals/{id}/approve": {
+      "post": {
+        "operationId": "InvestorController_approveCalibrationProposal",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      }
+    },
+    "/investor/calibration/proposals/{id}/reject": {
+      "post": {
+        "operationId": "InvestorController_rejectCalibrationProposal",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectCalibrationProposalDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      }
+    },
     "/investor/matches": {
       "get": {
         "operationId": "InvestorController_getMatches",
@@ -6118,6 +6429,171 @@
         },
         "tags": [
           "InvestorTeamPublic"
+        ]
+      }
+    },
+    "/startups/{startupId}/memo/sections/{sectionKey}/regenerate": {
+      "post": {
+        "description": "Re-runs the memo synthesis prompt for one section only. Operator edits in other sections are preserved. Idempotent for the same (startupId, sectionKey) — concurrent calls return 409.",
+        "operationId": "MemoController_regenerateSection",
+        "parameters": [
+          {
+            "name": "startupId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sectionKey",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegenerateMemoSectionResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown section key or missing prerequisites"
+          },
+          "409": {
+            "description": "Regeneration already in progress"
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Regenerate a single memo section",
+        "tags": [
+          "Memo"
+        ]
+      }
+    },
+    "/startups/{startupId}/memo/claims/rewrite": {
+      "post": {
+        "description": "DG-E1-F3-S1 — runs the `memo.claim.rewrite` prompt and returns at most 3 candidates. Does NOT persist; the operator's accept-flow calls `apply-rewrite`. Source linkage is preserved by prompt + a server-side factual-marker filter.",
+        "operationId": "MemoController_suggestClaimRewrite",
+        "parameters": [
+          {
+            "name": "startupId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RewriteClaimRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RewriteClaimResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Empty originalText"
+          },
+          "404": {
+            "description": "Unknown section key"
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Suggest up to 3 rewrites for an operator-selected memo claim",
+        "tags": [
+          "Memo"
+        ]
+      }
+    },
+    "/startups/{startupId}/memo/sections/{sectionKey}/apply-rewrite": {
+      "post": {
+        "description": "DG-E1-F3-S1 — writes operator-edited narrative through the section-regeneration JSON-merge path. No model call. Other sections + executive summary + DDAs are preserved. Citation linkage is preserved by default; pass `sources` only to override.",
+        "operationId": "MemoController_applyRewrite",
+        "parameters": [
+          {
+            "name": "startupId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sectionKey",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplyRewriteRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplyRewriteResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown section key or missing evaluation row"
+          },
+          "409": {
+            "description": "Another memo write is in progress for this section"
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Persist an operator-accepted rewrite for a memo section",
+        "tags": [
+          "Memo"
         ]
       }
     },
@@ -8780,6 +9256,294 @@
           "rejectionReason"
         ]
       },
+      "FundingHistoryListResponseDto": {
+        "type": "object",
+        "properties": {
+          "startupId": {
+            "type": "string"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "startupId": {
+                  "type": "string"
+                },
+                "roundType": {
+                  "type": "string"
+                },
+                "announcedAt": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "amount": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "currency": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "valuationPostMoney": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "leadInvestor": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "investors": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "nullable": true
+                },
+                "sources": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "provider": {
+                        "type": "string",
+                        "enum": [
+                          "crunchbase",
+                          "public_filing",
+                          "press_release"
+                        ]
+                      },
+                      "sourceUrl": {
+                        "type": "string",
+                        "format": "uri"
+                      },
+                      "fetchedAt": {
+                        "type": "string"
+                      },
+                      "reportedAmount": {
+                        "type": "number",
+                        "nullable": true
+                      },
+                      "reportedCurrency": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "reportedAnnouncedAt": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "reportedLeadInvestor": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "conflictsWith": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "provider",
+                      "sourceUrl",
+                      "fetchedAt"
+                    ]
+                  }
+                },
+                "evidenceConfidence": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "lastReconciledAt": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "type": "string"
+                },
+                "updatedAt": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "startupId",
+                "roundType",
+                "announcedAt",
+                "amount",
+                "currency",
+                "valuationPostMoney",
+                "leadInvestor",
+                "investors",
+                "sources",
+                "evidenceConfidence",
+                "lastReconciledAt",
+                "createdAt",
+                "updatedAt"
+              ]
+            }
+          },
+          "empty": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "startupId",
+          "rows",
+          "empty"
+        ]
+      },
+      "EnrichFundingResponseDto": {
+        "type": "object",
+        "properties": {
+          "startupId": {
+            "type": "string"
+          },
+          "providersAttempted": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "providersWithMatches": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "startupId": {
+                  "type": "string"
+                },
+                "roundType": {
+                  "type": "string"
+                },
+                "announcedAt": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "amount": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "currency": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "valuationPostMoney": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "leadInvestor": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "investors": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "nullable": true
+                },
+                "sources": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "provider": {
+                        "type": "string",
+                        "enum": [
+                          "crunchbase",
+                          "public_filing",
+                          "press_release"
+                        ]
+                      },
+                      "sourceUrl": {
+                        "type": "string",
+                        "format": "uri"
+                      },
+                      "fetchedAt": {
+                        "type": "string"
+                      },
+                      "reportedAmount": {
+                        "type": "number",
+                        "nullable": true
+                      },
+                      "reportedCurrency": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "reportedAnnouncedAt": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "reportedLeadInvestor": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "conflictsWith": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "provider",
+                      "sourceUrl",
+                      "fetchedAt"
+                    ]
+                  }
+                },
+                "evidenceConfidence": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "lastReconciledAt": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "type": "string"
+                },
+                "updatedAt": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "startupId",
+                "roundType",
+                "announcedAt",
+                "amount",
+                "currency",
+                "valuationPostMoney",
+                "leadInvestor",
+                "investors",
+                "sources",
+                "evidenceConfidence",
+                "lastReconciledAt",
+                "createdAt",
+                "updatedAt"
+              ]
+            }
+          }
+        },
+        "required": [
+          "startupId",
+          "providersAttempted",
+          "providersWithMatches",
+          "rows"
+        ]
+      },
       "CreatePortalDto": {
         "type": "object",
         "properties": {
@@ -8806,6 +9570,14 @@
           "brandColor": {
             "type": "string",
             "pattern": "^#[0-9A-Fa-f]{6}$"
+          },
+          "linkIntegrity": {
+            "type": "string",
+            "enum": [
+              "strict",
+              "standard",
+              "lenient"
+            ]
           }
         },
         "required": [
@@ -8843,6 +9615,14 @@
           },
           "isActive": {
             "type": "boolean"
+          },
+          "linkIntegrity": {
+            "type": "string",
+            "enum": [
+              "strict",
+              "standard",
+              "lenient"
+            ]
           }
         }
       },
@@ -9840,6 +10620,201 @@
           ]
         }
       },
+      "CalibrationSnapshotResponseDto": {
+        "type": "object",
+        "properties": {
+          "investorId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "completed",
+              "failed"
+            ]
+          },
+          "summary": {
+            "type": "object",
+            "properties": {
+              "totalDecisions": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "decisionsWithTriage": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "aligned": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "falsePositive": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "falseNegative": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "softMismatch": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "alignmentRate": {
+                "type": "number",
+                "nullable": true
+              },
+              "topOverrideReasons": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "reasonTag": {
+                      "type": "string"
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "reasonTag",
+                    "count"
+                  ]
+                }
+              },
+              "recentMismatches": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "startupId": {
+                      "type": "string"
+                    },
+                    "decidedAt": {
+                      "type": "string"
+                    },
+                    "mismatchType": {
+                      "type": "string",
+                      "enum": [
+                        "false_positive",
+                        "false_negative",
+                        "soft_mismatch"
+                      ]
+                    },
+                    "modelVerdict": {
+                      "type": "string",
+                      "enum": [
+                        "advance",
+                        "review",
+                        "reject"
+                      ]
+                    },
+                    "investorVerdict": {
+                      "type": "string",
+                      "enum": [
+                        "advance",
+                        "pass",
+                        "hold"
+                      ]
+                    },
+                    "reasonTags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "startupId",
+                    "decidedAt",
+                    "mismatchType",
+                    "modelVerdict",
+                    "investorVerdict",
+                    "reasonTags"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "totalDecisions",
+              "decisionsWithTriage",
+              "aligned",
+              "falsePositive",
+              "falseNegative",
+              "softMismatch",
+              "alignmentRate",
+              "topOverrideReasons",
+              "recentMismatches"
+            ]
+          },
+          "computedAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "lastJobId": {
+            "type": "string",
+            "nullable": true
+          },
+          "lastError": {
+            "type": "string",
+            "nullable": true
+          },
+          "enqueuedAt": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "investorId",
+          "status",
+          "summary",
+          "computedAt",
+          "lastJobId",
+          "lastError",
+          "enqueuedAt"
+        ]
+      },
+      "RecomputeCalibrationResponseDto": {
+        "type": "object",
+        "properties": {
+          "investorId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "jobId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "in_progress"
+            ]
+          },
+          "dedupedToExistingJob": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "investorId",
+          "jobId",
+          "status",
+          "dedupedToExistingJob"
+        ]
+      },
       "UpdateUserDto": {
         "type": "object",
         "properties": {
@@ -9990,6 +10965,75 @@
           "stage",
           "fundingTarget",
           "teamSize"
+        ]
+      },
+      "BulkUploadResponseDto": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "created": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "duplicate_merged": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "failed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "rowIndex": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "company": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "created",
+                    "duplicate_merged",
+                    "failed"
+                  ]
+                },
+                "startupId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "rowIndex",
+                "company",
+                "status"
+              ]
+            }
+          }
+        },
+        "required": [
+          "total",
+          "created",
+          "duplicate_merged",
+          "failed",
+          "rows"
         ]
       },
       "RetryPhaseDto": {
@@ -10237,6 +11281,7 @@
                 "synthesis.memo-chunk",
                 "synthesis.memo-summary",
                 "synthesis.report",
+                "memo.claim.rewrite",
                 "matching.thesis",
                 "pipeline.orchestrator",
                 "extraction.linkedin",
@@ -10565,6 +11610,7 @@
                             "synthesis.memo-chunk",
                             "synthesis.memo-summary",
                             "synthesis.report",
+                            "memo.claim.rewrite",
                             "matching.thesis",
                             "pipeline.orchestrator",
                             "extraction.linkedin",
@@ -10732,6 +11778,7 @@
                   "synthesis.memo-chunk",
                   "synthesis.memo-summary",
                   "synthesis.report",
+                  "memo.claim.rewrite",
                   "matching.thesis",
                   "pipeline.orchestrator",
                   "extraction.linkedin",
@@ -11347,6 +12394,7 @@
               "synthesis.memo-chunk",
               "synthesis.memo-summary",
               "synthesis.report",
+              "memo.claim.rewrite",
               "matching.thesis",
               "pipeline.orchestrator",
               "extraction.linkedin",
@@ -11559,6 +12607,7 @@
               "synthesis.memo-chunk",
               "synthesis.memo-summary",
               "synthesis.report",
+              "memo.claim.rewrite",
               "matching.thesis",
               "pipeline.orchestrator",
               "extraction.linkedin",
@@ -11832,6 +12881,7 @@
                     "synthesis.memo-chunk",
                     "synthesis.memo-summary",
                     "synthesis.report",
+                    "memo.claim.rewrite",
                     "matching.thesis",
                     "pipeline.orchestrator",
                     "extraction.linkedin",
@@ -12795,19 +13845,22 @@
           "notes": {
             "type": "string",
             "maxLength": 500
-          },
-          "triageClassificationAtDecision": {
-            "type": "string",
-            "enum": [
-              "advance",
-              "review",
-              "reject"
-            ]
           }
         },
         "required": [
           "verdict"
         ]
+      },
+      "RejectCalibrationProposalDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        },
+        "additionalProperties": false
       },
       "UpdateMatchStatusDto": {
         "type": "object",
@@ -13100,6 +14153,296 @@
           "role"
         ]
       },
+      "RegenerateMemoSectionResponseDto": {
+        "type": "object",
+        "properties": {
+          "startupId": {
+            "type": "string"
+          },
+          "sectionKey": {
+            "type": "string"
+          },
+          "regeneratedAt": {
+            "type": "string"
+          },
+          "usedFallback": {
+            "type": "boolean"
+          },
+          "overwroteOperatorEdits": {
+            "type": "boolean"
+          },
+          "section": {
+            "type": "object",
+            "properties": {
+              "sectionKey": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "content": {
+                "type": "string"
+              },
+              "highlights": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "concerns": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "sources": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "url": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "label",
+                    "url"
+                  ]
+                }
+              },
+              "regeneratedAt": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "sectionKey",
+              "title",
+              "content",
+              "highlights",
+              "concerns",
+              "sources",
+              "regeneratedAt"
+            ]
+          }
+        },
+        "required": [
+          "startupId",
+          "sectionKey",
+          "regeneratedAt",
+          "usedFallback",
+          "overwroteOperatorEdits",
+          "section"
+        ]
+      },
+      "RewriteClaimRequestDto": {
+        "type": "object",
+        "properties": {
+          "sectionKey": {
+            "type": "string",
+            "enum": [
+              "team",
+              "market",
+              "product",
+              "competitiveAdvantage",
+              "traction",
+              "businessModel",
+              "gtm",
+              "financials",
+              "legal",
+              "dealTerms",
+              "exitPotential"
+            ]
+          },
+          "originalText": {
+            "type": "string",
+            "minLength": 1
+          },
+          "instruction": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "sourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "required": [
+          "sectionKey",
+          "originalText"
+        ]
+      },
+      "RewriteClaimResponseDto": {
+        "type": "object",
+        "properties": {
+          "startupId": {
+            "type": "string"
+          },
+          "sectionKey": {
+            "type": "string"
+          },
+          "originalText": {
+            "type": "string"
+          },
+          "rewrites": {
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "diff": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "text",
+                "diff"
+              ]
+            }
+          },
+          "candidateCountBeforeFilter": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "usedFallback": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "startupId",
+          "sectionKey",
+          "originalText",
+          "rewrites",
+          "candidateCountBeforeFilter",
+          "usedFallback"
+        ]
+      },
+      "ApplyRewriteRequestDto": {
+        "type": "object",
+        "properties": {
+          "newContent": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "url": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "label",
+                "url"
+              ]
+            }
+          }
+        },
+        "required": [
+          "newContent"
+        ]
+      },
+      "ApplyRewriteResponseDto": {
+        "type": "object",
+        "properties": {
+          "startupId": {
+            "type": "string"
+          },
+          "sectionKey": {
+            "type": "string"
+          },
+          "regeneratedAt": {
+            "type": "string"
+          },
+          "overwroteOperatorEdits": {
+            "type": "boolean"
+          },
+          "section": {
+            "type": "object",
+            "properties": {
+              "sectionKey": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "content": {
+                "type": "string"
+              },
+              "highlights": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "concerns": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "sources": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "url": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "label",
+                    "url"
+                  ]
+                }
+              },
+              "regeneratedAt": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "sectionKey",
+              "title",
+              "content",
+              "highlights",
+              "concerns",
+              "sources",
+              "regeneratedAt"
+            ]
+          }
+        },
+        "required": [
+          "startupId",
+          "sectionKey",
+          "regeneratedAt",
+          "overwroteOperatorEdits",
+          "section"
+        ]
+      },
       "ScreeningDecisionResponseDto": {
         "type": "object",
         "properties": {
@@ -13123,6 +14466,15 @@
               "advance",
               "review",
               "reject"
+            ]
+          },
+          "nextAction": {
+            "type": "string",
+            "enum": [
+              "continue_evaluation",
+              "manual_review",
+              "request_materials",
+              "stop"
             ]
           },
           "overallScore": {
@@ -13185,6 +14537,13 @@
               ]
             }
           },
+          "lensVersions": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
           "policyVersion": {
             "type": "integer",
             "minimum": 1,
@@ -13201,9 +14560,11 @@
           "startupId",
           "pipelineRunId",
           "classification",
+          "nextAction",
           "overallScore",
           "reasonCodes",
           "lensSnapshot",
+          "lensVersions",
           "policyVersion",
           "createdAt"
         ]
@@ -13247,6 +14608,15 @@
                   "reject"
                 ]
               },
+              "nextAction": {
+                "type": "string",
+                "enum": [
+                  "continue_evaluation",
+                  "manual_review",
+                  "request_materials",
+                  "stop"
+                ]
+              },
               "missingMaterials": {
                 "type": "array",
                 "items": {
@@ -13257,7 +14627,102 @@
             "required": [
               "score",
               "signal",
+              "nextAction",
               "missingMaterials"
+            ]
+          },
+          "handoff": {
+            "type": "object",
+            "properties": {
+              "evidenceSeeds": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "lensKey": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "lensLabel": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "claim": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "confidence": {
+                      "type": "string",
+                      "enum": [
+                        "low",
+                        "medium",
+                        "high"
+                      ]
+                    },
+                    "lensScore": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 100
+                    },
+                    "signal": {
+                      "type": "string",
+                      "enum": [
+                        "advance",
+                        "review",
+                        "reject"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "lensKey",
+                    "lensLabel",
+                    "claim",
+                    "confidence",
+                    "lensScore",
+                    "signal"
+                  ]
+                }
+              },
+              "openIssues": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "label": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "summary": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "screening-output",
+                        "triage-decision"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "label",
+                    "summary",
+                    "source"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "evidenceSeeds",
+              "openIssues"
             ]
           },
           "lenses": {
@@ -13347,6 +14812,7 @@
           "pipelineRunId",
           "generatedAt",
           "overall",
+          "handoff",
           "lenses"
         ]
       },

@@ -36,6 +36,7 @@ export const AiPromptDefinitionsResponseDtoItemKey = {
   'synthesismemo-chunk': 'synthesis.memo-chunk',
   'synthesismemo-summary': 'synthesis.memo-summary',
   synthesisreport: 'synthesis.report',
+  memoclaimrewrite: 'memo.claim.rewrite',
   matchingthesis: 'matching.thesis',
   pipelineorchestrator: 'pipeline.orchestrator',
   extractionlinkedin: 'extraction.linkedin',

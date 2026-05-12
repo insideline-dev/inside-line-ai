@@ -5,7 +5,6 @@
  * Inside Line API Documentation
  * OpenAPI spec version: 2.0
  */
-import type { RecordDealDecisionDtoTriageClassificationAtDecision } from './recordDealDecisionDtoTriageClassificationAtDecision';
 import type { RecordDealDecisionDtoVerdict } from './recordDealDecisionDtoVerdict';
 
 export interface RecordDealDecisionDto {
@@ -14,5 +13,4 @@ export interface RecordDealDecisionDto {
   reasonTags?: string[];
   /** @maxLength 500 */
   notes?: string;
-  triageClassificationAtDecision?: RecordDealDecisionDtoTriageClassificationAtDecision;
 }

@@ -1435,6 +1435,110 @@ export function useStartupControllerDownloadReport<TData = Awaited<ReturnType<ty
 
 
 
+export type startupControllerDownloadScreeningResponse200 = {
+  data: void
+  status: 200
+}
+    
+export type startupControllerDownloadScreeningResponseSuccess = (startupControllerDownloadScreeningResponse200) & {
+  headers: Headers;
+};
+;
+
+export type startupControllerDownloadScreeningResponse = (startupControllerDownloadScreeningResponseSuccess)
+
+export const getStartupControllerDownloadScreeningUrl = (id: string,) => {
+
+
+  
+
+  return `/startups/${id}/screening.pdf`
+}
+
+export const startupControllerDownloadScreening = async (id: string, options?: RequestInit): Promise<startupControllerDownloadScreeningResponse> => {
+  
+  return customFetch<startupControllerDownloadScreeningResponse>(getStartupControllerDownloadScreeningUrl(id),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getStartupControllerDownloadScreeningQueryKey = (id: string,) => {
+    return [
+    `/startups/${id}/screening.pdf`
+    ] as const;
+    }
+
+    
+export const getStartupControllerDownloadScreeningQueryOptions = <TData = Awaited<ReturnType<typeof startupControllerDownloadScreening>>, TError = ErrorType<unknown>>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof startupControllerDownloadScreening>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getStartupControllerDownloadScreeningQueryKey(id);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof startupControllerDownloadScreening>>> = ({ signal }) => startupControllerDownloadScreening(id, { signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof startupControllerDownloadScreening>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type StartupControllerDownloadScreeningQueryResult = NonNullable<Awaited<ReturnType<typeof startupControllerDownloadScreening>>>
+export type StartupControllerDownloadScreeningQueryError = ErrorType<unknown>
+
+
+export function useStartupControllerDownloadScreening<TData = Awaited<ReturnType<typeof startupControllerDownloadScreening>>, TError = ErrorType<unknown>>(
+ id: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof startupControllerDownloadScreening>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof startupControllerDownloadScreening>>,
+          TError,
+          Awaited<ReturnType<typeof startupControllerDownloadScreening>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useStartupControllerDownloadScreening<TData = Awaited<ReturnType<typeof startupControllerDownloadScreening>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof startupControllerDownloadScreening>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof startupControllerDownloadScreening>>,
+          TError,
+          Awaited<ReturnType<typeof startupControllerDownloadScreening>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useStartupControllerDownloadScreening<TData = Awaited<ReturnType<typeof startupControllerDownloadScreening>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof startupControllerDownloadScreening>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useStartupControllerDownloadScreening<TData = Awaited<ReturnType<typeof startupControllerDownloadScreening>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof startupControllerDownloadScreening>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getStartupControllerDownloadScreeningQueryOptions(id,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
 export type startupControllerUploadToDataRoomResponse201 = {
   data: void
   status: 201

@@ -28,6 +28,7 @@ import type {
   CreatePortalDto,
   PortalControllerFindAllParams,
   PortalControllerGetSubmissionsParams,
+  PortalControllerListSubmissionAuditParams,
   SubmitToPortalDto,
   UpdatePortalDto
 } from '.././model';
@@ -756,7 +757,126 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getPortalControllerRejectSubmissionMutationOptions(options), queryClient);
     }
-    export type portalControllerGetPortalBySlugResponse200 = {
+    export type portalControllerListSubmissionAuditResponse200 = {
+  data: void
+  status: 200
+}
+    
+export type portalControllerListSubmissionAuditResponseSuccess = (portalControllerListSubmissionAuditResponse200) & {
+  headers: Headers;
+};
+;
+
+export type portalControllerListSubmissionAuditResponse = (portalControllerListSubmissionAuditResponseSuccess)
+
+export const getPortalControllerListSubmissionAuditUrl = (id: string,
+    params: PortalControllerListSubmissionAuditParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/portals/${id}/submission-audit?${stringifiedParams}` : `/portals/${id}/submission-audit`
+}
+
+export const portalControllerListSubmissionAudit = async (id: string,
+    params: PortalControllerListSubmissionAuditParams, options?: RequestInit): Promise<portalControllerListSubmissionAuditResponse> => {
+  
+  return customFetch<portalControllerListSubmissionAuditResponse>(getPortalControllerListSubmissionAuditUrl(id,params),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getPortalControllerListSubmissionAuditQueryKey = (id: string,
+    params?: PortalControllerListSubmissionAuditParams,) => {
+    return [
+    `/portals/${id}/submission-audit`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+    
+export const getPortalControllerListSubmissionAuditQueryOptions = <TData = Awaited<ReturnType<typeof portalControllerListSubmissionAudit>>, TError = ErrorType<unknown>>(id: string,
+    params: PortalControllerListSubmissionAuditParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof portalControllerListSubmissionAudit>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPortalControllerListSubmissionAuditQueryKey(id,params);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof portalControllerListSubmissionAudit>>> = ({ signal }) => portalControllerListSubmissionAudit(id,params, { signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof portalControllerListSubmissionAudit>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PortalControllerListSubmissionAuditQueryResult = NonNullable<Awaited<ReturnType<typeof portalControllerListSubmissionAudit>>>
+export type PortalControllerListSubmissionAuditQueryError = ErrorType<unknown>
+
+
+export function usePortalControllerListSubmissionAudit<TData = Awaited<ReturnType<typeof portalControllerListSubmissionAudit>>, TError = ErrorType<unknown>>(
+ id: string,
+    params: PortalControllerListSubmissionAuditParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof portalControllerListSubmissionAudit>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof portalControllerListSubmissionAudit>>,
+          TError,
+          Awaited<ReturnType<typeof portalControllerListSubmissionAudit>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePortalControllerListSubmissionAudit<TData = Awaited<ReturnType<typeof portalControllerListSubmissionAudit>>, TError = ErrorType<unknown>>(
+ id: string,
+    params: PortalControllerListSubmissionAuditParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof portalControllerListSubmissionAudit>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof portalControllerListSubmissionAudit>>,
+          TError,
+          Awaited<ReturnType<typeof portalControllerListSubmissionAudit>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePortalControllerListSubmissionAudit<TData = Awaited<ReturnType<typeof portalControllerListSubmissionAudit>>, TError = ErrorType<unknown>>(
+ id: string,
+    params: PortalControllerListSubmissionAuditParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof portalControllerListSubmissionAudit>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function usePortalControllerListSubmissionAudit<TData = Awaited<ReturnType<typeof portalControllerListSubmissionAudit>>, TError = ErrorType<unknown>>(
+ id: string,
+    params: PortalControllerListSubmissionAuditParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof portalControllerListSubmissionAudit>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPortalControllerListSubmissionAuditQueryOptions(id,params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+export type portalControllerGetPortalBySlugResponse200 = {
   data: void
   status: 200
 }

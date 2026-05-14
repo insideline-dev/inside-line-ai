@@ -475,14 +475,7 @@ export function DealCard({ startupId, className, startup: startupProp }: DealCar
             <CheckCheck className="mr-1.5 h-4 w-4" />
             {latestDecision ? `${capitalize(latestDecision.verdict)}d` : "Close out"}
           </Button>
-          <Button
-            size="sm"
-            onClick={handleOpenMemo}
-            data-testid="deal-card-open-memo"
-          >
-            Open full memo
-            <ArrowRight className="ml-1.5 h-4 w-4" />
-          </Button>
+          {/* Removed: "Open full memo" button — duplicate of the in-page memo below */}
         </div>
       </CardContent>
 

@@ -40,7 +40,7 @@ import {
 } from "@/components/startup-view";
 import { useToast } from "@/hooks/use-toast";
 import { DealCard } from "@/components/deal-card";
-import { DealActivityTimeline } from "@/components/startup-view/DealActivityTimeline";
+// import { DealActivityTimeline } from "@/components/startup-view/DealActivityTimeline";
 import type { Startup } from "@/types/startup";
 import type { Evaluation } from "@/types/evaluation";
 import type { ScoringWeights } from "@/lib/score-utils";
@@ -182,7 +182,7 @@ function InvestorStartupDetailPage() {
   return (
     <div className="space-y-6">
       <DealCard startupId={id} startup={startup as Startup} />
-      <DealActivityTimeline startupId={id} limit={50} />
+      {/* <DealActivityTimeline startupId={id} limit={50} /> */}
       <StartupHeader
         startup={startup as Startup}
         backLink="/investor"

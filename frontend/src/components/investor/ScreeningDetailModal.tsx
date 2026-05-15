@@ -11,6 +11,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FitChips } from "./FitChips";
+import { formatIndustry } from "@/lib/kpi-metrics";
 import type { FitStatus, ThesisFitOutput } from "@/types/thesis-fit";
 
 export type ScreeningVerdict = "review" | "advance" | "reject";
@@ -144,7 +145,7 @@ export function ScreeningDetailModal({
             </Badge>
           </DialogTitle>
           {detail.industry && (
-            <DialogDescription>{detail.industry}</DialogDescription>
+            <DialogDescription>{formatIndustry(detail.industry)}</DialogDescription>
           )}
         </DialogHeader>
 

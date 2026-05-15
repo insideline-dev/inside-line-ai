@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, jest } from "bun:test";
 import { ConfigService } from "@nestjs/config";
 import { ScreeningProcessor } from "../../processors/screening.processor";
-import type { LensRegistryService } from "../../lenses/lens-registry.service";
+import type { BaseLensAgent, LensRunResult } from "../../lenses/base-lens.agent";
+import type { LensOutput } from "../../schemas/lens";
+import type { MarketLens } from "../../lenses/market.lens";
+import type { TeamLens } from "../../lenses/team.lens";
+import type { TractionLens } from "../../lenses/traction.lens";
 import type { DrizzleService } from "../../../../database";
 import type { PipelineStateService } from "../../services/pipeline-state.service";
 import type { PipelineService } from "../../services/pipeline.service";
@@ -46,7 +50,9 @@ function buildScreeningResult() {
 describe("ScreeningProcessor", () => {
   let processor: ScreeningProcessor;
   let config: jest.Mocked<ConfigService>;
-  let lensRegistry: jest.Mocked<LensRegistryService>;
+  let teamLens: jest.Mocked<TeamLens>;
+  let marketLens: jest.Mocked<MarketLens>;
+  let tractionLens: jest.Mocked<TractionLens>;
   let drizzle: jest.Mocked<DrizzleService>;
   let screeningOutput: jest.Mocked<ScreeningOutputService>;
   let screeningTriage: jest.Mocked<ScreeningTriageService>;
@@ -64,10 +70,28 @@ describe("ScreeningProcessor", () => {
       }),
     } as unknown as jest.Mocked<ConfigService>;
 
-    lensRegistry = {
-      keys: jest.fn().mockReturnValue(["team"]),
-      runAll: jest.fn().mockResolvedValue({ team: buildScreeningResult() }),
-    } as unknown as jest.Mocked<LensRegistryService>;
+    const teamResult = buildScreeningResult();
+    teamLens = {
+      key: "team",
+      run: jest.fn().mockResolvedValue(teamResult),
+    } as unknown as jest.Mocked<TeamLens>;
+    // Market + Traction lenses default to a fallback shape so the
+    // processor can still iterate `this.lenses`; the spec asserts against
+    // the `team` row, which is what `screeningOutput` is set up to return.
+    const fallback = (key: string): LensRunResult<LensOutput> => ({
+      ...teamResult,
+      key,
+      output: { ...teamResult.output, score: 0, signal: "reject" as const },
+      usedFallback: true,
+    });
+    marketLens = {
+      key: "market",
+      run: jest.fn().mockResolvedValue(fallback("market")),
+    } as unknown as jest.Mocked<MarketLens>;
+    tractionLens = {
+      key: "traction",
+      run: jest.fn().mockResolvedValue(fallback("traction")),
+    } as unknown as jest.Mocked<TractionLens>;
 
     const startupRow = {
       id: STARTUP_ID,
@@ -210,7 +234,9 @@ describe("ScreeningProcessor", () => {
 
     processor = new ScreeningProcessor(
       config,
-      lensRegistry,
+      marketLens as unknown as MarketLens,
+      teamLens as unknown as TeamLens,
+      tractionLens as unknown as TractionLens,
       drizzle,
       pipelineState,
       {} as unknown as PipelineService,

@@ -1,5 +1,5 @@
 import { formatDistanceToNow } from "date-fns";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, Check, X } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,8 @@ export interface ScreeningDealCardData {
 interface ScreeningDealCardProps {
   data: ScreeningDealCardData;
   onOpen: (id: string) => void;
+  onPass?: (id: string) => void;
+  onAdvance?: (id: string) => void;
   className?: string;
 }
 
@@ -63,6 +65,8 @@ function fitTone(score: number): { bg: string; text: string; ring: string } {
 export function ScreeningDealCard({
   data,
   onOpen,
+  onPass,
+  onAdvance,
   className,
 }: ScreeningDealCardProps) {
   const verdictCfg = VERDICT_BADGE[data.verdict];
@@ -186,22 +190,55 @@ export function ScreeningDealCard({
           </div>
         )}
 
-        {/* Footer: time + action */}
-        <div className="flex items-center justify-between pt-1">
+        {/* Footer: time + actions */}
+        <div className="flex items-center justify-between gap-2 pt-1">
           <span className="text-xs text-muted-foreground">
             {formatDistanceToNow(new Date(data.submittedAt), {
               addSuffix: true,
             })}
           </span>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => onOpen(data.id)}
-            data-testid={`screening-card-open-${data.id}`}
-          >
-            Open
-            <ArrowUpRight className="ml-1 h-3.5 w-3.5" />
-          </Button>
+          <div className="flex items-center gap-1.5">
+            {data.verdict === "review" && (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onPass?.(data.id);
+                  }}
+                  data-testid={`screening-card-pass-${data.id}`}
+                  aria-label="Pass on this deal"
+                >
+                  <X className="mr-1 h-3.5 w-3.5" />
+                  Pass
+                </Button>
+                <Button
+                  size="sm"
+                  className="bg-emerald-600 text-white hover:bg-emerald-700"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAdvance?.(data.id);
+                  }}
+                  data-testid={`screening-card-advance-${data.id}`}
+                  aria-label="Advance to Due Diligence"
+                >
+                  <Check className="mr-1 h-3.5 w-3.5" />
+                  Advance
+                </Button>
+              </>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onOpen(data.id)}
+              data-testid={`screening-card-open-${data.id}`}
+            >
+              Open
+              <ArrowUpRight className="ml-1 h-3.5 w-3.5" />
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>

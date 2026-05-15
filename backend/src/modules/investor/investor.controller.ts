@@ -29,6 +29,7 @@ import { ScoringPreferencesService } from './scoring-preferences.service';
 import { DealDecisionService } from './deal-decision.service';
 import { RecordDealDecisionDto } from './dto/record-deal-decision.dto';
 import { CalibrationService } from './calibration.service';
+import { ScreeningQueueService } from './screening-queue.service';
 import { CalibrationProposalService } from './calibration-proposal.service';
 import {
   ListCalibrationProposalsQueryDto,
@@ -74,6 +75,7 @@ export class InvestorController {
     private calibrationProposalService: CalibrationProposalService,
     private scoringConfigService: ScoringConfigService,
     private startupMatching: StartupMatchingPipelineService,
+    private screeningQueueService: ScreeningQueueService,
   ) {}
 
   // ============ THESIS ENDPOINTS ============
@@ -260,6 +262,11 @@ export class InvestorController {
   @Get('pipeline')
   async getPipeline(@CurrentUser() user: User) {
     return this.pipelineService.getPipeline(user.id);
+  }
+
+  @Get('screening')
+  async getScreeningQueue(@CurrentUser() user: User) {
+    return this.screeningQueueService.getQueue(user.id);
   }
 
   @Post('startups/:id/match')

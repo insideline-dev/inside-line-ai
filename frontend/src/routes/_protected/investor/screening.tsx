@@ -1,8 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
-import { ChevronDown, ChevronRight, Inbox } from "lucide-react";
+import { ChevronDown, ChevronRight, Inbox, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { customFetch } from "@/api/client";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { StageNav } from "@/components/investor/StageNav";
@@ -14,6 +16,31 @@ import {
   type ScreeningVerdict,
 } from "@/components/investor/ScreeningDetailModal";
 import type { ThesisFitOutput } from "@/types/thesis-fit";
+
+interface BackendScreeningRow {
+  id: string;
+  companyName: string;
+  industry: string | null;
+  verdict: ScreeningVerdict;
+  overallScore: number;
+  fit: ThesisFitOutput | null;
+  lensScores: Array<{
+    key: "market" | "team" | "traction";
+    label: string;
+    score: number;
+    signal: string;
+    note?: string;
+  }>;
+  missingMaterials: string[];
+  triageRationale: string;
+  reasonCodes: string[];
+  submittedAt: string;
+  dealbreakerNote: string | null;
+}
+
+function fetchScreeningQueue() {
+  return customFetch<BackendScreeningRow[]>("/investor/screening");
+}
 
 export const Route = createFileRoute("/_protected/investor/screening")({
   component: ScreeningPage,
@@ -30,6 +57,26 @@ interface ScreeningRow {
   triageRationale: string;
   submittedAt: string;
   dealbreakerNote?: string | null;
+}
+
+function mapBackendRow(row: BackendScreeningRow): ScreeningRow {
+  return {
+    id: row.id,
+    companyName: row.companyName,
+    industry: row.industry,
+    verdict: row.verdict,
+    fit: row.fit,
+    lensScores: row.lensScores.map((l) => ({
+      key: l.key,
+      label: l.label,
+      score: l.score,
+      note: l.note,
+    })),
+    missingMaterials: row.missingMaterials,
+    triageRationale: row.triageRationale,
+    submittedAt: row.submittedAt,
+    dealbreakerNote: row.dealbreakerNote,
+  };
 }
 
 // PLACEHOLDER seed rows so the page renders end-to-end before PR4 wires
@@ -169,9 +216,55 @@ function VerdictBadge({ verdict }: { verdict: ScreeningVerdict }) {
 }
 
 function ScreeningPage() {
-  const [rows, setRows] = useState<ScreeningRow[]>(SEED_ROWS);
+  const { data: backendRows, isLoading, error } = useQuery({
+    queryKey: ["investor", "screening"],
+    queryFn: fetchScreeningQueue,
+    staleTime: 30_000,
+  });
+
+  // Pessimistic local mirror so PASS/ADVANCE update the row immediately.
+  // Source of truth is the backend; we patch verdict in-place on action.
+  const sourceRows = useMemo<ScreeningRow[]>(() => {
+    if (Array.isArray(backendRows) && backendRows.length > 0) {
+      return backendRows.map(mapBackendRow);
+    }
+    return SEED_ROWS;
+  }, [backendRows]);
+
+  const [overrides, setOverrides] = useState<
+    Record<string, Partial<ScreeningRow>>
+  >({});
+  const rows = useMemo(
+    () =>
+      sourceRows.map((r) => ({ ...r, ...(overrides[r.id] ?? {}) })),
+    [sourceRows, overrides],
+  );
+  const setRows = useCallback(
+    (mutator: (prev: ScreeningRow[]) => ScreeningRow[]) => {
+      // We mutate via `overrides` so refetched backend rows still flow through.
+      const before = sourceRows.map((r) => ({ ...r, ...(overrides[r.id] ?? {}) }));
+      const after = mutator(before);
+      const next: Record<string, Partial<ScreeningRow>> = { ...overrides };
+      for (let i = 0; i < after.length; i++) {
+        const diff: Partial<ScreeningRow> = {};
+        const b = before[i];
+        const a = after[i];
+        if (a.verdict !== b.verdict) diff.verdict = a.verdict;
+        if (a.dealbreakerNote !== b.dealbreakerNote)
+          diff.dealbreakerNote = a.dealbreakerNote;
+        if (Object.keys(diff).length > 0) {
+          next[a.id] = { ...(next[a.id] ?? {}), ...diff };
+        }
+      }
+      setOverrides(next);
+    },
+    [sourceRows, overrides],
+  );
+
   const [openId, setOpenId] = useState<string | null>(null);
   const [showRejected, setShowRejected] = useState(false);
+  const usingPlaceholder =
+    !isLoading && !error && (!backendRows || backendRows.length === 0);
 
   const { activeRows, rejectedRows, advancedRowIds } = useMemo(() => {
     const active = rows.filter((r) => r.verdict !== "reject");
@@ -237,7 +330,12 @@ function ScreeningPage() {
 
       <Card>
         <CardContent className="flex flex-col gap-2 p-4">
-          {activeRows.length === 0 ? (
+          {isLoading ? (
+            <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading screening queue…
+            </div>
+          ) : activeRows.length === 0 ? (
             <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
               <Inbox className="h-4 w-4" />
               No deals in screening yet.
@@ -287,13 +385,19 @@ function ScreeningPage() {
         </div>
       )}
 
-      <div className="rounded-md border border-dashed border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
-        <strong>PR7 preview:</strong> rows are placeholder data. Clicking a
-        row opens the detail modal with lens scores, fit, and missing
-        materials. PASS / ADVANCE buttons update local state only — the
-        backend screening pipeline (PR4) and the auto-advance to the DD
-        pipeline are not yet wired.
-      </div>
+      {usingPlaceholder && (
+        <div className="rounded-md border border-dashed border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+          <strong>No screened deals yet.</strong> Showing placeholder rows
+          until the first triage decision lands. Submit a startup from{" "}
+          <em>Analyze Startup</em> — once the pipeline finishes, the real
+          row replaces these.
+        </div>
+      )}
+      {error && (
+        <div className="rounded-md border border-red-300 bg-red-50 p-3 text-xs text-red-900">
+          Failed to load screening queue: {(error as Error).message}
+        </div>
+      )}
 
       <ScreeningDetailModal
         detail={openDetail}

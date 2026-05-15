@@ -9,7 +9,7 @@ You are replacing a previous system that did literal string-equality checks (e.g
 - "California" matches a "US" thesis.
 - "Berlin" matches an "EU" or "DACH" thesis.
 - "Pre-seed" is borderline against a "Seed-stage" thesis if revenue / traction is close to seed.
-- A \$5M raise borderlines a "\$1M–\$3M cheque size" thesis if it's a round size, not a cheque size — note the ambiguity.
+- A $5M raise borderlines a "$1M–$3M cheque size" thesis if it's a round size, not a cheque size — note the ambiguity.
 
 Reason like an experienced investor reading both sides as natural language.
 

@@ -189,13 +189,10 @@ export const envSchema = z.object({
   // <3 min and 1-2 orders of magnitude cheaper than evaluation. Override per
   // env to swap providers without code changes (DS-E2-F1-S1 acceptance).
   SCREENING_LENS_MODEL: z.string().default("gpt-5.4-mini"),
-  // DS-E2-F1-S2 — per-lens active-version flips. Optional strings; when
-  // unset, `LensRegistryService.getActiveVersion()` picks the highest
-  // registered version. Changing these activates a different lens worker
-  // for `runAll()` without a code redeploy.
-  LENS_ACTIVE_VERSION_MARKET: z.string().optional(),
-  LENS_ACTIVE_VERSION_TEAM: z.string().optional(),
-  LENS_ACTIVE_VERSION_TRACTION: z.string().optional(),
+  // (LENS_ACTIVE_VERSION_* env flips were removed alongside the lens
+  // registry in 2026-05-15's PR3. Lens prompt versioning now lives at the
+  // prompt-catalog layer — flip `activeVersion` on the `lens.*` entries in
+  // `ai-prompt-catalog.ts` to roll a new prompt revision.)
   // DS-E7-F2-S1 — triage policy v4 evidence-gate confidence floor.
   // Weighted evidence-confidence score required for a lens to keep an
   // `advance` signal (high=1.0, medium=0.5, low=0.2; weighted-sum / count).

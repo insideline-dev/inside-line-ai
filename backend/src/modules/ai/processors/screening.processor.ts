@@ -30,8 +30,13 @@ import type {
   ScreeningLensSummary,
   ScreeningResult,
 } from "../interfaces/phase-results.interface";
-import { LensRegistryService } from "../lenses/lens-registry.service";
-import type { LensInput } from "../schemas/lens";
+import { MarketLens } from "../lenses/market.lens";
+import { TeamLens } from "../lenses/team.lens";
+import { TractionLens } from "../lenses/traction.lens";
+import type { BaseLensAgent, LensRunResult } from "../lenses/base-lens.agent";
+import type { LensInput, LensOutput } from "../schemas/lens";
+
+const LENS_RUN_CONCURRENCY = 3;
 import { ScreeningOutputService } from "../contracts/screening-output";
 import { ScreeningTriageService } from "../screening/triage";
 import { PipelineStateService } from "../services/pipeline-state.service";
@@ -57,9 +62,20 @@ export class ScreeningProcessor
 {
   protected readonly logger = new Logger(ScreeningProcessor.name);
 
+  /**
+   * Lens agents run in parallel during screening. The list is explicit (no
+   * registry indirection) so adding a lens means importing it here and
+   * appending to the constructor's `lenses` initializer. Versioning lives at
+   * the prompt-catalog layer (`activeVersion` on each prompt key), not at
+   * the lens class layer.
+   */
+  private readonly lenses: ReadonlyArray<BaseLensAgent<LensOutput>>;
+
   constructor(
     config: ConfigService,
-    private lensRegistry: LensRegistryService,
+    market: MarketLens,
+    team: TeamLens,
+    traction: TractionLens,
     private drizzle: DrizzleService,
     private pipelineState: PipelineStateService,
     private pipelineService: PipelineService,
@@ -77,6 +93,7 @@ export class ScreeningProcessor
       QUEUE_CONCURRENCY[QUEUE_NAMES.AI_SCREENING],
       queuePrefix,
     );
+    this.lenses = [market, team, traction];
   }
 
   async onModuleInit() {
@@ -161,21 +178,49 @@ export class ScreeningProcessor
     };
   }
 
+  /**
+   * Run the registered lenses in parallel with bounded concurrency. Each lens
+   * handles its own fallback so a single failure doesn't take the batch down;
+   * a missing entry in the returned map signals an unrecoverable error.
+   */
+  private async runLenses(
+    ctx: LensInput,
+  ): Promise<Record<string, LensRunResult<LensOutput>>> {
+    const out: Record<string, LensRunResult<LensOutput>> = {};
+    let cursor = 0;
+    const next = async (): Promise<void> => {
+      while (cursor < this.lenses.length) {
+        const idx = cursor++;
+        const lens = this.lenses[idx];
+        try {
+          out[lens.key] = await lens.run(ctx);
+        } catch (err) {
+          this.logger.error(
+            `Lens ${lens.key} threw outside its fallback: ${(err as Error).message}`,
+          );
+        }
+      }
+    };
+    const workerCount = Math.min(LENS_RUN_CONCURRENCY, this.lenses.length);
+    await Promise.all(Array.from({ length: workerCount }, () => next()));
+    return out;
+  }
+
   /** Public so unit tests can drive the screening flow without BullMQ. */
   async runScreening(
     startupId: string,
     pipelineRunId: string,
   ): Promise<ScreeningResult> {
     const ctx = await this.buildContext(startupId);
-    const results = await this.lensRegistry.runAll(ctx);
+    const results = await this.runLenses(ctx);
 
     const lenses: ScreeningLensSummary[] = [];
     const failedKeys: string[] = [];
 
-    for (const key of this.lensRegistry.keys()) {
-      const result = results[key];
+    for (const lens of this.lenses) {
+      const result = results[lens.key];
       if (!result) {
-        failedKeys.push(key);
+        failedKeys.push(lens.key);
         continue;
       }
 
@@ -192,7 +237,7 @@ export class ScreeningProcessor
       });
 
       if (result.usedFallback) {
-        failedKeys.push(key);
+        failedKeys.push(lens.key);
       }
 
       try {

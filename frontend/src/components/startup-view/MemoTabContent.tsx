@@ -1,7 +1,6 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -36,17 +35,9 @@ import {
   Swords,
   Search,
   Download,
-  Sparkles,
-  AlertTriangle,
 } from "lucide-react";
 import type { Startup } from "@/types/startup";
 import type { Evaluation } from "@/types/evaluation";
-import { useScreeningOutput } from "@/lib/screening/useScreeningOutput";
-import {
-  collectScreeningFollowUpSeeds,
-  getScreeningEvidencePreview,
-} from "@/lib/screening/screening-evidence";
-
 interface MemoSectionSource {
   label: string;
   url: string;
@@ -494,15 +485,6 @@ export function MemoTabContent({
     memo?.executiveSummary ||
     evaluation.executiveSummary ||
     `Synthesis executive summary for ${startup.name} is not available yet.`;
-  const screeningOutput = useScreeningOutput(startup.id);
-  const screeningEvidence = useMemo(
-    () => getScreeningEvidencePreview(screeningOutput.data, 4),
-    [screeningOutput.data],
-  );
-  const screeningFollowUps = useMemo(
-    () => collectScreeningFollowUpSeeds(screeningOutput.data),
-    [screeningOutput.data],
-  );
   const executiveSummarySources = toEvaluationSourceArray(evaluation.sources);
 
   return (
@@ -551,70 +533,6 @@ export function MemoTabContent({
           defaultExpanded={true}
           forcePrint={forcePrint}
         />
-
-        {screeningEvidence.length > 0 && (
-          <Card className={forcePrint ? "border-0 bg-transparent shadow-none" : "border-border/60"} data-testid="card-memo-screening-evidence">
-            <CardHeader className={forcePrint ? "hidden" : "pb-3"}>
-              <CardTitle className="text-base flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-violet-500" />
-                Screening Evidence Seeds
-              </CardTitle>
-              <CardDescription>
-                Claim-level evidence from screening that should seed follow-on diligence.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className={forcePrint ? "p-0" : "space-y-2"}>
-              <ul className="space-y-2">
-                {screeningEvidence.map((item, index) => (
-                  <li key={`${item.lensKey}-${index}`} className="rounded-md bg-muted/25 p-3 text-sm">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1 space-y-1">
-                        <p className="font-medium text-foreground">{item.claim}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {item.lensLabel} lens · {item.confidence} confidence{item.source ? ` · ${item.source}` : ""}
-                        </p>
-                      </div>
-                      <Badge variant="outline" className="shrink-0 text-[10px]">
-                        {item.signal}
-                      </Badge>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </CardContent>
-          </Card>
-        )}
-
-        {screeningFollowUps.length > 0 && (
-          <Card className={forcePrint ? "border-0 bg-transparent shadow-none" : "border-border/60"} data-testid="card-memo-screening-follow-ups">
-            <CardHeader className={forcePrint ? "hidden" : "pb-3"}>
-              <CardTitle className="text-base flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-amber-500" />
-                Screening Open Issues
-              </CardTitle>
-              <CardDescription>
-                Screening questions and blockers that should carry into diligence, alongside the memo-generated due diligence areas.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className={forcePrint ? "p-0" : "space-y-2"}>
-              <ul className="space-y-2">
-                {screeningFollowUps.map((item) => (
-                  <li key={item.key} className="rounded-md bg-muted/25 p-3 text-sm">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1 space-y-1">
-                        <p className="font-medium text-foreground">{item.label}</p>
-                        <p className="text-xs text-muted-foreground">{item.summary}</p>
-                      </div>
-                      <Badge variant="outline" className="shrink-0 text-[10px] uppercase tracking-wide">
-                        {item.source === "triage-decision" ? "Decision" : "Output"}
-                      </Badge>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </CardContent>
-          </Card>
-        )}
 
         {SECTION_CONFIG.map((config) => {
           const section = sectionByKey.get(config.key);

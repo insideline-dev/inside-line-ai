@@ -54,6 +54,7 @@ import { PipelineFeedbackService } from "./services/pipeline-feedback.service";
 import { PipelineAgentTraceService } from "./services/pipeline-agent-trace.service";
 import { PdfTextExtractorService } from "./services/pdf-text-extractor.service";
 import { DocumentClassificationService } from "./services/document-classification.service";
+import { ThesisFitService } from "./agents/thesis-fit";
 import { ExcelTextExtractorService } from "./services/excel-text-extractor.service";
 import { PptxTextExtractorService } from "./services/pptx-text-extractor.service";
 import { LinkedinEnrichmentService } from "./services/linkedin-enrichment.service";
@@ -132,6 +133,7 @@ import { OpenAiTextGenerationService } from "./services/openai-text-generation.s
     OpenAiDirectClientService,
     OpenAiTextGenerationService,
     DocumentClassificationService,
+    ThesisFitService,
     ExtractionService,
     PdfTextExtractorService,
     PptxTextExtractorService,
@@ -201,6 +203,7 @@ import { OpenAiTextGenerationService } from "./services/openai-text-generation.s
     OpenAiDirectClientService,
     OpenAiTextGenerationService,
     DocumentClassificationService,
+    ThesisFitService,
     PipelineStateService,
     PipelineStateSnapshotService,
     PipelineFeedbackService,

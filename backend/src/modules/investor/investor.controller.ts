@@ -30,6 +30,12 @@ import { DealDecisionService } from './deal-decision.service';
 import { RecordDealDecisionDto } from './dto/record-deal-decision.dto';
 import { CalibrationService } from './calibration.service';
 import { ScreeningQueueService } from './screening-queue.service';
+import { ScreeningProcessor } from '../ai/processors/screening.processor';
+import { pipelineRun } from '../ai/entities/pipeline.schema';
+import { PipelineStatus } from '../ai/interfaces/pipeline.interface';
+import { DrizzleService } from '../../database';
+import { randomBytes } from 'node:crypto';
+import { ForbiddenException } from '@nestjs/common';
 import { CalibrationProposalService } from './calibration-proposal.service';
 import {
   ListCalibrationProposalsQueryDto,
@@ -76,6 +82,8 @@ export class InvestorController {
     private scoringConfigService: ScoringConfigService,
     private startupMatching: StartupMatchingPipelineService,
     private screeningQueueService: ScreeningQueueService,
+    private screeningProcessor: ScreeningProcessor,
+    private drizzle: DrizzleService,
   ) {}
 
   // ============ THESIS ENDPOINTS ============
@@ -267,6 +275,55 @@ export class InvestorController {
   @Get('screening')
   async getScreeningQueue(@CurrentUser() user: User) {
     return this.screeningQueueService.getQueue(user.id);
+  }
+
+  /**
+   * Dev-only: re-run the screening lenses + triage on an existing startup
+   * using the data already on file (description, team, classification).
+   * Writes a NEW screening_decision row + new startup_lens_result rows
+   * keyed off a fresh pipelineRunId. Does NOT trigger the DD pipeline even
+   * if the new verdict is ADVANCE — the deal stays where it is and only
+   * its screening surface refreshes.
+   *
+   * Returns 403 in any environment other than development.
+   */
+  @Post('screening/:startupId/rescreen-dev')
+  async rescreenForDev(
+    @Param('startupId', ParseUUIDPipe) startupId: string,
+    @CurrentUser() _user: User,
+  ) {
+    if (process.env.NODE_ENV !== 'development') {
+      throw new ForbiddenException(
+        'rescreen-dev is only available in development environment',
+      );
+    }
+    const pipelineRunId = `rescreen_${randomBytes(8).toString('hex')}`;
+    // pipeline_run_id is an FK on screening_decision + startup_lens_result —
+    // we have to create the parent row before runScreening can persist
+    // lens results / triage decision. Status COMPLETED so it doesn't get
+    // picked up as a hung pipeline by health probes.
+    await this.drizzle.db.insert(pipelineRun).values({
+      pipelineRunId,
+      startupId,
+      userId: _user.id,
+      status: PipelineStatus.COMPLETED,
+      config: { source: 'rescreen-dev' },
+      startedAt: new Date(),
+      completedAt: new Date(),
+    });
+    const result = await this.screeningProcessor.runScreening(
+      startupId,
+      pipelineRunId,
+    );
+    return {
+      ok: true,
+      pipelineRunId,
+      classification: result.classification ?? null,
+      overallScore: result.overallScore ?? null,
+      lensCount: result.lenses.length,
+      note:
+        'Re-screen complete. Deal not auto-advanced; the DD pipeline was NOT triggered.',
+    };
   }
 
   @Post('startups/:id/match')

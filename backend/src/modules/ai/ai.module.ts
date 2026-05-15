@@ -214,6 +214,7 @@ import { OpenAiTextGenerationService } from "./services/openai-text-generation.s
     LensesModule,
     ContractsModule,
     ScreeningTriageModule,
+    ScreeningProcessor,
   ],
 })
 export class AiModule {}

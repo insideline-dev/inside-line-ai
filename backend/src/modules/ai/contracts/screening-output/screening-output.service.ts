@@ -23,6 +23,11 @@ import type {
   ScreeningOverallV1,
   ScreeningSignal,
 } from "./v1.schema";
+import type {
+  ScreeningLensScoreV2,
+  ScreeningOutputV2,
+} from "./v2.schema";
+import type { ThesisFitOutput } from "../../schemas/thesis-fit.schema";
 
 /**
  * Builds the public {@link ScreeningOutputV1} contract from persisted
@@ -223,6 +228,47 @@ export class ScreeningOutputService {
       overall,
       handoff: this.buildHandoff(lenses, overall, decision),
       lenses,
+    };
+  }
+
+  /**
+   * Build a v2 ScreeningOutput. Identical to v1's shape on the inherited
+   * fields, with `thesisFit` (nullable when no thesis was on file) and
+   * `lensScores` (compact roll-up keyed by lens) added on top.
+   *
+   * Pulled out as a separate method so v1 callers stay on the frozen
+   * contract; new callers (Screening UI, DD handoff post-PR4) opt in to v2.
+   */
+  buildV2(
+    startupId: string,
+    pipelineRunId: string | null,
+    rows: StartupLensResult[],
+    materials: MaterialsInput | null,
+    decision: { signal: ScreeningSignal; score: number; reasonCodes: string[] } | null,
+    thesisFit: ThesisFitOutput | null,
+  ): ScreeningOutputV2 {
+    const v1 = this.assemble(
+      startupId,
+      pipelineRunId,
+      rows,
+      materials,
+      decision,
+    );
+    const lensScores: ScreeningLensScoreV2[] = v1.lenses
+      .filter((l): l is ScreeningLensV1 & { key: "market" | "team" | "traction" } =>
+        l.key === "market" || l.key === "team" || l.key === "traction",
+      )
+      .map((l) => ({
+        key: l.key,
+        score: l.score,
+        signal: l.signal,
+        rationale: l.rationale,
+      }));
+    return {
+      ...v1,
+      version: 2,
+      thesisFit,
+      lensScores,
     };
   }
 

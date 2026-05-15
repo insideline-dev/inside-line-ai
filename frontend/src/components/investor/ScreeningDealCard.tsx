@@ -53,27 +53,6 @@ const VERDICT_BADGE: Record<
 
 const LENS_LABELS = ["market", "team", "traction"] as const;
 
-const LENS_THEME: Record<
-  "market" | "team" | "traction",
-  { tile: string; label: string; ring: string }
-> = {
-  market: {
-    tile: "bg-sky-50 border-sky-200",
-    label: "text-sky-700",
-    ring: "ring-sky-200",
-  },
-  team: {
-    tile: "bg-violet-50 border-violet-200",
-    label: "text-violet-700",
-    ring: "ring-violet-200",
-  },
-  traction: {
-    tile: "bg-amber-50 border-amber-200",
-    label: "text-amber-700",
-    ring: "ring-amber-200",
-  },
-};
-
 function fitTone(score: number): { bg: string; text: string; ring: string } {
   if (score >= 80) return { bg: "bg-emerald-100", text: "text-emerald-800", ring: "ring-emerald-300" };
   if (score >= 60) return { bg: "bg-sky-100", text: "text-sky-800", ring: "ring-sky-300" };
@@ -136,18 +115,14 @@ export function ScreeningDealCard({
           </div>
         </div>
 
-        {/* Lens scores grid — per-lens accent colour */}
-        <div className="grid grid-cols-3 gap-2">
+        {/* Lens scores grid — ring + number tinted by score (red/amber/green) */}
+        <div className="grid grid-cols-3 gap-2 rounded-lg border bg-muted/20 p-3">
           {LENS_LABELS.map((key) => {
             const lens = lensByKey.get(key);
-            const theme = LENS_THEME[key];
             return (
               <div
                 key={key}
-                className={cn(
-                  "flex flex-col items-center gap-1 rounded-lg border p-2",
-                  theme.tile,
-                )}
+                className="flex flex-col items-center gap-1 rounded-md p-1"
                 data-testid={`screening-card-lens-${key}`}
               >
                 {lens ? (
@@ -155,18 +130,14 @@ export function ScreeningDealCard({
                     score={lens.score}
                     size="sm"
                     showLabel={false}
+                    colorText
                   />
                 ) : (
                   <div className="flex h-12 w-12 items-center justify-center rounded-full border-2 border-dashed border-muted-foreground/30 text-[10px] text-muted-foreground">
                     —
                   </div>
                 )}
-                <span
-                  className={cn(
-                    "text-[10px] font-semibold uppercase tracking-wide",
-                    theme.label,
-                  )}
-                >
+                <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                   {key}
                 </span>
               </div>

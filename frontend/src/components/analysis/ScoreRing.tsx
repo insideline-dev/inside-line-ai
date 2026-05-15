@@ -8,9 +8,11 @@ interface ScoreRingProps {
   label?: string;
   className?: string;
   variant?: "default" | "secondary";
+  /** When true, the inner number text adopts the same colour as the ring stroke. */
+  colorText?: boolean;
 }
 
-export function ScoreRing({ score, size = "md", showLabel = true, label, className, variant = "default" }: ScoreRingProps) {
+export function ScoreRing({ score, size = "md", showLabel = true, label, className, variant = "default", colorText = false }: ScoreRingProps) {
   const sizes = {
     sm: { width: 48, strokeWidth: 4, textSize: "text-sm" },
     md: { width: 80, strokeWidth: 6, textSize: "text-xl" },
@@ -62,7 +64,12 @@ export function ScoreRing({ score, size = "md", showLabel = true, label, classNa
           />
         </svg>
         <div className="absolute inset-0 flex items-center justify-center">
-          <span className={cn("font-semibold", textSize)}>{roundUpScore(normalizedScore)}</span>
+          <span
+            className={cn("font-semibold", textSize)}
+            style={colorText ? { color: getScoreColor(normalizedScore) } : undefined}
+          >
+            {roundUpScore(normalizedScore)}
+          </span>
         </div>
       </div>
       {showLabel && label && (

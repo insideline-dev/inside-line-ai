@@ -9,6 +9,7 @@ import { OrchestratorModule } from "./orchestrator";
 import { LensesModule } from "./lenses";
 import { ContractsModule } from "./contracts/contracts.module";
 import { ScreeningTriageModule } from "./screening/triage";
+import { ScreeningCascadeService } from "./screening/cascade.service";
 import { AiProviderService } from "./providers/ai-provider.service";
 import {
   BusinessModelEvaluationAgent,
@@ -179,6 +180,7 @@ import { OpenAiTextGenerationService } from "./services/openai-text-generation.s
     ScrapingProcessor,
     ResearchProcessor,
     ScreeningProcessor,
+    ScreeningCascadeService,
     EvaluationProcessor,
     SynthesisProcessor,
     MatchingProcessor,
@@ -215,6 +217,7 @@ import { OpenAiTextGenerationService } from "./services/openai-text-generation.s
     ContractsModule,
     ScreeningTriageModule,
     ScreeningProcessor,
+    ScreeningCascadeService,
   ],
 })
 export class AiModule {}

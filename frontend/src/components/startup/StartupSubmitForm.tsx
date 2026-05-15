@@ -106,16 +106,32 @@ const createSubmitSchema = (userRole: "founder" | "investor" | "admin" | "portal
     ? z.string().url("Please enter a valid URL").min(1, "Website is required")
     : z.string().url("Please enter a valid URL").optional().or(z.literal(""));
 
+  // Investor / admin intake is a screening submission: only name + website
+  // are required to trigger the screening pipeline. Stage, location, and
+  // round size are nice-to-have at this stage and surface to the editor as
+  // optional so they don't block triage. Founder / portal flows keep the
+  // stricter requirements because that data drives the matching engine.
+  const isLooseIntake = userRole === "investor" || userRole === "admin";
+  const stageValidation = isLooseIntake
+    ? z.string().optional().default("")
+    : z.string().min(1, "Stage is required");
+  const locationValidation = isLooseIntake
+    ? z.string().optional().default("")
+    : z.string().min(1, "Location is required");
+  const fundingTargetValidation = isLooseIntake
+    ? z.string().optional().default("")
+    : z.string().min(1, "Round size is required");
+
   const baseSchema = z.object({
     name: z.string().min(1, "Company name is required"),
     tagline: z.string().max(500, "Tagline is too long").optional().or(z.literal("")),
     website: websiteValidation,
     description: z.string().max(5000).optional().or(z.literal("")),
-    stage: z.string().min(1, "Stage is required"),
+    stage: stageValidation,
     sectorIndustryGroup: z.string().optional(),
     sectorIndustry: z.string().optional(),
-    location: z.string().min(1, "Location is required"),
-    fundingTarget: z.string().min(1, "Round size is required"),
+    location: locationValidation,
+    fundingTarget: fundingTargetValidation,
     roundCurrency: z.string().default("USD"),
     valuation: z.string().optional(),
     valuationKnown: z.boolean().optional(),
@@ -279,6 +295,9 @@ export function StartupSubmitForm({
   const isWebsiteRequired = isPortalSubmission ? portalRequiredFields.includes("website") : true;
   const isPitchDeckRequired = isPortalSubmission ? portalRequiredFields.includes("pitchDeck") : false;
   const primaryContactRequired = userRole === "founder" || userRole === "portal";
+  // Investor / admin intake: stage / location / round size are screening-
+  // optional so an editor can submit a deal with just name + website.
+  const isLooseIntakeRole = userRole === "investor" || userRole === "admin";
   const shouldShowPrimaryContactSection =
     showPrimaryContactSection ?? primaryContactRequired;
   const draftStorageKey = "startup-submit-draft-v1";
@@ -485,7 +504,17 @@ export function StartupSubmitForm({
   const submitMutation = useMutation({
     mutationFn: async (data: SubmitFormData) => {
       const fundingTarget = parsePositiveNumberInput(data.fundingTarget);
-      if (fundingTarget === undefined) {
+      const isLooseIntake = userRole === "investor" || userRole === "admin";
+      if (!isLooseIntake && fundingTarget === undefined) {
+        throw new Error("Round size must be a positive number");
+      }
+      if (
+        isLooseIntake &&
+        data.fundingTarget &&
+        data.fundingTarget.trim().length > 0 &&
+        fundingTarget === undefined
+      ) {
+        // Value was entered but doesn't parse — still flag.
         throw new Error("Round size must be a positive number");
       }
 
@@ -555,7 +584,8 @@ export function StartupSubmitForm({
             data.sectorIndustryGroup?.trim() ||
             "general",
           stage: data.stage as SubmitToPortalDto["stage"],
-          fundingTarget: Math.round(fundingTarget),
+          // Portal flow always requires a round size — guarded above.
+          fundingTarget: Math.round(fundingTarget as number),
           teamSize: Math.max(validTeamMembers.length, 1),
           pitchDeckUrl: pitchDeckFile?.publicUrl,
           demoUrl: demoVideoUrl,
@@ -586,7 +616,8 @@ export function StartupSubmitForm({
           data.sectorIndustryGroup?.trim() ||
           "general",
         stage: data.stage as CreateStartupDto["stage"],
-        fundingTarget: Math.round(fundingTarget),
+        fundingTarget:
+          fundingTarget !== undefined ? Math.round(fundingTarget) : undefined,
         teamSize: Math.max(validTeamMembers.length, 1),
         sectorIndustryGroup: normalizeOptionalText(data.sectorIndustryGroup),
         sectorIndustry: normalizeOptionalText(data.sectorIndustry),
@@ -1178,7 +1209,7 @@ export function StartupSubmitForm({
               name="location"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>City / Location</FormLabel>
+                  <FormLabel>City / Location {isLooseIntakeRole && <span className="text-muted-foreground text-xs">(optional)</span>}</FormLabel>
                   <FormControl>
                     <div className="relative">
                       <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -1648,7 +1679,7 @@ export function StartupSubmitForm({
                 name="stage"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Stage</FormLabel>
+                    <FormLabel>Stage {isLooseIntakeRole && <span className="text-muted-foreground text-xs">(optional)</span>}</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl>
                         <SelectTrigger data-testid="select-stage">
@@ -1676,7 +1707,7 @@ export function StartupSubmitForm({
                 name="fundingTarget"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Round Size</FormLabel>
+                    <FormLabel>Round Size {isLooseIntakeRole && <span className="text-muted-foreground text-xs">(optional)</span>}</FormLabel>
                     <FormControl>
                       <CurrencyInput
                         value={field.value || ""}

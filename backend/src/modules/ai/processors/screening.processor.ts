@@ -465,6 +465,8 @@ export class ScreeningProcessor
         industry: startup.industry,
         sectorIndustry: startup.sectorIndustry,
         stage: startup.stage,
+        userId: startup.userId,
+        teamMembers: startup.teamMembers,
       })
       .from(startup)
       .where(eq(startup.id, startupId))
@@ -476,12 +478,7 @@ export class ScreeningProcessor
 
     // Prefer the user-submitted `description` over the LLM-generated
     // `productDescription`. The latter has shown evidence of fabricating
-    // content from unrelated startups during enrichment (the 2026-05-15
-    // E2E test reproduced this: a B2B SaaS LLM-eval submission got
-    // re-described as "oil & gas insights software"). Until that
-    // fabrication path is fixed at the source, the lenses run on the
-    // human-authored field. We pass productDescription only as ancillary
-    // context so any genuinely complementary detail isn't dropped.
+    // content from unrelated startups during enrichment.
     const userDescription = (row.description ?? "").trim();
     const productDescription = (row.productDescription ?? "").trim();
     const startupDescription =
@@ -493,6 +490,14 @@ export class ScreeningProcessor
         ? `Additional system-extracted notes (treat as low-confidence): ${productDescription.slice(0, 400)}`
         : "";
 
+    // Pull the investor thesis owned by the user who submitted this deal.
+    // v2 lens prompts make thesis a first-class input; empty string is OK
+    // (the prompt is calibrated to handle "no thesis on file").
+    const investorThesis = await this.formatThesisForLens(row.userId);
+
+    // Pre-format team roster for the Team lens.
+    const teamMembers = this.formatTeamMembers(row.teamMembers);
+
     return {
       startupId,
       startupName: row.name,
@@ -500,6 +505,63 @@ export class ScreeningProcessor
       sector: row.sectorIndustry ?? row.industry ?? "",
       stage: row.stage ?? "",
       contextNotes,
+      investorThesis,
+      teamMembers,
     };
+  }
+
+  private async formatThesisForLens(userId: string | null): Promise<string> {
+    if (!userId) return "";
+    const [t] = await this.drizzle.db
+      .select()
+      .from(investorThesis)
+      .where(eq(investorThesis.userId, userId))
+      .limit(1);
+    if (!t) return "";
+
+    const lines: string[] = [];
+    const push = (label: string, value: string | null | undefined) => {
+      if (value && value.trim().length > 0) lines.push(`- ${label}: ${value}`);
+    };
+    const pushList = (label: string, value: string[] | null | undefined) => {
+      if (value && value.length > 0) push(label, value.join(", "));
+    };
+
+    pushList("Sectors / industries", t.industries);
+    pushList("Stages", t.stages);
+    pushList("Geographic focus", t.geographicFocus);
+    pushList("Business models", t.businessModels);
+    if (t.checkSizeMin != null || t.checkSizeMax != null) {
+      const min =
+        t.checkSizeMin != null ? `$${t.checkSizeMin.toLocaleString()}` : "?";
+      const max =
+        t.checkSizeMax != null ? `$${t.checkSizeMax.toLocaleString()}` : "?";
+      push("Check size range", `${min} – ${max}`);
+    }
+    pushList("Must-have features", t.mustHaveFeatures);
+    pushList("Deal breakers", t.dealBreakers);
+    if (t.minTeamSize != null) push("Min team size", String(t.minTeamSize));
+    push("Narrative", t.thesisNarrative);
+
+    return lines.length > 0
+      ? lines.join("\n")
+      : "(thesis row exists but no criteria set)";
+  }
+
+  private formatTeamMembers(
+    members: Array<{ name?: string; role?: string; linkedinUrl?: string }> | null,
+  ): string {
+    if (!members || members.length === 0) return "";
+    return members
+      .filter((m) => m && (m.name || m.role || m.linkedinUrl))
+      .map((m) => {
+        const parts = [
+          m.name?.trim() || "(unnamed)",
+          m.role?.trim() ? `— ${m.role.trim()}` : "",
+          m.linkedinUrl?.trim() ? `(${m.linkedinUrl.trim()})` : "",
+        ].filter(Boolean);
+        return `- ${parts.join(" ")}`;
+      })
+      .join("\n");
   }
 }

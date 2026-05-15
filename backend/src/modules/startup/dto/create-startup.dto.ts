@@ -24,11 +24,13 @@ export const CreateStartupSchema = z.object({
   tagline: z.string().max(500).optional().default(""),
   description: z.string().max(5000).optional().default(""),
   website: z.string().url(),
-  location: z.string().min(1).max(200),
-  industry: z.string().min(1).max(200),
-  stage: z.nativeEnum(StartupStage),
-  fundingTarget: z.number().int().positive(),
-  teamSize: z.number().int().positive(),
+  // Investor / admin intake doesn't require these — they ship in later
+  // diligence steps. Founder / portal flows still send them.
+  location: z.string().min(1).max(200).optional().default(""),
+  industry: z.string().min(1).max(200).optional().default("other"),
+  stage: z.nativeEnum(StartupStage).optional(),
+  fundingTarget: z.number().int().nonnegative().optional(),
+  teamSize: z.number().int().positive().optional().default(1),
   sectorIndustryGroup: z.string().max(200).optional(),
   sectorIndustry: z.string().max(200).optional(),
   pitchDeckUrl: z.string().url().optional(),

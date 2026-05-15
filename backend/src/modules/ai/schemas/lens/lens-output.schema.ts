@@ -35,5 +35,18 @@ export const LensInputSchema = z.object({
   sector: z.string().optional().default(""),
   stage: z.string().optional().default(""),
   contextNotes: z.string().optional().default(""),
+  /**
+   * Pre-formatted investor thesis text (one bullet per criterion). v2 lens
+   * prompts make this a required input — without thesis the lens cannot
+   * answer "is this worth THIS investor's time?". Empty string when no
+   * thesis is on file; the prompt is calibrated to handle that case.
+   */
+  investorThesis: z.string().optional().default(""),
+  /**
+   * Pre-formatted team roster (one bullet per member: name / role /
+   * LinkedIn). Consumed by the Team lens only; other lenses receive the
+   * variable but typically ignore it.
+   */
+  teamMembers: z.string().optional().default(""),
 });
 export type LensInput = z.infer<typeof LensInputSchema>;

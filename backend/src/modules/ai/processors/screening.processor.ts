@@ -366,10 +366,21 @@ export class ScreeningProcessor
       return null;
     }
 
-    const synthesis = (await this.pipelineState.getPhaseResult(
-      startupId,
-      PipelinePhase.SYNTHESIS,
-    )) as SynthesisResult | null;
+    // Pipeline state may not exist (e.g. dev-only rescreen-dev path that
+    // bypasses the BullMQ pipeline). Treat that as "no synthesis yet"
+    // rather than crashing the triage gate.
+    let synthesis: SynthesisResult | null = null;
+    try {
+      synthesis = (await this.pipelineState.getPhaseResult(
+        startupId,
+        PipelinePhase.SYNTHESIS,
+      )) as SynthesisResult | null;
+    } catch (err) {
+      this.logger.debug(
+        `[ScreeningProcessor] No pipeline state for ${startupId}; thesis-fit gate remains unseeded (${err instanceof Error ? err.message : String(err)})`,
+      );
+      return null;
+    }
     if (!synthesis) {
       this.logger.debug(
         `[ScreeningProcessor] No synthesis result available yet for ${startupId}; thesis-fit gate remains unseeded`,

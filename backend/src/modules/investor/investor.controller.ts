@@ -30,6 +30,7 @@ import { DealDecisionService } from './deal-decision.service';
 import { RecordDealDecisionDto } from './dto/record-deal-decision.dto';
 import { CalibrationService } from './calibration.service';
 import { ScreeningQueueService } from './screening-queue.service';
+import { ScreeningCalibrationService } from './screening-calibration.service';
 import { ScreeningProcessor } from '../ai/processors/screening.processor';
 import { pipelineRun } from '../ai/entities/pipeline.schema';
 import { PipelineStatus } from '../ai/interfaces/pipeline.interface';
@@ -82,6 +83,7 @@ export class InvestorController {
     private scoringConfigService: ScoringConfigService,
     private startupMatching: StartupMatchingPipelineService,
     private screeningQueueService: ScreeningQueueService,
+    private screeningCalibrationService: ScreeningCalibrationService,
     private screeningProcessor: ScreeningProcessor,
     private drizzle: DrizzleService,
   ) {}
@@ -275,6 +277,19 @@ export class InvestorController {
   @Get('screening')
   async getScreeningQueue(@CurrentUser() user: User) {
     return this.screeningQueueService.getQueue(user.id);
+  }
+
+  /**
+   * Screening-side calibration proposals (PR9). Distinct from
+   * `/investor/calibration/proposals` which is the DD-side ("worth my
+   * money?") loop. This surface answers "worth my time?" — based on
+   * screening verdict distribution and lens-reject dominance.
+   *
+   * Read-only and recomputed on every call.
+   */
+  @Get('screening/calibration')
+  async getScreeningCalibration(@CurrentUser() user: User) {
+    return this.screeningCalibrationService.listForInvestor(user.id);
   }
 
   /**

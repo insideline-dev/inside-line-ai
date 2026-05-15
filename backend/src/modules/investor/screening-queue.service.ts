@@ -48,7 +48,7 @@ const LENS_LABELS: Record<string, string> = {
   traction: "Traction",
 };
 
-function isVerdict(value: string): value is Verdict {
+export function isVerdict(value: string): value is Verdict {
   return value === "review" || value === "advance" || value === "reject";
 }
 
@@ -62,7 +62,7 @@ function isVerdict(value: string): value is Verdict {
  *   compact summary across all axes).
  * - Falls back to a humanised lens-flag summary when no fit object exists.
  */
-function buildTriageRationale(
+export function buildTriageRationale(
   codes: string[],
   fit: ScreeningDecisionThesisFit | null,
 ): string {
@@ -83,7 +83,7 @@ function buildTriageRationale(
 }
 
 
-function dealbreakerNoteFromReasonCodes(codes: string[]): string | null {
+export function dealbreakerNoteFromReasonCodes(codes: string[]): string | null {
   const breaker = codes.find(
     (c) =>
       c.includes("dealbreaker") ||

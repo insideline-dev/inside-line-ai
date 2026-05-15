@@ -30,9 +30,7 @@ export interface ScreeningQueueRow {
   companyName: string;
   industry: string | null;
   stage: string | null;
-  /** Hostname-derived favicon URL (Google s2 favicons) when website is known. */
-  faviconUrl: string | null;
-  /** Raw website URL (passed through so the card can link out). */
+  /** Raw website URL; favicon resolution happens client-side with chained CDN fallbacks. */
   website: string | null;
   verdict: Verdict;
   overallScore: number;
@@ -84,17 +82,6 @@ function buildTriageRationale(
     .join(" · ");
 }
 
-function deriveFaviconUrl(website: string | null | undefined): string | null {
-  if (!website) return null;
-  try {
-    const url = new URL(
-      website.startsWith("http") ? website : `https://${website}`,
-    );
-    return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(url.hostname)}&sz=64`;
-  } catch {
-    return null;
-  }
-}
 
 function dealbreakerNoteFromReasonCodes(codes: string[]): string | null {
   const breaker = codes.find(
@@ -294,7 +281,6 @@ export class ScreeningQueueService {
         companyName: r.startup_name,
         industry: r.sector_industry ?? r.industry ?? null,
         stage: r.startup_stage,
-        faviconUrl: deriveFaviconUrl(r.startup_website),
         website: r.startup_website,
         verdict,
         overallScore: r.overall_score,

@@ -16,6 +16,7 @@ import { CalibrationProposalService } from "../calibration-proposal.service";
 import { DealDecisionService } from "../deal-decision.service";
 import { StartupMatchingPipelineService } from "../../ai/services/startup-matching-pipeline.service";
 import { ScreeningQueueService } from "../screening-queue.service";
+import { ScreeningCalibrationService } from "../screening-calibration.service";
 import { ScreeningProcessor } from "../../ai/processors/screening.processor";
 import { DrizzleService } from "../../../database";
 import { UserRole } from "../../../auth/entities/auth.schema";
@@ -69,6 +70,7 @@ describe("InvestorController.rescreenForDev", () => {
         { provide: CalibrationProposalService, useValue: {} },
         { provide: StartupMatchingPipelineService, useValue: {} },
         { provide: ScreeningQueueService, useValue: {} },
+        { provide: ScreeningCalibrationService, useValue: {} },
         { provide: ScreeningProcessor, useValue: screeningProcessor },
         {
           provide: DrizzleService,

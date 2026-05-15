@@ -7,6 +7,12 @@
  * to score the startup on "is this worth THIS investor's time?" — not
  * "is this a good startup in the abstract?".
  *
+ * Scope (signed off 2026-05-15): v2 is the active version for BOTH the
+ * Screening surface AND the DD pipeline's lens phase. The same prompts run
+ * in both places because thesis-aware scoring is strictly better than the
+ * v1 placeholder for either use case. v1 is preserved under
+ * versions["1"] in `ai-prompt-catalog.ts` for historical replay only.
+ *
  * Shared output contract — every lens returns:
  *   { score: 0-100, signal: advance|review|reject, rationale: <=800 chars,
  *     evidence: [{ claim, source?, confidence: low|medium|high }] up to 5 }

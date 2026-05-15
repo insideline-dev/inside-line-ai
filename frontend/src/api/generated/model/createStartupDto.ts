@@ -27,23 +27,23 @@ export interface CreateStartupDto {
    * @minLength 1
    * @maxLength 200
    */
-  location: string;
+  location?: string;
   /**
    * @minLength 1
    * @maxLength 200
    */
-  industry: string;
-  stage: CreateStartupDtoStage;
+  industry?: string;
+  stage?: CreateStartupDtoStage;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  fundingTarget?: number;
   /**
    * @maximum 9007199254740991
    * @exclusiveMinimum 0
    */
-  fundingTarget: number;
-  /**
-   * @maximum 9007199254740991
-   * @exclusiveMinimum 0
-   */
-  teamSize: number;
+  teamSize?: number;
   /** @maxLength 200 */
   sectorIndustryGroup?: string;
   /** @maxLength 200 */

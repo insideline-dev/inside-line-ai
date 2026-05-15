@@ -112,7 +112,15 @@ export class ScreeningQueueService {
    * Thesis-fit per-axis output is `null` until ThesisFitService is wired into
    * the pipeline (planned follow-up); the UI shows a "fit pending" state.
    */
-  async getQueue(investorUserId: string): Promise<ScreeningQueueRow[]> {
+  /**
+   * Investor scope: only startups owned by the calling investor.
+   * Admin scope (allStartups=true): every startup in the DB, irrespective of
+   * owner. Admin surface is the global screening dashboard.
+   */
+  async getQueue(
+    investorUserId: string,
+    options?: { allStartups?: boolean },
+  ): Promise<ScreeningQueueRow[]> {
     const db = this.drizzle.db;
 
     // Latest screening_decision per startup, restricted to startups owned by
@@ -174,7 +182,7 @@ export class ScreeningQueueService {
         s.created_at as submitted_at
       from latest l
       join startups s on s.id = l.startup_id
-      where s.user_id = ${investorUserId}
+      where ${options?.allStartups ? sql`true` : sql`s.user_id = ${investorUserId}`}
       order by s.created_at desc
     `)) as unknown as DecisionRow[] | { rows: DecisionRow[] };
 

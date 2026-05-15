@@ -69,6 +69,7 @@ import {
     CalibrationRecomputeService,
     CalibrationProposalService,
     LensDeltaService,
+    ScreeningQueueService,
   ],
 })
 export class InvestorModule {}

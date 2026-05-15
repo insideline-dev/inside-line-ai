@@ -43,6 +43,7 @@ import { BulkDataService } from './bulk-data.service';
 import { BulkStartupIntakeService } from './bulk-startup-intake.service';
 import { AdminMatchingService } from './admin-matching.service';
 import { AdminScreeningService } from './admin-screening.service';
+import { ScreeningQueueService } from '../investor/screening-queue.service';
 import { AdminInvestorService } from './admin-investor.service';
 import { AiPromptService } from '../ai/services/ai-prompt.service';
 import { AiPromptRuntimeService } from '../ai/services/ai-prompt-runtime.service';
@@ -127,7 +128,18 @@ export class AdminController {
     private pipelineFlowConfigService: PipelineFlowConfigService,
     private phaseTransitionService: PhaseTransitionService,
     private adminInvestorService: AdminInvestorService,
+    private screeningQueueService: ScreeningQueueService,
   ) {}
+
+  /**
+   * Admin-scope screening queue. Same shape as `GET /investor/screening`
+   * but unfiltered by ownership — admin sees every startup that has at
+   * least one screening_decision row.
+   */
+  @Get('screening')
+  async getScreeningQueue(@CurrentUser() user: User) {
+    return this.screeningQueueService.getQueue(user.id, { allStartups: true });
+  }
 
   // ============ ANALYTICS ENDPOINTS ============
 

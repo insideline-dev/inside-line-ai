@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, Inbox, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { customFetch } from "@/api/client";
@@ -200,10 +200,39 @@ const SEED_ROWS: ScreeningRow[] = [
 ];
 
 function ScreeningPage() {
+  const queryClient = useQueryClient();
   const { data: backendRows, isLoading, error } = useQuery({
     queryKey: ["investor", "screening"],
     queryFn: fetchScreeningQueue,
     staleTime: 30_000,
+  });
+
+  const advanceMutation = useMutation({
+    mutationFn: (startupId: string) =>
+      customFetch<{ ok: boolean; startupId: string; verdict: "advance"; note: string }>(
+        `/investor/screening/${startupId}/advance`,
+        { method: "POST" },
+      ),
+    onSuccess: (res) => {
+      toast.success("Advanced to Due Diligence", { description: res.note });
+      queryClient.invalidateQueries({ queryKey: ["investor", "screening"] });
+    },
+    onError: (err) =>
+      toast.error("Advance failed", { description: (err as Error).message }),
+  });
+
+  const passMutation = useMutation({
+    mutationFn: (startupId: string) =>
+      customFetch<{ ok: boolean; startupId: string; verdict: "reject" }>(
+        `/investor/screening/${startupId}/pass`,
+        { method: "POST" },
+      ),
+    onSuccess: () => {
+      toast.success("Marked as passed — moved to rejected archive.");
+      queryClient.invalidateQueries({ queryKey: ["investor", "screening"] });
+    },
+    onError: (err) =>
+      toast.error("Pass failed", { description: (err as Error).message }),
   });
 
   // Pessimistic local mirror so PASS/ADVANCE update the row immediately.
@@ -264,26 +293,29 @@ function ScreeningPage() {
 
   const handlePass = useCallback(
     (id: string) => {
+      // Optimistic local update; the mutation invalidates the query on
+      // success so the server state replaces it.
       setRows((prev) =>
         prev.map((r) =>
           r.id === id ? { ...r, verdict: "reject", dealbreakerNote: "Passed by investor" } : r,
         ),
       );
       setOpenId(null);
-      toast.success("Marked as passed — moved to rejected archive.");
+      passMutation.mutate(id);
     },
-    [],
+    [passMutation],
   );
 
-  const handleAdvance = useCallback((id: string) => {
-    setRows((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, verdict: "advance" } : r)),
-    );
-    setOpenId(null);
-    toast.success(
-      "Advanced to Due Diligence. (Backend wiring lands in a later PR.)",
-    );
-  }, []);
+  const handleAdvance = useCallback(
+    (id: string) => {
+      setRows((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, verdict: "advance" } : r)),
+      );
+      setOpenId(null);
+      advanceMutation.mutate(id);
+    },
+    [advanceMutation],
+  );
 
   const openDetail = useMemo<ScreeningDetail | null>(() => {
     if (!openId) return null;

@@ -136,7 +136,7 @@ export class ScreeningProcessor
   protected async process(
     job: Job<AiScreeningJobData>,
   ): Promise<Omit<AiScreeningJobResult, "jobId" | "duration" | "success">> {
-    const { startupId, pipelineRunId } = job.data;
+    const { startupId, pipelineRunId, userId } = job.data;
 
     if (job.data.type !== "ai_screening") {
       throw new Error("Invalid job type for screening processor");
@@ -164,7 +164,8 @@ export class ScreeningProcessor
         pipelineState: this.pipelineState,
         pipelineService: this.pipelineService,
         notificationGateway: this.notificationGateway,
-        run: () => this.runScreening(startupId, pipelineRunId),
+        run: () =>
+          this.runScreening(startupId, pipelineRunId, { userId }),
       });
     } finally {
       clearInterval(heartbeat);
@@ -182,22 +183,67 @@ export class ScreeningProcessor
    * Run the registered lenses in parallel with bounded concurrency. Each lens
    * handles its own fallback so a single failure doesn't take the batch down;
    * a missing entry in the returned map signals an unrecoverable error.
+   *
+   * Emits per-lens agent progress events (`started` → `completed`/`fallback`)
+   * via `pipelineService.onAgentProgress` so the admin pipeline-live view
+   * can render lens-by-lens execution inside the SCREENING phase — same UX
+   * pattern the research/evaluation phases already use.
    */
   private async runLenses(
     ctx: LensInput,
+    progress?: { userId: string; pipelineRunId: string; startupId: string },
   ): Promise<Record<string, LensRunResult<LensOutput>>> {
     const out: Record<string, LensRunResult<LensOutput>> = {};
     let cursor = 0;
+    const emit = async (
+      key: string,
+      lifecycle: "started" | "completed" | "fallback",
+      usedFallback = false,
+      errorMessage?: string,
+    ): Promise<void> => {
+      if (!progress) return;
+      try {
+        await this.pipelineService.onAgentProgress({
+          startupId: progress.startupId,
+          userId: progress.userId,
+          pipelineRunId: progress.pipelineRunId,
+          phase: PipelinePhase.SCREENING,
+          key: `lens_${key}`,
+          status: lifecycle === "started" ? "running" : "completed",
+          progress: lifecycle === "started" ? 0 : 100,
+          attempt: 1,
+          retryCount: 0,
+          phaseRetryCount: 0,
+          usedFallback,
+          error: errorMessage,
+          lifecycleEvent: lifecycle,
+        });
+      } catch (err) {
+        this.logger.warn(
+          `Lens progress emit failed (${key} ${lifecycle}): ${(err as Error).message}`,
+        );
+      }
+    };
+
     const next = async (): Promise<void> => {
       while (cursor < this.lenses.length) {
         const idx = cursor++;
         const lens = this.lenses[idx];
+        await emit(lens.key, "started");
         try {
-          out[lens.key] = await lens.run(ctx);
+          const r = await lens.run(ctx);
+          out[lens.key] = r;
+          await emit(
+            lens.key,
+            r.usedFallback ? "fallback" : "completed",
+            r.usedFallback,
+            r.error,
+          );
         } catch (err) {
           this.logger.error(
             `Lens ${lens.key} threw outside its fallback: ${(err as Error).message}`,
           );
+          await emit(lens.key, "completed", true, (err as Error).message);
         }
       }
     };
@@ -210,9 +256,19 @@ export class ScreeningProcessor
   async runScreening(
     startupId: string,
     pipelineRunId: string,
+    progressContext?: { userId: string },
   ): Promise<ScreeningResult> {
     const ctx = await this.buildContext(startupId);
-    const results = await this.runLenses(ctx);
+    const results = await this.runLenses(
+      ctx,
+      progressContext
+        ? {
+            userId: progressContext.userId,
+            pipelineRunId,
+            startupId,
+          }
+        : undefined,
+    );
 
     const lenses: ScreeningLensSummary[] = [];
     const failedKeys: string[] = [];

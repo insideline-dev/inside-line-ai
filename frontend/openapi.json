@@ -6141,6 +6141,52 @@
         ]
       }
     },
+    "/investor/screening/{startupId}/advance": {
+      "post": {
+        "operationId": "InvestorController_advanceFromScreening",
+        "parameters": [
+          {
+            "name": "startupId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      }
+    },
+    "/investor/screening/{startupId}/pass": {
+      "post": {
+        "operationId": "InvestorController_passFromScreening",
+        "parameters": [
+          {
+            "name": "startupId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      }
+    },
     "/investor/screening/calibration": {
       "get": {
         "operationId": "InvestorController_getScreeningCalibration",

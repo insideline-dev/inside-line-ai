@@ -12,6 +12,12 @@ export interface StageCounts {
 interface StageNavProps {
   counts?: StageCounts;
   className?: string;
+  /**
+   * Route surface this nav is mounted on. Controls which set of routes
+   * the four tabs link to. Defaults to "investor" for back-compat with
+   * the original mount on /investor/screening.
+   */
+  surface?: "investor" | "admin";
 }
 
 interface StageDef {
@@ -21,38 +27,46 @@ interface StageDef {
   matches: (pathname: string) => boolean;
 }
 
-const STAGES: StageDef[] = [
-  {
-    key: "screening",
-    label: "Screening",
-    to: "/investor/screening",
-    matches: (p) => p.startsWith("/investor/screening"),
-  },
-  {
-    key: "dd",
-    label: "Due Diligence",
-    to: "/investor",
-    matches: (p) =>
-      p === "/investor" ||
-      p === "/investor/" ||
-      p.startsWith("/investor/startup"),
-  },
-  {
-    key: "contracting",
-    label: "Contracting",
-    to: "/investor/contracting",
-    matches: (p) => p.startsWith("/investor/contracting"),
-  },
-  {
-    key: "portfolio",
-    label: "Portfolio",
-    to: "/investor/portfolio",
-    matches: (p) => p.startsWith("/investor/portfolio"),
-  },
-];
+function stagesFor(surface: "investor" | "admin"): StageDef[] {
+  const root = surface === "admin" ? "/admin" : "/investor";
+  return [
+    {
+      key: "screening",
+      label: "Screening",
+      to: `${root}/screening`,
+      matches: (p) => p.startsWith(`${root}/screening`),
+    },
+    {
+      key: "dd",
+      label: "Due Diligence",
+      to: root,
+      matches: (p) =>
+        p === root ||
+        p === `${root}/` ||
+        p.startsWith(`${root}/startup`),
+    },
+    {
+      key: "contracting",
+      label: "Contracting",
+      to: `${root}/contracting`,
+      matches: (p) => p.startsWith(`${root}/contracting`),
+    },
+    {
+      key: "portfolio",
+      label: "Portfolio",
+      to: `${root}/portfolio`,
+      matches: (p) => p.startsWith(`${root}/portfolio`),
+    },
+  ];
+}
 
-export function StageNav({ counts = {}, className }: StageNavProps) {
+export function StageNav({
+  counts = {},
+  className,
+  surface = "investor",
+}: StageNavProps) {
   const { pathname } = useLocation();
+  const STAGES = stagesFor(surface);
 
   return (
     <nav

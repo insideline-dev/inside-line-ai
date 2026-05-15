@@ -6127,6 +6127,43 @@
         ]
       }
     },
+    "/investor/screening": {
+      "get": {
+        "operationId": "InvestorController_getScreeningQueue",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      }
+    },
+    "/investor/screening/{startupId}/rescreen-dev": {
+      "post": {
+        "operationId": "InvestorController_rescreenForDev",
+        "parameters": [
+          {
+            "name": "startupId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      }
+    },
     "/investor/startups/{id}/match": {
       "post": {
         "operationId": "InvestorController_triggerStartupMatching",
@@ -8135,11 +8172,13 @@
             "format": "uri"
           },
           "location": {
+            "default": "",
             "type": "string",
             "minLength": 1,
             "maxLength": 200
           },
           "industry": {
+            "default": "other",
             "type": "string",
             "minLength": 1,
             "maxLength": 200
@@ -8159,11 +8198,11 @@
           },
           "fundingTarget": {
             "type": "integer",
-            "exclusiveMinimum": true,
-            "maximum": 9007199254740991,
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "teamSize": {
+            "default": 1,
             "type": "integer",
             "exclusiveMinimum": true,
             "maximum": 9007199254740991,
@@ -8348,12 +8387,7 @@
         },
         "required": [
           "name",
-          "website",
-          "location",
-          "industry",
-          "stage",
-          "fundingTarget",
-          "teamSize"
+          "website"
         ]
       },
       "UpdateStartupDto": {
@@ -8379,11 +8413,13 @@
             "format": "uri"
           },
           "location": {
+            "default": "",
             "type": "string",
             "minLength": 1,
             "maxLength": 200
           },
           "industry": {
+            "default": "other",
             "type": "string",
             "minLength": 1,
             "maxLength": 200
@@ -8403,11 +8439,11 @@
           },
           "fundingTarget": {
             "type": "integer",
-            "exclusiveMinimum": true,
-            "maximum": 9007199254740991,
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "teamSize": {
+            "default": 1,
             "type": "integer",
             "exclusiveMinimum": true,
             "maximum": 9007199254740991,
@@ -9980,11 +10016,13 @@
                 "format": "uri"
               },
               "location": {
+                "default": "",
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 200
               },
               "industry": {
+                "default": "other",
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 200
@@ -10004,11 +10042,11 @@
               },
               "fundingTarget": {
                 "type": "integer",
-                "exclusiveMinimum": true,
-                "maximum": 9007199254740991,
-                "minimum": 0
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "teamSize": {
+                "default": 1,
                 "type": "integer",
                 "exclusiveMinimum": true,
                 "maximum": 9007199254740991,
@@ -10193,12 +10231,7 @@
             },
             "required": [
               "name",
-              "website",
-              "location",
-              "industry",
-              "stage",
-              "fundingTarget",
-              "teamSize"
+              "website"
             ]
           },
           "notes": {

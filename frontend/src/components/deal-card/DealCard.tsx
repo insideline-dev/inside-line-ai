@@ -1,4 +1,3 @@
-import { useNavigate } from "@tanstack/react-router";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -6,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScoreRing } from "@/components/analysis/ScoreRing";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowRight, AlertCircle, CheckCheck, Download, Loader2 } from "lucide-react";
+import { AlertCircle, CheckCheck, Download, Loader2 } from "lucide-react";
 import { downloadScreening } from "@/lib/pdf/download";
 import {
   useStartupControllerFindOne,
@@ -108,7 +107,6 @@ function buildLensTiles(decision: TriageDecision | null | undefined): LensTile[]
 }
 
 export function DealCard({ startupId, className, startup: startupProp }: DealCardProps) {
-  const navigate = useNavigate();
   const { toast } = useToast();
 
   // Fetch startup only when not supplied. We try the private endpoint first,
@@ -186,10 +184,6 @@ export function DealCard({ startupId, className, startup: startupProp }: DealCar
       : decision
         ? "No flags raised"
         : null;
-
-  const handleOpenMemo = () => {
-    void navigate({ to: "/investor/startup/$id", params: { id: startupId } });
-  };
 
   // DS-E10-F4-S1 — share-safe 1-page screening PDF.
   const [isDownloadingScreening, setIsDownloadingScreening] = useState(false);

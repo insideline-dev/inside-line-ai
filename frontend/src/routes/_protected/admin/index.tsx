@@ -14,6 +14,7 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import { QuickAddStartupDialog } from "./-components/QuickAddStartupDialog";
 import { BulkUploadStartupsDialog } from "./-components/BulkUploadStartupsDialog";
+import { StageNav } from "@/components/investor/StageNav";
 
 export const Route = createFileRoute("/_protected/admin/")({
   component: AdminDashboard,
@@ -297,10 +298,11 @@ function AdminDashboard() {
   ];
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
+      <StageNav surface="admin" />
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Admin Dashboard</h1>
+          <h1 className="text-2xl font-bold">Due Diligence</h1>
           <p className="text-muted-foreground">Review and manage startup submissions</p>
         </div>
         <div className="flex items-center gap-2">

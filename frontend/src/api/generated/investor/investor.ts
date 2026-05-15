@@ -2219,7 +2219,157 @@ export function useInvestorControllerGetScreeningQueue<TData = Awaited<ReturnTyp
 
 
 
-export type investorControllerGetScreeningCalibrationResponse200 = {
+export type investorControllerAdvanceFromScreeningResponse201 = {
+  data: void
+  status: 201
+}
+    
+export type investorControllerAdvanceFromScreeningResponseSuccess = (investorControllerAdvanceFromScreeningResponse201) & {
+  headers: Headers;
+};
+;
+
+export type investorControllerAdvanceFromScreeningResponse = (investorControllerAdvanceFromScreeningResponseSuccess)
+
+export const getInvestorControllerAdvanceFromScreeningUrl = (startupId: string,) => {
+
+
+  
+
+  return `/investor/screening/${startupId}/advance`
+}
+
+export const investorControllerAdvanceFromScreening = async (startupId: string, options?: RequestInit): Promise<investorControllerAdvanceFromScreeningResponse> => {
+  
+  return customFetch<investorControllerAdvanceFromScreeningResponse>(getInvestorControllerAdvanceFromScreeningUrl(startupId),
+  {      
+    ...options,
+    method: 'POST'
+    
+    
+  }
+);}
+
+
+
+
+export const getInvestorControllerAdvanceFromScreeningMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof investorControllerAdvanceFromScreening>>, TError,{startupId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof investorControllerAdvanceFromScreening>>, TError,{startupId: string}, TContext> => {
+
+const mutationKey = ['investorControllerAdvanceFromScreening'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof investorControllerAdvanceFromScreening>>, {startupId: string}> = (props) => {
+          const {startupId} = props ?? {};
+
+          return  investorControllerAdvanceFromScreening(startupId,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type InvestorControllerAdvanceFromScreeningMutationResult = NonNullable<Awaited<ReturnType<typeof investorControllerAdvanceFromScreening>>>
+    
+    export type InvestorControllerAdvanceFromScreeningMutationError = ErrorType<unknown>
+
+    export const useInvestorControllerAdvanceFromScreening = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof investorControllerAdvanceFromScreening>>, TError,{startupId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof investorControllerAdvanceFromScreening>>,
+        TError,
+        {startupId: string},
+        TContext
+      > => {
+      return useMutation(getInvestorControllerAdvanceFromScreeningMutationOptions(options), queryClient);
+    }
+    export type investorControllerPassFromScreeningResponse201 = {
+  data: void
+  status: 201
+}
+    
+export type investorControllerPassFromScreeningResponseSuccess = (investorControllerPassFromScreeningResponse201) & {
+  headers: Headers;
+};
+;
+
+export type investorControllerPassFromScreeningResponse = (investorControllerPassFromScreeningResponseSuccess)
+
+export const getInvestorControllerPassFromScreeningUrl = (startupId: string,) => {
+
+
+  
+
+  return `/investor/screening/${startupId}/pass`
+}
+
+export const investorControllerPassFromScreening = async (startupId: string, options?: RequestInit): Promise<investorControllerPassFromScreeningResponse> => {
+  
+  return customFetch<investorControllerPassFromScreeningResponse>(getInvestorControllerPassFromScreeningUrl(startupId),
+  {      
+    ...options,
+    method: 'POST'
+    
+    
+  }
+);}
+
+
+
+
+export const getInvestorControllerPassFromScreeningMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof investorControllerPassFromScreening>>, TError,{startupId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof investorControllerPassFromScreening>>, TError,{startupId: string}, TContext> => {
+
+const mutationKey = ['investorControllerPassFromScreening'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof investorControllerPassFromScreening>>, {startupId: string}> = (props) => {
+          const {startupId} = props ?? {};
+
+          return  investorControllerPassFromScreening(startupId,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type InvestorControllerPassFromScreeningMutationResult = NonNullable<Awaited<ReturnType<typeof investorControllerPassFromScreening>>>
+    
+    export type InvestorControllerPassFromScreeningMutationError = ErrorType<unknown>
+
+    export const useInvestorControllerPassFromScreening = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof investorControllerPassFromScreening>>, TError,{startupId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof investorControllerPassFromScreening>>,
+        TError,
+        {startupId: string},
+        TContext
+      > => {
+      return useMutation(getInvestorControllerPassFromScreeningMutationOptions(options), queryClient);
+    }
+    export type investorControllerGetScreeningCalibrationResponse200 = {
   data: void
   status: 200
 }

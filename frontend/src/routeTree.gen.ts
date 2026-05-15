@@ -49,13 +49,16 @@ import { Route as ProtectedFounderMeetingsRouteImport } from './routes/_protecte
 import { Route as ProtectedFounderInvestorInterestRouteImport } from './routes/_protected/founder/investor-interest'
 import { Route as ProtectedFounderDataRoomRouteImport } from './routes/_protected/founder/data-room'
 import { Route as ProtectedAdminUsersRouteImport } from './routes/_protected/admin/users'
+import { Route as ProtectedAdminScreeningRouteImport } from './routes/_protected/admin/screening'
 import { Route as ProtectedAdminScoutsRouteImport } from './routes/_protected/admin/scouts'
 import { Route as ProtectedAdminScoringRouteImport } from './routes/_protected/admin/scoring'
+import { Route as ProtectedAdminPortfolioRouteImport } from './routes/_protected/admin/portfolio'
 import { Route as ProtectedAdminMatchingLogsRouteImport } from './routes/_protected/admin/matching-logs'
 import { Route as ProtectedAdminInvestorsRouteImport } from './routes/_protected/admin/investors'
 import { Route as ProtectedAdminIntegrationsRouteImport } from './routes/_protected/admin/integrations'
 import { Route as ProtectedAdminDataRoomRouteImport } from './routes/_protected/admin/data-room'
 import { Route as ProtectedAdminConversationsRouteImport } from './routes/_protected/admin/conversations'
+import { Route as ProtectedAdminContractingRouteImport } from './routes/_protected/admin/contracting'
 import { Route as ProtectedAdminAnalyticsRouteImport } from './routes/_protected/admin/analytics'
 import { Route as ProtectedAdminAgentsRouteImport } from './routes/_protected/admin/agents'
 import { Route as ProtectedScoutStartupIdRouteImport } from './routes/_protected/scout/startup.$id'
@@ -63,6 +66,7 @@ import { Route as ProtectedInvestorStartupIdRouteImport } from './routes/_protec
 import { Route as ProtectedInvestorOnboardingWebsiteRouteImport } from './routes/_protected/investor/onboarding.website'
 import { Route as ProtectedFounderStartupIdRouteImport } from './routes/_protected/founder/startup.$id'
 import { Route as ProtectedAdminStartupIdRouteImport } from './routes/_protected/admin/startup.$id'
+import { Route as ProtectedAdminScreeningIdRouteImport } from './routes/_protected/admin/screening_.$id'
 
 const WaitlistRoute = WaitlistRouteImport.update({
   id: '/waitlist',
@@ -274,6 +278,11 @@ const ProtectedAdminUsersRoute = ProtectedAdminUsersRouteImport.update({
   path: '/users',
   getParentRoute: () => ProtectedAdminRoute,
 } as any)
+const ProtectedAdminScreeningRoute = ProtectedAdminScreeningRouteImport.update({
+  id: '/screening',
+  path: '/screening',
+  getParentRoute: () => ProtectedAdminRoute,
+} as any)
 const ProtectedAdminScoutsRoute = ProtectedAdminScoutsRouteImport.update({
   id: '/scouts',
   path: '/scouts',
@@ -282,6 +291,11 @@ const ProtectedAdminScoutsRoute = ProtectedAdminScoutsRouteImport.update({
 const ProtectedAdminScoringRoute = ProtectedAdminScoringRouteImport.update({
   id: '/scoring',
   path: '/scoring',
+  getParentRoute: () => ProtectedAdminRoute,
+} as any)
+const ProtectedAdminPortfolioRoute = ProtectedAdminPortfolioRouteImport.update({
+  id: '/portfolio',
+  path: '/portfolio',
   getParentRoute: () => ProtectedAdminRoute,
 } as any)
 const ProtectedAdminMatchingLogsRoute =
@@ -310,6 +324,12 @@ const ProtectedAdminConversationsRoute =
   ProtectedAdminConversationsRouteImport.update({
     id: '/conversations',
     path: '/conversations',
+    getParentRoute: () => ProtectedAdminRoute,
+  } as any)
+const ProtectedAdminContractingRoute =
+  ProtectedAdminContractingRouteImport.update({
+    id: '/contracting',
+    path: '/contracting',
     getParentRoute: () => ProtectedAdminRoute,
   } as any)
 const ProtectedAdminAnalyticsRoute = ProtectedAdminAnalyticsRouteImport.update({
@@ -350,6 +370,12 @@ const ProtectedAdminStartupIdRoute = ProtectedAdminStartupIdRouteImport.update({
   path: '/startup/$id',
   getParentRoute: () => ProtectedAdminRoute,
 } as any)
+const ProtectedAdminScreeningIdRoute =
+  ProtectedAdminScreeningIdRouteImport.update({
+    id: '/screening_/$id',
+    path: '/screening/$id',
+    getParentRoute: () => ProtectedAdminRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -366,13 +392,16 @@ export interface FileRoutesByFullPath {
   '/auth/magic-link': typeof AuthMagicLinkRoute
   '/admin/agents': typeof ProtectedAdminAgentsRoute
   '/admin/analytics': typeof ProtectedAdminAnalyticsRoute
+  '/admin/contracting': typeof ProtectedAdminContractingRoute
   '/admin/conversations': typeof ProtectedAdminConversationsRoute
   '/admin/data-room': typeof ProtectedAdminDataRoomRoute
   '/admin/integrations': typeof ProtectedAdminIntegrationsRoute
   '/admin/investors': typeof ProtectedAdminInvestorsRoute
   '/admin/matching-logs': typeof ProtectedAdminMatchingLogsRoute
+  '/admin/portfolio': typeof ProtectedAdminPortfolioRoute
   '/admin/scoring': typeof ProtectedAdminScoringRoute
   '/admin/scouts': typeof ProtectedAdminScoutsRoute
+  '/admin/screening': typeof ProtectedAdminScreeningRoute
   '/admin/users': typeof ProtectedAdminUsersRoute
   '/founder/data-room': typeof ProtectedFounderDataRoomRoute
   '/founder/investor-interest': typeof ProtectedFounderInvestorInterestRoute
@@ -400,6 +429,7 @@ export interface FileRoutesByFullPath {
   '/founder/': typeof ProtectedFounderIndexRoute
   '/investor/': typeof ProtectedInvestorIndexRoute
   '/scout/': typeof ProtectedScoutIndexRoute
+  '/admin/screening/$id': typeof ProtectedAdminScreeningIdRoute
   '/admin/startup/$id': typeof ProtectedAdminStartupIdRoute
   '/founder/startup/$id': typeof ProtectedFounderStartupIdRoute
   '/investor/onboarding/website': typeof ProtectedInvestorOnboardingWebsiteRoute
@@ -417,13 +447,16 @@ export interface FileRoutesByTo {
   '/auth/magic-link': typeof AuthMagicLinkRoute
   '/admin/agents': typeof ProtectedAdminAgentsRoute
   '/admin/analytics': typeof ProtectedAdminAnalyticsRoute
+  '/admin/contracting': typeof ProtectedAdminContractingRoute
   '/admin/conversations': typeof ProtectedAdminConversationsRoute
   '/admin/data-room': typeof ProtectedAdminDataRoomRoute
   '/admin/integrations': typeof ProtectedAdminIntegrationsRoute
   '/admin/investors': typeof ProtectedAdminInvestorsRoute
   '/admin/matching-logs': typeof ProtectedAdminMatchingLogsRoute
+  '/admin/portfolio': typeof ProtectedAdminPortfolioRoute
   '/admin/scoring': typeof ProtectedAdminScoringRoute
   '/admin/scouts': typeof ProtectedAdminScoutsRoute
+  '/admin/screening': typeof ProtectedAdminScreeningRoute
   '/admin/users': typeof ProtectedAdminUsersRoute
   '/founder/data-room': typeof ProtectedFounderDataRoomRoute
   '/founder/investor-interest': typeof ProtectedFounderInvestorInterestRoute
@@ -451,6 +484,7 @@ export interface FileRoutesByTo {
   '/founder': typeof ProtectedFounderIndexRoute
   '/investor': typeof ProtectedInvestorIndexRoute
   '/scout': typeof ProtectedScoutIndexRoute
+  '/admin/screening/$id': typeof ProtectedAdminScreeningIdRoute
   '/admin/startup/$id': typeof ProtectedAdminStartupIdRoute
   '/founder/startup/$id': typeof ProtectedFounderStartupIdRoute
   '/investor/onboarding/website': typeof ProtectedInvestorOnboardingWebsiteRoute
@@ -474,13 +508,16 @@ export interface FileRoutesById {
   '/auth/magic-link': typeof AuthMagicLinkRoute
   '/_protected/admin/agents': typeof ProtectedAdminAgentsRoute
   '/_protected/admin/analytics': typeof ProtectedAdminAnalyticsRoute
+  '/_protected/admin/contracting': typeof ProtectedAdminContractingRoute
   '/_protected/admin/conversations': typeof ProtectedAdminConversationsRoute
   '/_protected/admin/data-room': typeof ProtectedAdminDataRoomRoute
   '/_protected/admin/integrations': typeof ProtectedAdminIntegrationsRoute
   '/_protected/admin/investors': typeof ProtectedAdminInvestorsRoute
   '/_protected/admin/matching-logs': typeof ProtectedAdminMatchingLogsRoute
+  '/_protected/admin/portfolio': typeof ProtectedAdminPortfolioRoute
   '/_protected/admin/scoring': typeof ProtectedAdminScoringRoute
   '/_protected/admin/scouts': typeof ProtectedAdminScoutsRoute
+  '/_protected/admin/screening': typeof ProtectedAdminScreeningRoute
   '/_protected/admin/users': typeof ProtectedAdminUsersRoute
   '/_protected/founder/data-room': typeof ProtectedFounderDataRoomRoute
   '/_protected/founder/investor-interest': typeof ProtectedFounderInvestorInterestRoute
@@ -508,6 +545,7 @@ export interface FileRoutesById {
   '/_protected/founder/': typeof ProtectedFounderIndexRoute
   '/_protected/investor/': typeof ProtectedInvestorIndexRoute
   '/_protected/scout/': typeof ProtectedScoutIndexRoute
+  '/_protected/admin/screening_/$id': typeof ProtectedAdminScreeningIdRoute
   '/_protected/admin/startup/$id': typeof ProtectedAdminStartupIdRoute
   '/_protected/founder/startup/$id': typeof ProtectedFounderStartupIdRoute
   '/_protected/investor/onboarding/website': typeof ProtectedInvestorOnboardingWebsiteRoute
@@ -531,13 +569,16 @@ export interface FileRouteTypes {
     | '/auth/magic-link'
     | '/admin/agents'
     | '/admin/analytics'
+    | '/admin/contracting'
     | '/admin/conversations'
     | '/admin/data-room'
     | '/admin/integrations'
     | '/admin/investors'
     | '/admin/matching-logs'
+    | '/admin/portfolio'
     | '/admin/scoring'
     | '/admin/scouts'
+    | '/admin/screening'
     | '/admin/users'
     | '/founder/data-room'
     | '/founder/investor-interest'
@@ -565,6 +606,7 @@ export interface FileRouteTypes {
     | '/founder/'
     | '/investor/'
     | '/scout/'
+    | '/admin/screening/$id'
     | '/admin/startup/$id'
     | '/founder/startup/$id'
     | '/investor/onboarding/website'
@@ -582,13 +624,16 @@ export interface FileRouteTypes {
     | '/auth/magic-link'
     | '/admin/agents'
     | '/admin/analytics'
+    | '/admin/contracting'
     | '/admin/conversations'
     | '/admin/data-room'
     | '/admin/integrations'
     | '/admin/investors'
     | '/admin/matching-logs'
+    | '/admin/portfolio'
     | '/admin/scoring'
     | '/admin/scouts'
+    | '/admin/screening'
     | '/admin/users'
     | '/founder/data-room'
     | '/founder/investor-interest'
@@ -616,6 +661,7 @@ export interface FileRouteTypes {
     | '/founder'
     | '/investor'
     | '/scout'
+    | '/admin/screening/$id'
     | '/admin/startup/$id'
     | '/founder/startup/$id'
     | '/investor/onboarding/website'
@@ -638,13 +684,16 @@ export interface FileRouteTypes {
     | '/auth/magic-link'
     | '/_protected/admin/agents'
     | '/_protected/admin/analytics'
+    | '/_protected/admin/contracting'
     | '/_protected/admin/conversations'
     | '/_protected/admin/data-room'
     | '/_protected/admin/integrations'
     | '/_protected/admin/investors'
     | '/_protected/admin/matching-logs'
+    | '/_protected/admin/portfolio'
     | '/_protected/admin/scoring'
     | '/_protected/admin/scouts'
+    | '/_protected/admin/screening'
     | '/_protected/admin/users'
     | '/_protected/founder/data-room'
     | '/_protected/founder/investor-interest'
@@ -672,6 +721,7 @@ export interface FileRouteTypes {
     | '/_protected/founder/'
     | '/_protected/investor/'
     | '/_protected/scout/'
+    | '/_protected/admin/screening_/$id'
     | '/_protected/admin/startup/$id'
     | '/_protected/founder/startup/$id'
     | '/_protected/investor/onboarding/website'
@@ -974,6 +1024,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedAdminUsersRouteImport
       parentRoute: typeof ProtectedAdminRoute
     }
+    '/_protected/admin/screening': {
+      id: '/_protected/admin/screening'
+      path: '/screening'
+      fullPath: '/admin/screening'
+      preLoaderRoute: typeof ProtectedAdminScreeningRouteImport
+      parentRoute: typeof ProtectedAdminRoute
+    }
     '/_protected/admin/scouts': {
       id: '/_protected/admin/scouts'
       path: '/scouts'
@@ -986,6 +1043,13 @@ declare module '@tanstack/react-router' {
       path: '/scoring'
       fullPath: '/admin/scoring'
       preLoaderRoute: typeof ProtectedAdminScoringRouteImport
+      parentRoute: typeof ProtectedAdminRoute
+    }
+    '/_protected/admin/portfolio': {
+      id: '/_protected/admin/portfolio'
+      path: '/portfolio'
+      fullPath: '/admin/portfolio'
+      preLoaderRoute: typeof ProtectedAdminPortfolioRouteImport
       parentRoute: typeof ProtectedAdminRoute
     }
     '/_protected/admin/matching-logs': {
@@ -1021,6 +1085,13 @@ declare module '@tanstack/react-router' {
       path: '/conversations'
       fullPath: '/admin/conversations'
       preLoaderRoute: typeof ProtectedAdminConversationsRouteImport
+      parentRoute: typeof ProtectedAdminRoute
+    }
+    '/_protected/admin/contracting': {
+      id: '/_protected/admin/contracting'
+      path: '/contracting'
+      fullPath: '/admin/contracting'
+      preLoaderRoute: typeof ProtectedAdminContractingRouteImport
       parentRoute: typeof ProtectedAdminRoute
     }
     '/_protected/admin/analytics': {
@@ -1072,36 +1143,51 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedAdminStartupIdRouteImport
       parentRoute: typeof ProtectedAdminRoute
     }
+    '/_protected/admin/screening_/$id': {
+      id: '/_protected/admin/screening_/$id'
+      path: '/screening/$id'
+      fullPath: '/admin/screening/$id'
+      preLoaderRoute: typeof ProtectedAdminScreeningIdRouteImport
+      parentRoute: typeof ProtectedAdminRoute
+    }
   }
 }
 
 interface ProtectedAdminRouteChildren {
   ProtectedAdminAgentsRoute: typeof ProtectedAdminAgentsRoute
   ProtectedAdminAnalyticsRoute: typeof ProtectedAdminAnalyticsRoute
+  ProtectedAdminContractingRoute: typeof ProtectedAdminContractingRoute
   ProtectedAdminConversationsRoute: typeof ProtectedAdminConversationsRoute
   ProtectedAdminDataRoomRoute: typeof ProtectedAdminDataRoomRoute
   ProtectedAdminIntegrationsRoute: typeof ProtectedAdminIntegrationsRoute
   ProtectedAdminInvestorsRoute: typeof ProtectedAdminInvestorsRoute
   ProtectedAdminMatchingLogsRoute: typeof ProtectedAdminMatchingLogsRoute
+  ProtectedAdminPortfolioRoute: typeof ProtectedAdminPortfolioRoute
   ProtectedAdminScoringRoute: typeof ProtectedAdminScoringRoute
   ProtectedAdminScoutsRoute: typeof ProtectedAdminScoutsRoute
+  ProtectedAdminScreeningRoute: typeof ProtectedAdminScreeningRoute
   ProtectedAdminUsersRoute: typeof ProtectedAdminUsersRoute
   ProtectedAdminIndexRoute: typeof ProtectedAdminIndexRoute
+  ProtectedAdminScreeningIdRoute: typeof ProtectedAdminScreeningIdRoute
   ProtectedAdminStartupIdRoute: typeof ProtectedAdminStartupIdRoute
 }
 
 const ProtectedAdminRouteChildren: ProtectedAdminRouteChildren = {
   ProtectedAdminAgentsRoute: ProtectedAdminAgentsRoute,
   ProtectedAdminAnalyticsRoute: ProtectedAdminAnalyticsRoute,
+  ProtectedAdminContractingRoute: ProtectedAdminContractingRoute,
   ProtectedAdminConversationsRoute: ProtectedAdminConversationsRoute,
   ProtectedAdminDataRoomRoute: ProtectedAdminDataRoomRoute,
   ProtectedAdminIntegrationsRoute: ProtectedAdminIntegrationsRoute,
   ProtectedAdminInvestorsRoute: ProtectedAdminInvestorsRoute,
   ProtectedAdminMatchingLogsRoute: ProtectedAdminMatchingLogsRoute,
+  ProtectedAdminPortfolioRoute: ProtectedAdminPortfolioRoute,
   ProtectedAdminScoringRoute: ProtectedAdminScoringRoute,
   ProtectedAdminScoutsRoute: ProtectedAdminScoutsRoute,
+  ProtectedAdminScreeningRoute: ProtectedAdminScreeningRoute,
   ProtectedAdminUsersRoute: ProtectedAdminUsersRoute,
   ProtectedAdminIndexRoute: ProtectedAdminIndexRoute,
+  ProtectedAdminScreeningIdRoute: ProtectedAdminScreeningIdRoute,
   ProtectedAdminStartupIdRoute: ProtectedAdminStartupIdRoute,
 }
 

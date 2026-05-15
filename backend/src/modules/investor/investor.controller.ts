@@ -32,8 +32,11 @@ import { CalibrationService } from './calibration.service';
 import { ScreeningQueueService } from './screening-queue.service';
 import { ScreeningCalibrationService } from './screening-calibration.service';
 import { ScreeningProcessor } from '../ai/processors/screening.processor';
+import { PipelineService } from '../ai/services/pipeline.service';
 import { pipelineRun } from '../ai/entities/pipeline.schema';
-import { PipelineStatus } from '../ai/interfaces/pipeline.interface';
+import { screeningDecision } from '../ai/entities/screening-decision.schema';
+import { PipelinePhase, PipelineStatus } from '../ai/interfaces/pipeline.interface';
+import { desc, eq } from 'drizzle-orm';
 import { DrizzleService } from '../../database';
 import { randomBytes } from 'node:crypto';
 import { ForbiddenException } from '@nestjs/common';
@@ -85,6 +88,7 @@ export class InvestorController {
     private screeningQueueService: ScreeningQueueService,
     private screeningCalibrationService: ScreeningCalibrationService,
     private screeningProcessor: ScreeningProcessor,
+    private pipelineCoreService: PipelineService,
     private drizzle: DrizzleService,
   ) {}
 
@@ -280,6 +284,109 @@ export class InvestorController {
   }
 
   /**
+   * Advance a screening REVIEW deal into Due Diligence.
+   *
+   * Server flow:
+   *  1. Override the latest screening_decision row to classification='advance'
+   *     so the gate (applyScreeningGate) sees the new verdict.
+   *  2. Record the investor's decision (verdict='advance') on the deal
+   *     decision log — same surface the rest of the app uses for audit.
+   *  3. Re-run the pipeline starting from the EVALUATION phase. The earlier
+   *     phases (extraction / enrichment / scraping / research / screening)
+   *     stay on the cached results, so we don't redo cheap work — this is
+   *     the explicit reuse path the plan calls for.
+   */
+  @Post('screening/:startupId/advance')
+  async advanceFromScreening(
+    @Param('startupId', ParseUUIDPipe) startupId: string,
+    @CurrentUser() user: User,
+  ) {
+    // 1. Override latest screening verdict.
+    const [latest] = await this.drizzle.db
+      .select({ id: screeningDecision.id })
+      .from(screeningDecision)
+      .where(eq(screeningDecision.startupId, startupId))
+      .orderBy(desc(screeningDecision.createdAt))
+      .limit(1);
+    if (!latest) {
+      throw new NotFoundException(
+        `No screening_decision exists for startup ${startupId}; run screening first.`,
+      );
+    }
+    await this.drizzle.db
+      .update(screeningDecision)
+      .set({ classification: 'advance' })
+      .where(eq(screeningDecision.id, latest.id));
+
+    // 2. Audit the partner's call.
+    await this.dealDecisionService.record(user.id, startupId, {
+      verdict: 'advance',
+      reasonTags: ['screening_review_overridden'],
+      notes: undefined,
+    });
+
+    // 3. Re-run from EVALUATION. rerunFromPhase preserves all upstream phase
+    //    outputs — exactly the reuse semantics §10/PR4 specifies.
+    try {
+      await this.pipelineCoreService.rerunFromPhase(
+        startupId,
+        PipelinePhase.EVALUATION,
+      );
+    } catch (err) {
+      // Surface a clearer error if no live pipeline state exists (e.g. an
+      // old deal whose screening ran via the dev rescreen path). Caller can
+      // fall back to a fresh startPipeline if they want.
+      const message = err instanceof Error ? err.message : String(err);
+      throw new NotFoundException(
+        `Could not start DD from screening — ${message}. Try restarting the full pipeline.`,
+      );
+    }
+
+    return {
+      ok: true,
+      startupId,
+      verdict: 'advance' as const,
+      note: 'Evaluation + synthesis queued; deal will move to DD when complete.',
+    };
+  }
+
+  /**
+   * Pass on a screening REVIEW deal. No DD pipeline trigger — just records
+   * the decision and overrides the verdict to 'reject' so the deal drops
+   * into the rejected archive.
+   */
+  @Post('screening/:startupId/pass')
+  async passFromScreening(
+    @Param('startupId', ParseUUIDPipe) startupId: string,
+    @CurrentUser() user: User,
+    @Body() body?: { reasonTags?: string[]; notes?: string | null },
+  ) {
+    const [latest] = await this.drizzle.db
+      .select({ id: screeningDecision.id })
+      .from(screeningDecision)
+      .where(eq(screeningDecision.startupId, startupId))
+      .orderBy(desc(screeningDecision.createdAt))
+      .limit(1);
+    if (!latest) {
+      throw new NotFoundException(
+        `No screening_decision exists for startup ${startupId}`,
+      );
+    }
+    await this.drizzle.db
+      .update(screeningDecision)
+      .set({ classification: 'reject' })
+      .where(eq(screeningDecision.id, latest.id));
+
+    await this.dealDecisionService.record(user.id, startupId, {
+      verdict: 'pass',
+      reasonTags: body?.reasonTags ?? ['screening_review_pass'],
+      notes: body?.notes ?? undefined,
+    });
+
+    return { ok: true, startupId, verdict: 'reject' as const };
+  }
+
+  /**
    * Screening-side calibration proposals (PR9). Distinct from
    * `/investor/calibration/proposals` which is the DD-side ("worth my
    * money?") loop. This surface answers "worth my time?" — based on
@@ -329,6 +436,7 @@ export class InvestorController {
     const result = await this.screeningProcessor.runScreening(
       startupId,
       pipelineRunId,
+      { userId: _user.id },
     );
     return {
       ok: true,

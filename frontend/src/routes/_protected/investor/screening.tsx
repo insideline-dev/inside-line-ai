@@ -1,34 +1,41 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { ChevronDown, ChevronRight, Inbox } from "lucide-react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { StageNav } from "@/components/investor/StageNav";
 import { FitChips } from "@/components/investor/FitChips";
+import {
+  ScreeningDetailModal,
+  type LensScore,
+  type ScreeningDetail,
+  type ScreeningVerdict,
+} from "@/components/investor/ScreeningDetailModal";
 import type { ThesisFitOutput } from "@/types/thesis-fit";
 
 export const Route = createFileRoute("/_protected/investor/screening")({
   component: ScreeningPage,
 });
 
-type ScreeningVerdict = "review" | "advance" | "reject";
-
 interface ScreeningRow {
   id: string;
   companyName: string;
+  industry?: string | null;
   verdict: ScreeningVerdict;
   fit: ThesisFitOutput | null;
+  lensScores: LensScore[];
+  missingMaterials: string[];
+  triageRationale: string;
   submittedAt: string;
-  industry?: string | null;
   dealbreakerNote?: string | null;
 }
 
 // PLACEHOLDER seed rows so the page renders end-to-end before PR4 wires
-// the real screening pipeline to a real endpoint. Rows demonstrate each
-// verdict + fit-axis combination including the California/US regression
-// case (Acme — geography MATCH despite being labelled California).
+// the real screening pipeline to a real endpoint. Includes the
+// California/US regression case (Acme — geography MATCH despite being
+// labelled California) to validate the thesis-fit shape end-to-end.
 const SEED_ROWS: ScreeningRow[] = [
   {
     id: "seed-1",
@@ -45,6 +52,14 @@ const SEED_ROWS: ScreeningRow[] = [
       rationale:
         "Sector and geography are strong; check size is the blocker.",
     },
+    lensScores: [
+      { key: "market", label: "Market", score: 78, note: "Strong TAM signal" },
+      { key: "team", label: "Team", score: 65, note: "Ex-Stripe founders, no domain expertise" },
+      { key: "traction", label: "Traction", score: 41, note: "Pre-revenue, design partners only" },
+    ],
+    missingMaterials: ["Cap table", "Prior round details"],
+    triageRationale:
+      "Mixed signals — fit hits 3/4 axes but check-size exceeds policy. Worth a 5-minute review.",
   },
   {
     id: "seed-2",
@@ -60,6 +75,14 @@ const SEED_ROWS: ScreeningRow[] = [
       overall: 88,
       rationale: "Clean fit across all four axes.",
     },
+    lensScores: [
+      { key: "market", label: "Market", score: 82 },
+      { key: "team", label: "Team", score: 84 },
+      { key: "traction", label: "Traction", score: 79 },
+    ],
+    missingMaterials: [],
+    triageRationale:
+      "Clean across the board — no flags. Advanced automatically to DD.",
   },
   {
     id: "seed-3",
@@ -75,6 +98,14 @@ const SEED_ROWS: ScreeningRow[] = [
       overall: 74,
       rationale: "Sector is the open question.",
     },
+    lensScores: [
+      { key: "market", label: "Market", score: 70 },
+      { key: "team", label: "Team", score: 72, note: "Strong climate operator" },
+      { key: "traction", label: "Traction", score: 55, note: "Two pilot LOIs" },
+    ],
+    missingMaterials: ["Pilot contracts"],
+    triageRationale:
+      "Borderline on sector — adjacent but not core. Investor judgement needed.",
   },
   {
     id: "seed-4",
@@ -91,6 +122,13 @@ const SEED_ROWS: ScreeningRow[] = [
       overall: 18,
       rationale: "Dealbreaker on sector.",
     },
+    lensScores: [
+      { key: "market", label: "Market", score: 40 },
+      { key: "team", label: "Team", score: 55 },
+      { key: "traction", label: "Traction", score: 30 },
+    ],
+    missingMaterials: [],
+    triageRationale: "Auto-rejected — dealbreaker on sector.",
   },
   {
     id: "seed-5",
@@ -107,6 +145,13 @@ const SEED_ROWS: ScreeningRow[] = [
       overall: 22,
       rationale: "Too early.",
     },
+    lensScores: [
+      { key: "market", label: "Market", score: 50 },
+      { key: "team", label: "Team", score: 60 },
+      { key: "traction", label: "Traction", score: 15 },
+    ],
+    missingMaterials: ["Product demo"],
+    triageRationale: "Auto-rejected — pre-product, below stage floor.",
   },
 ];
 
@@ -123,57 +168,65 @@ function VerdictBadge({ verdict }: { verdict: ScreeningVerdict }) {
   );
 }
 
-function ScreeningRowCard({ row }: { row: ScreeningRow }) {
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-background px-4 py-3 hover:bg-muted/40">
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <div className="flex items-center gap-2">
-          <span className="font-medium">{row.companyName}</span>
-          <VerdictBadge verdict={row.verdict} />
-          {row.industry && (
-            <span className="text-xs text-muted-foreground">{row.industry}</span>
-          )}
-        </div>
-        <FitChips fit={row.fit} />
-        {row.dealbreakerNote && (
-          <span className="text-xs text-red-700">{row.dealbreakerNote}</span>
-        )}
-      </div>
-      <div className="flex items-center gap-3">
-        <span className="text-xs text-muted-foreground">
-          {formatDistanceToNow(new Date(row.submittedAt), { addSuffix: true })}
-        </span>
-        {row.verdict === "review" && (
-          <div className="flex gap-2">
-            <Button size="sm" variant="outline" disabled>
-              Pass
-            </Button>
-            <Button size="sm" disabled>
-              Advance
-            </Button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 function ScreeningPage() {
+  const [rows, setRows] = useState<ScreeningRow[]>(SEED_ROWS);
+  const [openId, setOpenId] = useState<string | null>(null);
   const [showRejected, setShowRejected] = useState(false);
 
-  const { activeRows, rejectedRows, counts } = useMemo(() => {
-    const active = SEED_ROWS.filter((r) => r.verdict !== "reject");
-    const rejected = SEED_ROWS.filter((r) => r.verdict === "reject");
-    return {
-      activeRows: active,
-      rejectedRows: rejected,
-      counts: { screening: active.length },
-    };
+  const { activeRows, rejectedRows, advancedRowIds } = useMemo(() => {
+    const active = rows.filter((r) => r.verdict !== "reject");
+    const rejected = rows.filter((r) => r.verdict === "reject");
+    const advanced = new Set(
+      rows.filter((r) => r.verdict === "advance").map((r) => r.id),
+    );
+    return { activeRows: active, rejectedRows: rejected, advancedRowIds: advanced };
+  }, [rows]);
+
+  const openRow = useCallback((id: string) => setOpenId(id), []);
+  const closeModal = useCallback(() => setOpenId(null), []);
+
+  const handlePass = useCallback(
+    (id: string) => {
+      setRows((prev) =>
+        prev.map((r) =>
+          r.id === id ? { ...r, verdict: "reject", dealbreakerNote: "Passed by investor" } : r,
+        ),
+      );
+      setOpenId(null);
+      toast.success("Marked as passed — moved to rejected archive.");
+    },
+    [],
+  );
+
+  const handleAdvance = useCallback((id: string) => {
+    setRows((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, verdict: "advance" } : r)),
+    );
+    setOpenId(null);
+    toast.success(
+      "Advanced to Due Diligence. (Backend wiring lands in a later PR.)",
+    );
   }, []);
+
+  const openDetail = useMemo<ScreeningDetail | null>(() => {
+    if (!openId) return null;
+    const row = rows.find((r) => r.id === openId);
+    if (!row) return null;
+    return {
+      id: row.id,
+      companyName: row.companyName,
+      industry: row.industry,
+      verdict: row.verdict,
+      fit: row.fit,
+      lensScores: row.lensScores,
+      missingMaterials: row.missingMaterials,
+      triageRationale: row.triageRationale,
+    };
+  }, [openId, rows]);
 
   return (
     <div className="flex flex-col gap-4 p-6">
-      <StageNav counts={counts} />
+      <StageNav counts={{ screening: activeRows.length }} />
 
       <div className="flex items-baseline justify-between">
         <h1 className="text-2xl font-semibold">Deal Screening</h1>
@@ -191,7 +244,12 @@ function ScreeningPage() {
             </div>
           ) : (
             activeRows.map((row) => (
-              <ScreeningRowCard key={row.id} row={row} />
+              <ScreeningRowCard
+                key={row.id}
+                row={row}
+                advanced={advancedRowIds.has(row.id)}
+                onOpen={openRow}
+              />
             ))
           )}
         </CardContent>
@@ -216,7 +274,12 @@ function ScreeningPage() {
             <Card>
               <CardContent className="flex flex-col gap-2 p-4">
                 {rejectedRows.map((row) => (
-                  <ScreeningRowCard key={row.id} row={row} />
+                  <ScreeningRowCard
+                    key={row.id}
+                    row={row}
+                    advanced={false}
+                    onOpen={openRow}
+                  />
                 ))}
               </CardContent>
             </Card>
@@ -225,11 +288,63 @@ function ScreeningPage() {
       )}
 
       <div className="rounded-md border border-dashed border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
-        <strong>PR6 preview:</strong> rows above are placeholder data so the
-        UI ships before the backend screening pipeline (PR4) is wired. PASS /
-        ADVANCE buttons are inert; the click-row-to-open-modal flow lands in
-        PR7.
+        <strong>PR7 preview:</strong> rows are placeholder data. Clicking a
+        row opens the detail modal with lens scores, fit, and missing
+        materials. PASS / ADVANCE buttons update local state only — the
+        backend screening pipeline (PR4) and the auto-advance to the DD
+        pipeline are not yet wired.
       </div>
+
+      <ScreeningDetailModal
+        detail={openDetail}
+        open={!!openId}
+        onOpenChange={(v) => !v && closeModal()}
+        onPass={handlePass}
+        onAdvance={handleAdvance}
+      />
     </div>
+  );
+}
+
+function ScreeningRowCard({
+  row,
+  advanced,
+  onOpen,
+}: {
+  row: ScreeningRow;
+  advanced: boolean;
+  onOpen: (id: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(row.id)}
+      className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-background px-4 py-3 text-left hover:bg-muted/40"
+      data-testid={`screening-row-${row.id}`}
+    >
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <div className="flex items-center gap-2">
+          <span className="font-medium">{row.companyName}</span>
+          <VerdictBadge verdict={row.verdict} />
+          {advanced && (
+            <span className="text-xs italic text-emerald-700">
+              (auto-advanced)
+            </span>
+          )}
+          {row.industry && (
+            <span className="text-xs text-muted-foreground">{row.industry}</span>
+          )}
+        </div>
+        <FitChips fit={row.fit} />
+        {row.dealbreakerNote && (
+          <span className="text-xs text-red-700">{row.dealbreakerNote}</span>
+        )}
+      </div>
+      <div className="flex items-center gap-3">
+        <span className="text-xs text-muted-foreground">
+          {formatDistanceToNow(new Date(row.submittedAt), { addSuffix: true })}
+        </span>
+      </div>
+    </button>
   );
 }

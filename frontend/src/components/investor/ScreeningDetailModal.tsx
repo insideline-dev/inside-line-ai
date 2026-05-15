@@ -29,7 +29,6 @@ export interface ScreeningDetail {
   verdict: ScreeningVerdict;
   fit: ThesisFitOutput | null;
   lensScores: LensScore[];
-  triageRationale: string;
 }
 
 interface ScreeningDetailModalProps {
@@ -201,14 +200,6 @@ export function ScreeningDetailModal({
             </div>
           </section>
 
-          <section className="flex flex-col gap-1.5">
-            <h3 className="text-xs font-semibold uppercase text-muted-foreground">
-              Triage rationale
-            </h3>
-            <p className="rounded-md bg-muted/40 px-3 py-2 text-sm">
-              {detail.triageRationale}
-            </p>
-          </section>
         </div>
 
         <DialogFooter className="shrink-0 border-t border-border px-6 py-4">

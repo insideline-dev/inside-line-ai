@@ -1,11 +1,11 @@
 import { formatDistanceToNow } from "date-fns";
 import { ArrowUpRight, Check, X } from "lucide-react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ScoreRing } from "@/components/analysis/ScoreRing";
 import { FitChips } from "./FitChips";
+import { StartupFavicon } from "./StartupFavicon";
 import { cn } from "@/lib/utils";
 import { formatIndustry } from "@/lib/kpi-metrics";
 import type { ThesisFitOutput } from "@/types/thesis-fit";
@@ -19,7 +19,6 @@ export interface ScreeningDealCardData {
   companyName: string;
   industry?: string | null;
   stage?: string | null;
-  faviconUrl?: string | null;
   website?: string | null;
   verdict: ScreeningVerdict;
   overallScore?: number | null;
@@ -84,18 +83,10 @@ export function ScreeningDealCard({
         {/* Header */}
         <div className="flex items-start justify-between gap-4">
           <div className="flex min-w-0 items-start gap-3">
-            <Avatar className="h-12 w-12 shrink-0 rounded-lg border bg-muted/40">
-              {data.faviconUrl ? (
-                <AvatarImage
-                  src={data.faviconUrl}
-                  alt={`${data.companyName} favicon`}
-                  className="object-contain p-2"
-                />
-              ) : null}
-              <AvatarFallback className="rounded-lg text-base font-semibold">
-                {data.companyName.charAt(0).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
+            <StartupFavicon
+              name={data.companyName}
+              website={data.website}
+            />
             <div className="min-w-0">
               <h3 className="truncate text-lg font-semibold leading-tight">
                 {data.companyName}

@@ -19,7 +19,6 @@ interface BackendScreeningRow {
   companyName: string;
   industry: string | null;
   stage: string | null;
-  faviconUrl: string | null;
   website: string | null;
   verdict: ScreeningVerdict;
   overallScore: number;
@@ -50,7 +49,6 @@ interface ScreeningRow {
   companyName: string;
   industry?: string | null;
   stage?: string | null;
-  faviconUrl?: string | null;
   website?: string | null;
   verdict: ScreeningVerdict;
   overallScore?: number;
@@ -67,7 +65,6 @@ function mapBackendRow(row: BackendScreeningRow): ScreeningRow {
     companyName: row.companyName,
     industry: row.industry,
     stage: row.stage,
-    faviconUrl: row.faviconUrl,
     website: row.website,
     verdict: row.verdict,
     overallScore: row.overallScore,
@@ -334,7 +331,6 @@ function ScreeningPage() {
                 companyName: row.companyName,
                 industry: row.industry,
                 stage: row.stage,
-                faviconUrl: row.faviconUrl,
                 website: row.website,
                 verdict: row.verdict,
                 overallScore: row.overallScore,
@@ -377,6 +373,7 @@ function ScreeningPage() {
                     companyName: row.companyName,
                     industry: row.industry,
                     stage: row.stage,
+                    website: row.website,
                     verdict: row.verdict,
                     overallScore: row.overallScore,
                     fit: row.fit,

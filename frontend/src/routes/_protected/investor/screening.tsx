@@ -346,6 +346,8 @@ function ScreeningPage() {
                 isAutoAdvanced: advancedRowIds.has(row.id),
               }}
               onOpen={openRow}
+              onPass={handlePass}
+              onAdvance={handleAdvance}
             />
           ))}
         </div>

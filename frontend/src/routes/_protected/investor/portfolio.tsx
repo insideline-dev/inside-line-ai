@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataTable } from "@/components/DataTable";
 import { customFetch } from "@/api/client";
+import { StageNav } from "@/components/investor/StageNav";
 
 export const Route = createFileRoute("/_protected/investor/portfolio")({
   component: PortfolioPage,
@@ -38,6 +39,7 @@ function PortfolioPage() {
   if (isLoading) {
     return (
       <div className="space-y-6">
+        <StageNav />
         <div>
           <h1 className="text-2xl font-bold text-balance">Portfolio Companies</h1>
           <p className="text-muted-foreground text-pretty">
@@ -67,6 +69,7 @@ function PortfolioPage() {
 
   return (
     <div className="space-y-6">
+      <StageNav counts={{ portfolio: items.length }} />
       <div>
         <h1 className="text-2xl font-bold text-balance">Portfolio Companies</h1>
         <p className="text-muted-foreground text-pretty">

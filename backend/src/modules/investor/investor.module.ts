@@ -21,6 +21,7 @@ import { CalibrationRecomputeProcessor } from './calibration-recompute.processor
 import { CalibrationProposalService } from './calibration-proposal.service';
 import { LensDeltaService } from './lens-delta.service';
 import { ScreeningQueueService } from './screening-queue.service';
+import { ScreeningCalibrationService } from './screening-calibration.service';
 import {
   InvestorController,
   InvestorTeamPublicController,
@@ -53,6 +54,7 @@ import {
     CalibrationProposalService,
     LensDeltaService,
     ScreeningQueueService,
+    ScreeningCalibrationService,
   ],
   exports: [
     ThesisService,

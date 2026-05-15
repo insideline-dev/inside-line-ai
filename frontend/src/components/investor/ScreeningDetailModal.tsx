@@ -97,9 +97,15 @@ function FitTable({ fit }: { fit: ThesisFitOutput }) {
           </div>
         );
       })}
-      <div className="flex items-center justify-between bg-muted/40 px-3 py-2 text-sm">
-        <span className="font-medium">Overall fit</span>
-        <span className="font-semibold">{fit.overall} / 100</span>
+      <div className="flex flex-col gap-0.5 bg-muted/40 px-3 py-2 text-sm">
+        <div className="flex items-center justify-between">
+          <span className="font-medium">Overall fit</span>
+          <span className="font-semibold">{fit.overall} / 100</span>
+        </div>
+        <span className="text-[10px] text-muted-foreground">
+          Early signal — assesses thesis alignment from the submitted info.
+          May revise once a deck and team data are received.
+        </span>
       </div>
     </div>
   );

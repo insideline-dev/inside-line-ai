@@ -92,6 +92,8 @@ export abstract class BaseLensAgent<TOutput extends LensOutput> {
       sector: ctx.sector,
       stage: ctx.stage,
       contextNotes: ctx.contextNotes,
+      investorThesis: ctx.investorThesis || "(no thesis on file)",
+      teamMembers: ctx.teamMembers || "(no team roster provided)",
     };
   }
 

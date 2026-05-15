@@ -37,7 +37,7 @@ import {
   pipelineRun,
   pipelineStateSnapshot,
 } from "../ai/entities";
-import { startup, StartupStatus } from "./entities/startup.schema";
+import { startup, StartupStatus, StartupStage } from "./entities/startup.schema";
 import { agentConversation } from "../agent/entities/agent.schema";
 import { investorInboxSubmission } from "../integrations/agentmail/entities/investor-inbox-submission.schema";
 import {
@@ -321,6 +321,13 @@ export class StartupService {
       const geography = deriveStartupGeography(normalized.location);
       const isInvestorSubmission = submittedByRole === UserRole.INVESTOR;
 
+      // Investor / admin loose intake may submit without a stage or round
+      // size. DB columns are notNull, so default both — least committal,
+      // gets refined in DD. fundingTarget=0 is a sentinel meaning
+      // "unknown at intake".
+      const stageForInsert = dto.stage ?? StartupStage.PRE_SEED;
+      const fundingTargetForInsert = dto.fundingTarget ?? 0;
+
       const [created] = await db
         .insert(startup)
         .values({
@@ -330,6 +337,8 @@ export class StartupService {
           isPrivate: options?.isPrivate ?? isInvestorSubmission,
           slug,
           ...dto,
+          stage: stageForInsert,
+          fundingTarget: fundingTargetForInsert,
           name: normalized.name,
           tagline: normalized.tagline,
           description: normalized.description,

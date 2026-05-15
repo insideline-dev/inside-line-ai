@@ -16,6 +16,7 @@ import {
   matchesThesisAxis,
 } from "@/components/investor/ThesisAxisFilter";
 import { CalibrationCard } from "@/components/investor/CalibrationCard";
+import { StageNav } from "@/components/investor/StageNav";
 import { useFilterStore } from "@/stores";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SearchAndFilters, defaultFilters, type FilterState, STAGES, REGIONS, SOURCE_OPTIONS } from "@/components/SearchAndFilters";
@@ -1513,6 +1514,7 @@ function InvestorDashboard() {
 
   return (
     <div className="space-y-6">
+      <StageNav />
       {showThesisWarning && (
         <div className="flex flex-col gap-3 border border-amber-300 bg-amber-50 p-4 text-amber-900 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3">

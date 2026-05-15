@@ -36,12 +36,14 @@ import { Route as ProtectedScoutCommissionsRouteImport } from './routes/_protect
 import { Route as ProtectedScoutApplyRouteImport } from './routes/_protected/scout/apply'
 import { Route as ProtectedInvestorThesisRouteImport } from './routes/_protected/investor/thesis'
 import { Route as ProtectedInvestorSubmitRouteImport } from './routes/_protected/investor/submit'
+import { Route as ProtectedInvestorScreeningRouteImport } from './routes/_protected/investor/screening'
 import { Route as ProtectedInvestorScoringRouteImport } from './routes/_protected/investor/scoring'
 import { Route as ProtectedInvestorPortfolioRouteImport } from './routes/_protected/investor/portfolio'
 import { Route as ProtectedInvestorPortalRouteImport } from './routes/_protected/investor/portal'
 import { Route as ProtectedInvestorNotesRouteImport } from './routes/_protected/investor/notes'
 import { Route as ProtectedInvestorMessagingRouteImport } from './routes/_protected/investor/messaging'
 import { Route as ProtectedInvestorDataRoomRouteImport } from './routes/_protected/investor/data-room'
+import { Route as ProtectedInvestorContractingRouteImport } from './routes/_protected/investor/contracting'
 import { Route as ProtectedFounderSubmitRouteImport } from './routes/_protected/founder/submit'
 import { Route as ProtectedFounderMeetingsRouteImport } from './routes/_protected/founder/meetings'
 import { Route as ProtectedFounderInvestorInterestRouteImport } from './routes/_protected/founder/investor-interest'
@@ -198,6 +200,12 @@ const ProtectedInvestorSubmitRoute = ProtectedInvestorSubmitRouteImport.update({
   path: '/submit',
   getParentRoute: () => ProtectedInvestorRoute,
 } as any)
+const ProtectedInvestorScreeningRoute =
+  ProtectedInvestorScreeningRouteImport.update({
+    id: '/screening',
+    path: '/screening',
+    getParentRoute: () => ProtectedInvestorRoute,
+  } as any)
 const ProtectedInvestorScoringRoute =
   ProtectedInvestorScoringRouteImport.update({
     id: '/scoring',
@@ -230,6 +238,12 @@ const ProtectedInvestorDataRoomRoute =
   ProtectedInvestorDataRoomRouteImport.update({
     id: '/data-room',
     path: '/data-room',
+    getParentRoute: () => ProtectedInvestorRoute,
+  } as any)
+const ProtectedInvestorContractingRoute =
+  ProtectedInvestorContractingRouteImport.update({
+    id: '/contracting',
+    path: '/contracting',
     getParentRoute: () => ProtectedInvestorRoute,
   } as any)
 const ProtectedFounderSubmitRoute = ProtectedFounderSubmitRouteImport.update({
@@ -364,12 +378,14 @@ export interface FileRoutesByFullPath {
   '/founder/investor-interest': typeof ProtectedFounderInvestorInterestRoute
   '/founder/meetings': typeof ProtectedFounderMeetingsRoute
   '/founder/submit': typeof ProtectedFounderSubmitRoute
+  '/investor/contracting': typeof ProtectedInvestorContractingRoute
   '/investor/data-room': typeof ProtectedInvestorDataRoomRoute
   '/investor/messaging': typeof ProtectedInvestorMessagingRoute
   '/investor/notes': typeof ProtectedInvestorNotesRoute
   '/investor/portal': typeof ProtectedInvestorPortalRoute
   '/investor/portfolio': typeof ProtectedInvestorPortfolioRoute
   '/investor/scoring': typeof ProtectedInvestorScoringRoute
+  '/investor/screening': typeof ProtectedInvestorScreeningRoute
   '/investor/submit': typeof ProtectedInvestorSubmitRoute
   '/investor/thesis': typeof ProtectedInvestorThesisRoute
   '/scout/apply': typeof ProtectedScoutApplyRoute
@@ -413,12 +429,14 @@ export interface FileRoutesByTo {
   '/founder/investor-interest': typeof ProtectedFounderInvestorInterestRoute
   '/founder/meetings': typeof ProtectedFounderMeetingsRoute
   '/founder/submit': typeof ProtectedFounderSubmitRoute
+  '/investor/contracting': typeof ProtectedInvestorContractingRoute
   '/investor/data-room': typeof ProtectedInvestorDataRoomRoute
   '/investor/messaging': typeof ProtectedInvestorMessagingRoute
   '/investor/notes': typeof ProtectedInvestorNotesRoute
   '/investor/portal': typeof ProtectedInvestorPortalRoute
   '/investor/portfolio': typeof ProtectedInvestorPortfolioRoute
   '/investor/scoring': typeof ProtectedInvestorScoringRoute
+  '/investor/screening': typeof ProtectedInvestorScreeningRoute
   '/investor/submit': typeof ProtectedInvestorSubmitRoute
   '/investor/thesis': typeof ProtectedInvestorThesisRoute
   '/scout/apply': typeof ProtectedScoutApplyRoute
@@ -468,12 +486,14 @@ export interface FileRoutesById {
   '/_protected/founder/investor-interest': typeof ProtectedFounderInvestorInterestRoute
   '/_protected/founder/meetings': typeof ProtectedFounderMeetingsRoute
   '/_protected/founder/submit': typeof ProtectedFounderSubmitRoute
+  '/_protected/investor/contracting': typeof ProtectedInvestorContractingRoute
   '/_protected/investor/data-room': typeof ProtectedInvestorDataRoomRoute
   '/_protected/investor/messaging': typeof ProtectedInvestorMessagingRoute
   '/_protected/investor/notes': typeof ProtectedInvestorNotesRoute
   '/_protected/investor/portal': typeof ProtectedInvestorPortalRoute
   '/_protected/investor/portfolio': typeof ProtectedInvestorPortfolioRoute
   '/_protected/investor/scoring': typeof ProtectedInvestorScoringRoute
+  '/_protected/investor/screening': typeof ProtectedInvestorScreeningRoute
   '/_protected/investor/submit': typeof ProtectedInvestorSubmitRoute
   '/_protected/investor/thesis': typeof ProtectedInvestorThesisRoute
   '/_protected/scout/apply': typeof ProtectedScoutApplyRoute
@@ -523,12 +543,14 @@ export interface FileRouteTypes {
     | '/founder/investor-interest'
     | '/founder/meetings'
     | '/founder/submit'
+    | '/investor/contracting'
     | '/investor/data-room'
     | '/investor/messaging'
     | '/investor/notes'
     | '/investor/portal'
     | '/investor/portfolio'
     | '/investor/scoring'
+    | '/investor/screening'
     | '/investor/submit'
     | '/investor/thesis'
     | '/scout/apply'
@@ -572,12 +594,14 @@ export interface FileRouteTypes {
     | '/founder/investor-interest'
     | '/founder/meetings'
     | '/founder/submit'
+    | '/investor/contracting'
     | '/investor/data-room'
     | '/investor/messaging'
     | '/investor/notes'
     | '/investor/portal'
     | '/investor/portfolio'
     | '/investor/scoring'
+    | '/investor/screening'
     | '/investor/submit'
     | '/investor/thesis'
     | '/scout/apply'
@@ -626,12 +650,14 @@ export interface FileRouteTypes {
     | '/_protected/founder/investor-interest'
     | '/_protected/founder/meetings'
     | '/_protected/founder/submit'
+    | '/_protected/investor/contracting'
     | '/_protected/investor/data-room'
     | '/_protected/investor/messaging'
     | '/_protected/investor/notes'
     | '/_protected/investor/portal'
     | '/_protected/investor/portfolio'
     | '/_protected/investor/scoring'
+    | '/_protected/investor/screening'
     | '/_protected/investor/submit'
     | '/_protected/investor/thesis'
     | '/_protected/scout/apply'
@@ -857,6 +883,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedInvestorSubmitRouteImport
       parentRoute: typeof ProtectedInvestorRoute
     }
+    '/_protected/investor/screening': {
+      id: '/_protected/investor/screening'
+      path: '/screening'
+      fullPath: '/investor/screening'
+      preLoaderRoute: typeof ProtectedInvestorScreeningRouteImport
+      parentRoute: typeof ProtectedInvestorRoute
+    }
     '/_protected/investor/scoring': {
       id: '/_protected/investor/scoring'
       path: '/scoring'
@@ -897,6 +930,13 @@ declare module '@tanstack/react-router' {
       path: '/data-room'
       fullPath: '/investor/data-room'
       preLoaderRoute: typeof ProtectedInvestorDataRoomRouteImport
+      parentRoute: typeof ProtectedInvestorRoute
+    }
+    '/_protected/investor/contracting': {
+      id: '/_protected/investor/contracting'
+      path: '/contracting'
+      fullPath: '/investor/contracting'
+      preLoaderRoute: typeof ProtectedInvestorContractingRouteImport
       parentRoute: typeof ProtectedInvestorRoute
     }
     '/_protected/founder/submit': {
@@ -1091,12 +1131,14 @@ const ProtectedFounderRouteWithChildren =
   ProtectedFounderRoute._addFileChildren(ProtectedFounderRouteChildren)
 
 interface ProtectedInvestorRouteChildren {
+  ProtectedInvestorContractingRoute: typeof ProtectedInvestorContractingRoute
   ProtectedInvestorDataRoomRoute: typeof ProtectedInvestorDataRoomRoute
   ProtectedInvestorMessagingRoute: typeof ProtectedInvestorMessagingRoute
   ProtectedInvestorNotesRoute: typeof ProtectedInvestorNotesRoute
   ProtectedInvestorPortalRoute: typeof ProtectedInvestorPortalRoute
   ProtectedInvestorPortfolioRoute: typeof ProtectedInvestorPortfolioRoute
   ProtectedInvestorScoringRoute: typeof ProtectedInvestorScoringRoute
+  ProtectedInvestorScreeningRoute: typeof ProtectedInvestorScreeningRoute
   ProtectedInvestorSubmitRoute: typeof ProtectedInvestorSubmitRoute
   ProtectedInvestorThesisRoute: typeof ProtectedInvestorThesisRoute
   ProtectedInvestorIndexRoute: typeof ProtectedInvestorIndexRoute
@@ -1105,12 +1147,14 @@ interface ProtectedInvestorRouteChildren {
 }
 
 const ProtectedInvestorRouteChildren: ProtectedInvestorRouteChildren = {
+  ProtectedInvestorContractingRoute: ProtectedInvestorContractingRoute,
   ProtectedInvestorDataRoomRoute: ProtectedInvestorDataRoomRoute,
   ProtectedInvestorMessagingRoute: ProtectedInvestorMessagingRoute,
   ProtectedInvestorNotesRoute: ProtectedInvestorNotesRoute,
   ProtectedInvestorPortalRoute: ProtectedInvestorPortalRoute,
   ProtectedInvestorPortfolioRoute: ProtectedInvestorPortfolioRoute,
   ProtectedInvestorScoringRoute: ProtectedInvestorScoringRoute,
+  ProtectedInvestorScreeningRoute: ProtectedInvestorScreeningRoute,
   ProtectedInvestorSubmitRoute: ProtectedInvestorSubmitRoute,
   ProtectedInvestorThesisRoute: ProtectedInvestorThesisRoute,
   ProtectedInvestorIndexRoute: ProtectedInvestorIndexRoute,

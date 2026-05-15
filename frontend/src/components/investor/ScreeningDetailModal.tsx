@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { CheckCircle2, AlertCircle, XCircle } from "lucide-react";
+import { CheckCircle2, AlertCircle, XCircle, Sparkles } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -29,7 +29,6 @@ export interface ScreeningDetail {
   verdict: ScreeningVerdict;
   fit: ThesisFitOutput | null;
   lensScores: LensScore[];
-  missingMaterials: string[];
   triageRationale: string;
 }
 
@@ -157,17 +156,32 @@ export function ScreeningDetailModal({
         </DialogHeader>
 
         <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-6 py-4">
+          {/* Prominent AI thesis-fit summary — this is the screening verdict
+              in narrative form. Promoted above the per-axis breakdown so the
+              investor reads the conclusion before scanning chips. */}
+          {detail.fit?.rationale && (
+            <section
+              className="flex flex-col gap-2 rounded-lg border border-primary/20 bg-primary/[0.04] p-4"
+              data-testid="screening-thesis-summary"
+            >
+              <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-primary">
+                <Sparkles className="h-3.5 w-3.5" />
+                Thesis fit summary
+              </h3>
+              <p className="text-sm leading-relaxed text-foreground">
+                {detail.fit.rationale}
+              </p>
+            </section>
+          )}
+
           <section className="flex flex-col gap-2">
             <h3 className="text-xs font-semibold uppercase text-muted-foreground">
-              Thesis fit
+              Thesis fit — per-axis
             </h3>
             {detail.fit ? (
               <>
                 <FitChips fit={detail.fit} />
                 <FitTable fit={detail.fit} />
-                <p className="text-sm text-muted-foreground">
-                  {detail.fit.rationale}
-                </p>
               </>
             ) : (
               <p className="text-sm text-muted-foreground">
@@ -186,19 +200,6 @@ export function ScreeningDetailModal({
               ))}
             </div>
           </section>
-
-          {detail.missingMaterials.length > 0 && (
-            <section className="flex flex-col gap-2">
-              <h3 className="text-xs font-semibold uppercase text-muted-foreground">
-                Missing materials
-              </h3>
-              <ul className="list-disc pl-5 text-sm text-muted-foreground">
-                {detail.missingMaterials.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            </section>
-          )}
 
           <section className="flex flex-col gap-1.5">
             <h3 className="text-xs font-semibold uppercase text-muted-foreground">

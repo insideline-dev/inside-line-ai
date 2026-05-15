@@ -53,6 +53,34 @@ const VERDICT_BADGE: Record<
 
 const LENS_LABELS = ["market", "team", "traction"] as const;
 
+const LENS_THEME: Record<
+  "market" | "team" | "traction",
+  { tile: string; label: string; ring: string }
+> = {
+  market: {
+    tile: "bg-sky-50 border-sky-200",
+    label: "text-sky-700",
+    ring: "ring-sky-200",
+  },
+  team: {
+    tile: "bg-violet-50 border-violet-200",
+    label: "text-violet-700",
+    ring: "ring-violet-200",
+  },
+  traction: {
+    tile: "bg-amber-50 border-amber-200",
+    label: "text-amber-700",
+    ring: "ring-amber-200",
+  },
+};
+
+function fitTone(score: number): { bg: string; text: string; ring: string } {
+  if (score >= 80) return { bg: "bg-emerald-100", text: "text-emerald-800", ring: "ring-emerald-300" };
+  if (score >= 60) return { bg: "bg-sky-100", text: "text-sky-800", ring: "ring-sky-300" };
+  if (score >= 40) return { bg: "bg-amber-100", text: "text-amber-800", ring: "ring-amber-300" };
+  return { bg: "bg-red-100", text: "text-red-800", ring: "ring-red-300" };
+}
+
 export function ScreeningDealCard({
   data,
   onOpen,
@@ -108,14 +136,18 @@ export function ScreeningDealCard({
           </div>
         </div>
 
-        {/* Lens scores grid */}
-        <div className="grid grid-cols-3 gap-2 rounded-lg border bg-muted/20 p-3">
+        {/* Lens scores grid — per-lens accent colour */}
+        <div className="grid grid-cols-3 gap-2">
           {LENS_LABELS.map((key) => {
             const lens = lensByKey.get(key);
+            const theme = LENS_THEME[key];
             return (
               <div
                 key={key}
-                className="flex flex-col items-center gap-1 rounded-md p-1"
+                className={cn(
+                  "flex flex-col items-center gap-1 rounded-lg border p-2",
+                  theme.tile,
+                )}
                 data-testid={`screening-card-lens-${key}`}
               >
                 {lens ? (
@@ -129,7 +161,12 @@ export function ScreeningDealCard({
                     —
                   </div>
                 )}
-                <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                <span
+                  className={cn(
+                    "text-[10px] font-semibold uppercase tracking-wide",
+                    theme.label,
+                  )}
+                >
                   {key}
                 </span>
               </div>
@@ -137,11 +174,38 @@ export function ScreeningDealCard({
           })}
         </div>
 
-        {/* Thesis-fit chips */}
-        <div className="flex flex-col gap-1">
-          <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            Thesis fit
-          </span>
+        {/* Thesis-fit — overall score highlighted, chips below */}
+        <div className="flex flex-col gap-2 rounded-lg border bg-muted/15 p-3">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Thesis fit
+            </span>
+            {data.fit ? (
+              (() => {
+                const tone = fitTone(data.fit.overall);
+                return (
+                  <div
+                    className={cn(
+                      "inline-flex items-baseline gap-1 rounded-full px-3 py-1 ring-1",
+                      tone.bg,
+                      tone.text,
+                      tone.ring,
+                    )}
+                    data-testid="screening-card-fit-score"
+                  >
+                    <span className="text-lg font-bold leading-none">
+                      {data.fit.overall}
+                    </span>
+                    <span className="text-[10px] font-medium leading-none opacity-80">
+                      / 100
+                    </span>
+                  </div>
+                );
+              })()
+            ) : (
+              <span className="text-[10px] text-muted-foreground">pending</span>
+            )}
+          </div>
           <FitChips fit={data.fit} />
         </div>
 

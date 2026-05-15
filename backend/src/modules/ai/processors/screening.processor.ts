@@ -474,13 +474,32 @@ export class ScreeningProcessor
       throw new Error(`Startup ${startupId} not found for screening`);
     }
 
+    // Prefer the user-submitted `description` over the LLM-generated
+    // `productDescription`. The latter has shown evidence of fabricating
+    // content from unrelated startups during enrichment (the 2026-05-15
+    // E2E test reproduced this: a B2B SaaS LLM-eval submission got
+    // re-described as "oil & gas insights software"). Until that
+    // fabrication path is fixed at the source, the lenses run on the
+    // human-authored field. We pass productDescription only as ancillary
+    // context so any genuinely complementary detail isn't dropped.
+    const userDescription = (row.description ?? "").trim();
+    const productDescription = (row.productDescription ?? "").trim();
+    const startupDescription =
+      userDescription.length > 0
+        ? userDescription
+        : productDescription;
+    const contextNotes =
+      userDescription.length > 0 && productDescription.length > 0
+        ? `Additional system-extracted notes (treat as low-confidence): ${productDescription.slice(0, 400)}`
+        : "";
+
     return {
       startupId,
       startupName: row.name,
-      startupDescription: row.productDescription ?? row.description ?? "",
+      startupDescription,
       sector: row.sectorIndustry ?? row.industry ?? "",
       stage: row.stage ?? "",
-      contextNotes: "",
+      contextNotes,
     };
   }
 }

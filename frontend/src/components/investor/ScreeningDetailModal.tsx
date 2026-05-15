@@ -137,8 +137,8 @@ export function ScreeningDetailModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[85vh] max-w-2xl flex-col p-0">
+        <DialogHeader className="shrink-0 border-b border-border px-6 pb-4 pt-5">
           <DialogTitle className="flex items-center gap-2">
             {detail.companyName}
             <Badge variant="outline" className="uppercase">
@@ -150,7 +150,7 @@ export function ScreeningDetailModal({
           )}
         </DialogHeader>
 
-        <div className="flex flex-col gap-4 py-2">
+        <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-6 py-4">
           <section className="flex flex-col gap-2">
             <h3 className="text-xs font-semibold uppercase text-muted-foreground">
               Thesis fit
@@ -204,7 +204,7 @@ export function ScreeningDetailModal({
           </section>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="shrink-0 border-t border-border px-6 py-4">
           {canAct ? (
             <>
               <Button

@@ -162,6 +162,13 @@
       "when": 1778533262730,
       "tag": "0022_needy_flatman",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1778867881224,
+      "tag": "0023_funny_magus",
+      "breakpoints": true
     }
   ]
 }

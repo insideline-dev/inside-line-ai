@@ -1,0 +1,1 @@
+ALTER TABLE "screening_decision" ADD COLUMN "thesis_fit" jsonb;

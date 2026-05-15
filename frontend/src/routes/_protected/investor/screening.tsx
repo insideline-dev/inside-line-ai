@@ -1,14 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { formatDistanceToNow } from "date-fns";
 import { ChevronDown, ChevronRight, Inbox, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { customFetch } from "@/api/client";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import { StageNav } from "@/components/investor/StageNav";
-import { FitChips } from "@/components/investor/FitChips";
+import { ScreeningDealCard } from "@/components/investor/ScreeningDealCard";
 import {
   ScreeningDetailModal,
   type LensScore,
@@ -21,6 +18,7 @@ interface BackendScreeningRow {
   id: string;
   companyName: string;
   industry: string | null;
+  stage: string | null;
   verdict: ScreeningVerdict;
   overallScore: number;
   fit: ThesisFitOutput | null;
@@ -50,7 +48,9 @@ interface ScreeningRow {
   id: string;
   companyName: string;
   industry?: string | null;
+  stage?: string | null;
   verdict: ScreeningVerdict;
+  overallScore?: number;
   fit: ThesisFitOutput | null;
   lensScores: LensScore[];
   missingMaterials: string[];
@@ -64,7 +64,9 @@ function mapBackendRow(row: BackendScreeningRow): ScreeningRow {
     id: row.id,
     companyName: row.companyName,
     industry: row.industry,
+    stage: row.stage,
     verdict: row.verdict,
+    overallScore: row.overallScore,
     fit: row.fit,
     lensScores: row.lensScores.map((l) => ({
       key: l.key,
@@ -202,19 +204,6 @@ const SEED_ROWS: ScreeningRow[] = [
   },
 ];
 
-function VerdictBadge({ verdict }: { verdict: ScreeningVerdict }) {
-  const cfg = {
-    review: { label: "REVIEW", className: "bg-amber-100 text-amber-900 hover:bg-amber-100" },
-    advance: { label: "ADVANCE", className: "bg-emerald-100 text-emerald-900 hover:bg-emerald-100" },
-    reject: { label: "REJECT", className: "bg-red-100 text-red-900 hover:bg-red-100" },
-  }[verdict];
-  return (
-    <Badge variant="secondary" className={cfg.className}>
-      {cfg.label}
-    </Badge>
-  );
-}
-
 function ScreeningPage() {
   const { data: backendRows, isLoading, error } = useQuery({
     queryKey: ["investor", "screening"],
@@ -328,33 +317,42 @@ function ScreeningPage() {
         </span>
       </div>
 
-      <Card>
-        <CardContent className="flex flex-col gap-2 p-4">
-          {isLoading ? (
-            <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Loading screening queue…
-            </div>
-          ) : activeRows.length === 0 ? (
-            <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
-              <Inbox className="h-4 w-4" />
-              No deals in screening yet.
-            </div>
-          ) : (
-            activeRows.map((row) => (
-              <ScreeningRowCard
-                key={row.id}
-                row={row}
-                advanced={advancedRowIds.has(row.id)}
-                onOpen={openRow}
-              />
-            ))
-          )}
-        </CardContent>
-      </Card>
+      {isLoading ? (
+        <div className="flex items-center gap-2 rounded-md border border-border p-6 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Loading screening queue…
+        </div>
+      ) : activeRows.length === 0 ? (
+        <div className="flex items-center gap-2 rounded-md border border-border p-6 text-sm text-muted-foreground">
+          <Inbox className="h-4 w-4" />
+          No deals in screening yet.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {activeRows.map((row) => (
+            <ScreeningDealCard
+              key={row.id}
+              data={{
+                id: row.id,
+                companyName: row.companyName,
+                industry: row.industry,
+                stage: row.stage,
+                verdict: row.verdict,
+                overallScore: row.overallScore,
+                fit: row.fit,
+                lensScores: row.lensScores,
+                submittedAt: row.submittedAt,
+                dealbreakerNote: row.dealbreakerNote,
+                isAutoAdvanced: advancedRowIds.has(row.id),
+              }}
+              onOpen={openRow}
+            />
+          ))}
+        </div>
+      )}
 
       {rejectedRows.length > 0 && (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-3">
           <button
             type="button"
             className="flex w-fit items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
@@ -369,18 +367,26 @@ function ScreeningPage() {
             Show rejected ({rejectedRows.length})
           </button>
           {showRejected && (
-            <Card>
-              <CardContent className="flex flex-col gap-2 p-4">
-                {rejectedRows.map((row) => (
-                  <ScreeningRowCard
-                    key={row.id}
-                    row={row}
-                    advanced={false}
-                    onOpen={openRow}
-                  />
-                ))}
-              </CardContent>
-            </Card>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {rejectedRows.map((row) => (
+                <ScreeningDealCard
+                  key={row.id}
+                  data={{
+                    id: row.id,
+                    companyName: row.companyName,
+                    industry: row.industry,
+                    stage: row.stage,
+                    verdict: row.verdict,
+                    overallScore: row.overallScore,
+                    fit: row.fit,
+                    lensScores: row.lensScores,
+                    submittedAt: row.submittedAt,
+                    dealbreakerNote: row.dealbreakerNote,
+                  }}
+                  onOpen={openRow}
+                />
+              ))}
+            </div>
           )}
         </div>
       )}
@@ -410,45 +416,3 @@ function ScreeningPage() {
   );
 }
 
-function ScreeningRowCard({
-  row,
-  advanced,
-  onOpen,
-}: {
-  row: ScreeningRow;
-  advanced: boolean;
-  onOpen: (id: string) => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={() => onOpen(row.id)}
-      className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-background px-4 py-3 text-left hover:bg-muted/40"
-      data-testid={`screening-row-${row.id}`}
-    >
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <div className="flex items-center gap-2">
-          <span className="font-medium">{row.companyName}</span>
-          <VerdictBadge verdict={row.verdict} />
-          {advanced && (
-            <span className="text-xs italic text-emerald-700">
-              (auto-advanced)
-            </span>
-          )}
-          {row.industry && (
-            <span className="text-xs text-muted-foreground">{row.industry}</span>
-          )}
-        </div>
-        <FitChips fit={row.fit} />
-        {row.dealbreakerNote && (
-          <span className="text-xs text-red-700">{row.dealbreakerNote}</span>
-        )}
-      </div>
-      <div className="flex items-center gap-3">
-        <span className="text-xs text-muted-foreground">
-          {formatDistanceToNow(new Date(row.submittedAt), { addSuffix: true })}
-        </span>
-      </div>
-    </button>
-  );
-}

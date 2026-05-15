@@ -14,6 +14,9 @@ import { CalibrationService } from '../calibration.service';
 import { CalibrationProposalService } from '../calibration-proposal.service';
 import { DealDecisionService } from '../deal-decision.service';
 import { StartupMatchingPipelineService } from '../../ai/services/startup-matching-pipeline.service';
+import { ScreeningQueueService } from '../screening-queue.service';
+import { ScreeningProcessor } from '../../ai/processors/screening.processor';
+import { DrizzleService } from '../../../database';
 import { UserRole } from '../../../auth/entities/auth.schema';
 
 describe('InvestorController', () => {
@@ -190,6 +193,18 @@ describe('InvestorController', () => {
             queueStartupMatching: jest.fn(),
             getLatestMatchingStatus: jest.fn(),
           },
+        },
+        {
+          provide: ScreeningQueueService,
+          useValue: { getQueue: jest.fn() },
+        },
+        {
+          provide: ScreeningProcessor,
+          useValue: { runScreening: jest.fn() },
+        },
+        {
+          provide: DrizzleService,
+          useValue: { db: { insert: jest.fn() } },
         },
       ],
     }).compile();

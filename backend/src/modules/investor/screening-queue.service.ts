@@ -30,11 +30,14 @@ export interface ScreeningQueueRow {
   companyName: string;
   industry: string | null;
   stage: string | null;
+  /** Hostname-derived favicon URL (Google s2 favicons) when website is known. */
+  faviconUrl: string | null;
+  /** Raw website URL (passed through so the card can link out). */
+  website: string | null;
   verdict: Verdict;
   overallScore: number;
   fit: ScreeningDecisionThesisFit | null;
   lensScores: ScreeningQueueLensScore[];
-  missingMaterials: string[];
   triageRationale: string;
   reasonCodes: string[];
   submittedAt: string;
@@ -51,11 +54,27 @@ function isVerdict(value: string): value is Verdict {
   return value === "review" || value === "advance" || value === "reject";
 }
 
-function rationaleFromReasonCodes(codes: string[]): string {
-  if (codes.length === 0) return "Triage produced no reason codes.";
-  return codes
+/**
+ * Build the short triage rationale shown at the bottom of the modal.
+ * - Drops `missing_materials` entirely — for screening, the deck being
+ *   absent is not a useful signal; the question is "is this worth the
+ *   investor's time?", and the lens prompts already treat missing deck
+ *   as low-confidence evidence, not a rejection criterion.
+ * - Prefers the thesis-fit rationale when available (it is the AI's own
+ *   compact summary across all axes).
+ * - Falls back to a humanised lens-flag summary when no fit object exists.
+ */
+function buildTriageRationale(
+  codes: string[],
+  fit: ScreeningDecisionThesisFit | null,
+): string {
+  if (fit?.rationale && fit.rationale.trim().length > 0) {
+    return fit.rationale.trim();
+  }
+  const interesting = codes.filter((c) => c !== "missing_materials");
+  if (interesting.length === 0) return "All lens signals are aligned.";
+  return interesting
     .map((code) => {
-      if (code === "missing_materials") return "Materials still missing";
       if (code.startsWith("lens.")) {
         const [, lens, verdict] = code.split(".");
         return `${LENS_LABELS[lens] ?? lens} lens ${verdict ?? "flagged"}`;
@@ -63,6 +82,18 @@ function rationaleFromReasonCodes(codes: string[]): string {
       return code.replace(/_/g, " ");
     })
     .join(" · ");
+}
+
+function deriveFaviconUrl(website: string | null | undefined): string | null {
+  if (!website) return null;
+  try {
+    const url = new URL(
+      website.startsWith("http") ? website : `https://${website}`,
+    );
+    return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(url.hostname)}&sz=64`;
+  } catch {
+    return null;
+  }
 }
 
 function dealbreakerNoteFromReasonCodes(codes: string[]): string | null {
@@ -114,6 +145,7 @@ export class ScreeningQueueService {
       startup_stage: string | null;
       startup_location: string | null;
       startup_description: string | null;
+      startup_website: string | null;
       industry: string | null;
       sector_industry: string | null;
       funding_target: number | null;
@@ -150,6 +182,7 @@ export class ScreeningQueueService {
         s.description as startup_description,
         s.industry,
         s.sector_industry,
+        s.website as startup_website,
         s.funding_target,
         s.created_at as submitted_at
       from latest l
@@ -233,10 +266,13 @@ export class ScreeningQueueService {
         },
       );
 
-      const reasonCodes = r.reason_codes ?? [];
-      const missingMaterials = reasonCodes.includes("missing_materials")
-        ? ["Pitch deck or supporting materials"]
-        : [];
+      // Screening intentionally does NOT surface missing materials.
+      // The question at this stage is "is this worth the investor's time?";
+      // a missing deck is handled by the lens prompts (low-confidence
+      // evidence, not auto-reject) and a Due Diligence concern.
+      const reasonCodes = (r.reason_codes ?? []).filter(
+        (c) => c !== "missing_materials",
+      );
 
       let fit: ScreeningDecisionThesisFit | null = r.thesis_fit;
       if (!fit && thesisRow) {
@@ -258,12 +294,13 @@ export class ScreeningQueueService {
         companyName: r.startup_name,
         industry: r.sector_industry ?? r.industry ?? null,
         stage: r.startup_stage,
+        faviconUrl: deriveFaviconUrl(r.startup_website),
+        website: r.startup_website,
         verdict,
         overallScore: r.overall_score,
         fit,
         lensScores,
-        missingMaterials,
-        triageRationale: rationaleFromReasonCodes(reasonCodes),
+        triageRationale: buildTriageRationale(reasonCodes, fit),
         reasonCodes,
         submittedAt:
           r.submitted_at instanceof Date

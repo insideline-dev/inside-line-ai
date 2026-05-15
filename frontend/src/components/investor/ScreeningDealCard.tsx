@@ -1,12 +1,13 @@
 import { formatDistanceToNow } from "date-fns";
 import { ArrowUpRight, Check, X } from "lucide-react";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ScoreRing } from "@/components/analysis/ScoreRing";
 import { FitChips } from "./FitChips";
 import { cn } from "@/lib/utils";
+import { formatIndustry } from "@/lib/kpi-metrics";
 import type { ThesisFitOutput } from "@/types/thesis-fit";
 import type {
   LensScore,
@@ -18,6 +19,8 @@ export interface ScreeningDealCardData {
   companyName: string;
   industry?: string | null;
   stage?: string | null;
+  faviconUrl?: string | null;
+  website?: string | null;
   verdict: ScreeningVerdict;
   overallScore?: number | null;
   fit: ThesisFitOutput | null;
@@ -82,6 +85,13 @@ export function ScreeningDealCard({
         <div className="flex items-start justify-between gap-4">
           <div className="flex min-w-0 items-start gap-3">
             <Avatar className="h-12 w-12 shrink-0 rounded-lg border bg-muted/40">
+              {data.faviconUrl ? (
+                <AvatarImage
+                  src={data.faviconUrl}
+                  alt={`${data.companyName} favicon`}
+                  className="object-contain p-2"
+                />
+              ) : null}
               <AvatarFallback className="rounded-lg text-base font-semibold">
                 {data.companyName.charAt(0).toUpperCase()}
               </AvatarFallback>
@@ -92,11 +102,8 @@ export function ScreeningDealCard({
               </h3>
               <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                 {data.industry && (
-                  <Badge
-                    variant="secondary"
-                    className="capitalize text-[11px]"
-                  >
-                    {data.industry.replace(/_/g, " ")}
+                  <Badge variant="secondary" className="text-[11px]">
+                    {formatIndustry(data.industry)}
                   </Badge>
                 )}
                 {data.stage && (

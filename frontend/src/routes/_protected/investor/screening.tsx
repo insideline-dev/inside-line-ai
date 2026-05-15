@@ -19,6 +19,8 @@ interface BackendScreeningRow {
   companyName: string;
   industry: string | null;
   stage: string | null;
+  faviconUrl: string | null;
+  website: string | null;
   verdict: ScreeningVerdict;
   overallScore: number;
   fit: ThesisFitOutput | null;
@@ -29,7 +31,6 @@ interface BackendScreeningRow {
     signal: string;
     note?: string;
   }>;
-  missingMaterials: string[];
   triageRationale: string;
   reasonCodes: string[];
   submittedAt: string;
@@ -49,11 +50,12 @@ interface ScreeningRow {
   companyName: string;
   industry?: string | null;
   stage?: string | null;
+  faviconUrl?: string | null;
+  website?: string | null;
   verdict: ScreeningVerdict;
   overallScore?: number;
   fit: ThesisFitOutput | null;
   lensScores: LensScore[];
-  missingMaterials: string[];
   triageRationale: string;
   submittedAt: string;
   dealbreakerNote?: string | null;
@@ -65,6 +67,8 @@ function mapBackendRow(row: BackendScreeningRow): ScreeningRow {
     companyName: row.companyName,
     industry: row.industry,
     stage: row.stage,
+    faviconUrl: row.faviconUrl,
+    website: row.website,
     verdict: row.verdict,
     overallScore: row.overallScore,
     fit: row.fit,
@@ -74,7 +78,6 @@ function mapBackendRow(row: BackendScreeningRow): ScreeningRow {
       score: l.score,
       note: l.note,
     })),
-    missingMaterials: row.missingMaterials,
     triageRationale: row.triageRationale,
     submittedAt: row.submittedAt,
     dealbreakerNote: row.dealbreakerNote,
@@ -106,7 +109,6 @@ const SEED_ROWS: ScreeningRow[] = [
       { key: "team", label: "Team", score: 65, note: "Ex-Stripe founders, no domain expertise" },
       { key: "traction", label: "Traction", score: 41, note: "Pre-revenue, design partners only" },
     ],
-    missingMaterials: ["Cap table", "Prior round details"],
     triageRationale:
       "Mixed signals — fit hits 3/4 axes but check-size exceeds policy. Worth a 5-minute review.",
   },
@@ -129,7 +131,6 @@ const SEED_ROWS: ScreeningRow[] = [
       { key: "team", label: "Team", score: 84 },
       { key: "traction", label: "Traction", score: 79 },
     ],
-    missingMaterials: [],
     triageRationale:
       "Clean across the board — no flags. Advanced automatically to DD.",
   },
@@ -152,7 +153,6 @@ const SEED_ROWS: ScreeningRow[] = [
       { key: "team", label: "Team", score: 72, note: "Strong climate operator" },
       { key: "traction", label: "Traction", score: 55, note: "Two pilot LOIs" },
     ],
-    missingMaterials: ["Pilot contracts"],
     triageRationale:
       "Borderline on sector — adjacent but not core. Investor judgement needed.",
   },
@@ -176,7 +176,6 @@ const SEED_ROWS: ScreeningRow[] = [
       { key: "team", label: "Team", score: 55 },
       { key: "traction", label: "Traction", score: 30 },
     ],
-    missingMaterials: [],
     triageRationale: "Auto-rejected — dealbreaker on sector.",
   },
   {
@@ -199,7 +198,6 @@ const SEED_ROWS: ScreeningRow[] = [
       { key: "team", label: "Team", score: 60 },
       { key: "traction", label: "Traction", score: 15 },
     ],
-    missingMaterials: ["Product demo"],
     triageRationale: "Auto-rejected — pre-product, below stage floor.",
   },
 ];
@@ -301,7 +299,6 @@ function ScreeningPage() {
       verdict: row.verdict,
       fit: row.fit,
       lensScores: row.lensScores,
-      missingMaterials: row.missingMaterials,
       triageRationale: row.triageRationale,
     };
   }, [openId, rows]);
@@ -337,6 +334,8 @@ function ScreeningPage() {
                 companyName: row.companyName,
                 industry: row.industry,
                 stage: row.stage,
+                faviconUrl: row.faviconUrl,
+                website: row.website,
                 verdict: row.verdict,
                 overallScore: row.overallScore,
                 fit: row.fit,

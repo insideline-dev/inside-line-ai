@@ -44,6 +44,28 @@ export interface ScreeningDecisionLensSnapshot {
  */
 export type ScreeningDecisionLensVersions = Record<string, string>;
 
+/**
+ * Per-axis thesis-fit assessment captured at decision time.
+ * Mirrors `backend/src/modules/ai/schemas/thesis-fit.schema.ts`. Stored on
+ * the decision row so the chips on the screening queue render off persisted
+ * data instead of recomputing the agent on every page load.
+ *
+ * Nullable for two reasons:
+ *  - existing rows pre-dating this column have no fit (we backfill lazily
+ *    from the queue endpoint when the row is read);
+ *  - if ThesisFitService fails the row still has a verdict.
+ */
+export type ThesisFitAxisStatus = "match" | "borderline" | "mismatch";
+
+export interface ScreeningDecisionThesisFit {
+  geography: { status: ThesisFitAxisStatus; note: string };
+  stage: { status: ThesisFitAxisStatus; note: string };
+  sector: { status: ThesisFitAxisStatus; note: string };
+  checkSize: { status: ThesisFitAxisStatus; note: string };
+  overall: number;
+  rationale: string;
+}
+
 export const screeningDecision = pgTable(
   "screening_decision",
   {
@@ -74,6 +96,11 @@ export const screeningDecision = pgTable(
       .notNull()
       .default({}),
     policyVersion: integer("policy_version").notNull().default(1),
+    /**
+     * Per-axis thesis-fit object produced by ThesisFitService. Nullable —
+     * backfilled lazily for pre-existing decisions on first read.
+     */
+    thesisFit: jsonb("thesis_fit").$type<ScreeningDecisionThesisFit | null>(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

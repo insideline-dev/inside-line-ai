@@ -1,8 +1,19 @@
-import { Injectable } from "@nestjs/common";
-import { and, desc, inArray, sql } from "drizzle-orm";
+import { Injectable, Logger } from "@nestjs/common";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { DrizzleService } from "../../database";
-import { type ScreeningDecisionLensSnapshot } from "../ai/entities/screening-decision.schema";
+import {
+  screeningDecision,
+  type ScreeningDecisionLensSnapshot,
+  type ScreeningDecisionThesisFit,
+} from "../ai/entities/screening-decision.schema";
 import { startupLensResult } from "../ai/entities/lens-result.schema";
+import {
+  ThesisFitService,
+  type InvestorThesisInput,
+  type StartupProfileInput,
+} from "../ai/agents/thesis-fit";
+import { investorThesis } from "./entities/investor.schema";
+import { startup } from "../startup/entities/startup.schema";
 
 export type Verdict = "review" | "advance" | "reject";
 
@@ -18,9 +29,10 @@ export interface ScreeningQueueRow {
   id: string;
   companyName: string;
   industry: string | null;
+  stage: string | null;
   verdict: Verdict;
   overallScore: number;
-  fit: null; // populated when ThesisFitService is wired into the pipeline (PR5b)
+  fit: ScreeningDecisionThesisFit | null;
   lensScores: ScreeningQueueLensScore[];
   missingMaterials: string[];
   triageRationale: string;
@@ -65,7 +77,12 @@ function dealbreakerNoteFromReasonCodes(codes: string[]): string | null {
 
 @Injectable()
 export class ScreeningQueueService {
-  constructor(private drizzle: DrizzleService) {}
+  private readonly logger = new Logger(ScreeningQueueService.name);
+
+  constructor(
+    private drizzle: DrizzleService,
+    private thesisFit: ThesisFitService,
+  ) {}
 
   /**
    * Returns the investor's screening triage queue: every startup they submitted
@@ -86,40 +103,54 @@ export class ScreeningQueueService {
     interface DecisionRow {
       startup_id: string;
       pipeline_run_id: string | null;
+      decision_id: string;
       classification: string;
       overall_score: number;
       reason_codes: string[];
       lens_snapshot: ScreeningDecisionLensSnapshot[];
+      thesis_fit: ScreeningDecisionThesisFit | null;
       created_at: Date;
       startup_name: string;
+      startup_stage: string | null;
+      startup_location: string | null;
+      startup_description: string | null;
       industry: string | null;
       sector_industry: string | null;
+      funding_target: number | null;
       submitted_at: Date;
     }
     const decisionRows = (await db.execute(sql`
       with latest as (
         select distinct on (sd.startup_id)
+          sd.id as decision_id,
           sd.startup_id,
           sd.pipeline_run_id,
           sd.classification,
           sd.overall_score,
           sd.reason_codes,
           sd.lens_snapshot,
+          sd.thesis_fit,
           sd.created_at
         from screening_decision sd
         order by sd.startup_id, sd.created_at desc
       )
       select
+        l.decision_id,
         l.startup_id,
         l.pipeline_run_id,
         l.classification,
         l.overall_score,
         l.reason_codes,
         l.lens_snapshot,
+        l.thesis_fit,
         l.created_at,
         s.name as startup_name,
+        s.stage as startup_stage,
+        s.location as startup_location,
+        s.description as startup_description,
         s.industry,
         s.sector_industry,
+        s.funding_target,
         s.created_at as submitted_at
       from latest l
       join startups s on s.id = l.startup_id
@@ -177,7 +208,15 @@ export class ScreeningQueueService {
       }
     }
 
-    return rows.map((r): ScreeningQueueRow => {
+    // Pull investor thesis once — needed for lazy fit backfill.
+    const [thesisRow] = await db
+      .select()
+      .from(investorThesis)
+      .where(eq(investorThesis.userId, investorUserId))
+      .limit(1);
+
+    const out: ScreeningQueueRow[] = [];
+    for (const r of rows) {
       const verdict = isVerdict(r.classification) ? r.classification : "review";
       const pairKey = `${r.startup_id}::${r.pipeline_run_id ?? ""}`;
       const lensMap = lensByPair.get(pairKey) ?? new Map();
@@ -199,13 +238,29 @@ export class ScreeningQueueService {
         ? ["Pitch deck or supporting materials"]
         : [];
 
-      return {
+      let fit: ScreeningDecisionThesisFit | null = r.thesis_fit;
+      if (!fit && thesisRow) {
+        try {
+          fit = await this.computeAndPersistFit(
+            r.decision_id,
+            thesisRow,
+            r,
+          );
+        } catch (err) {
+          this.logger.warn(
+            `[ScreeningQueue] thesis-fit backfill failed for startup ${r.startup_id}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      }
+
+      out.push({
         id: r.startup_id,
         companyName: r.startup_name,
         industry: r.sector_industry ?? r.industry ?? null,
+        stage: r.startup_stage,
         verdict,
         overallScore: r.overall_score,
-        fit: null,
+        fit,
         lensScores,
         missingMaterials,
         triageRationale: rationaleFromReasonCodes(reasonCodes),
@@ -215,7 +270,60 @@ export class ScreeningQueueService {
             ? r.submitted_at.toISOString()
             : String(r.submitted_at),
         dealbreakerNote: dealbreakerNoteFromReasonCodes(reasonCodes),
-      };
-    });
+      });
+    }
+    return out;
+  }
+
+  /**
+   * Lazy backfill: call ThesisFitService for a decision that pre-dates the
+   * thesis_fit column (or had a transient failure). Persists the result back
+   * so subsequent reads are instant.
+   */
+  private async computeAndPersistFit(
+    decisionId: string,
+    thesisRow: { industries: string[] | null; stages: string[] | null; checkSizeMin: number | null; checkSizeMax: number | null; geographicFocus: string[] | null; businessModels: string[] | null; mustHaveFeatures: string[] | null; dealBreakers: string[] | null; thesisNarrative: string | null },
+    decision: {
+      startup_name: string;
+      startup_stage: string | null;
+      startup_location: string | null;
+      startup_description: string | null;
+      industry: string | null;
+      sector_industry: string | null;
+      funding_target: number | null;
+    },
+  ): Promise<ScreeningDecisionThesisFit> {
+    const thesisInput: InvestorThesisInput = {
+      industries: thesisRow.industries,
+      stages: thesisRow.stages,
+      checkSizeMin: thesisRow.checkSizeMin,
+      checkSizeMax: thesisRow.checkSizeMax,
+      geographicFocus: thesisRow.geographicFocus,
+      businessModels: thesisRow.businessModels,
+      mustHaveFeatures: thesisRow.mustHaveFeatures,
+      dealBreakers: thesisRow.dealBreakers,
+      thesisNarrative: thesisRow.thesisNarrative,
+    };
+    const startupInput: StartupProfileInput = {
+      companyName: decision.startup_name,
+      industry: decision.sector_industry ?? decision.industry,
+      stage: decision.startup_stage,
+      geography: decision.startup_location,
+      checkContext: decision.funding_target
+        ? `raising $${decision.funding_target.toLocaleString()}`
+        : null,
+      classification: {
+        sector: decision.sector_industry,
+        industry: decision.industry,
+        stage: decision.startup_stage,
+      },
+      additionalSignals: decision.startup_description,
+    };
+    const fit = await this.thesisFit.assess(thesisInput, startupInput);
+    await this.drizzle.db
+      .update(screeningDecision)
+      .set({ thesisFit: fit })
+      .where(eq(screeningDecision.id, decisionId));
+    return fit;
   }
 }

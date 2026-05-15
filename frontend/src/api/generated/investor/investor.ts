@@ -2219,6 +2219,110 @@ export function useInvestorControllerGetScreeningQueue<TData = Awaited<ReturnTyp
 
 
 
+export type investorControllerGetScreeningCalibrationResponse200 = {
+  data: void
+  status: 200
+}
+    
+export type investorControllerGetScreeningCalibrationResponseSuccess = (investorControllerGetScreeningCalibrationResponse200) & {
+  headers: Headers;
+};
+;
+
+export type investorControllerGetScreeningCalibrationResponse = (investorControllerGetScreeningCalibrationResponseSuccess)
+
+export const getInvestorControllerGetScreeningCalibrationUrl = () => {
+
+
+  
+
+  return `/investor/screening/calibration`
+}
+
+export const investorControllerGetScreeningCalibration = async ( options?: RequestInit): Promise<investorControllerGetScreeningCalibrationResponse> => {
+  
+  return customFetch<investorControllerGetScreeningCalibrationResponse>(getInvestorControllerGetScreeningCalibrationUrl(),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getInvestorControllerGetScreeningCalibrationQueryKey = () => {
+    return [
+    `/investor/screening/calibration`
+    ] as const;
+    }
+
+    
+export const getInvestorControllerGetScreeningCalibrationQueryOptions = <TData = Awaited<ReturnType<typeof investorControllerGetScreeningCalibration>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetScreeningCalibration>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getInvestorControllerGetScreeningCalibrationQueryKey();
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof investorControllerGetScreeningCalibration>>> = ({ signal }) => investorControllerGetScreeningCalibration({ signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetScreeningCalibration>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type InvestorControllerGetScreeningCalibrationQueryResult = NonNullable<Awaited<ReturnType<typeof investorControllerGetScreeningCalibration>>>
+export type InvestorControllerGetScreeningCalibrationQueryError = ErrorType<unknown>
+
+
+export function useInvestorControllerGetScreeningCalibration<TData = Awaited<ReturnType<typeof investorControllerGetScreeningCalibration>>, TError = ErrorType<unknown>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetScreeningCalibration>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof investorControllerGetScreeningCalibration>>,
+          TError,
+          Awaited<ReturnType<typeof investorControllerGetScreeningCalibration>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useInvestorControllerGetScreeningCalibration<TData = Awaited<ReturnType<typeof investorControllerGetScreeningCalibration>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetScreeningCalibration>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof investorControllerGetScreeningCalibration>>,
+          TError,
+          Awaited<ReturnType<typeof investorControllerGetScreeningCalibration>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useInvestorControllerGetScreeningCalibration<TData = Awaited<ReturnType<typeof investorControllerGetScreeningCalibration>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetScreeningCalibration>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useInvestorControllerGetScreeningCalibration<TData = Awaited<ReturnType<typeof investorControllerGetScreeningCalibration>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetScreeningCalibration>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getInvestorControllerGetScreeningCalibrationQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
 export type investorControllerRescreenForDevResponse201 = {
   data: void
   status: 201

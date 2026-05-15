@@ -6141,6 +6141,20 @@
         ]
       }
     },
+    "/investor/screening/calibration": {
+      "get": {
+        "operationId": "InvestorController_getScreeningCalibration",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      }
+    },
     "/investor/screening/{startupId}/rescreen-dev": {
       "post": {
         "operationId": "InvestorController_rescreenForDev",

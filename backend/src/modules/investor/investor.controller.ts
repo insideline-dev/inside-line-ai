@@ -33,9 +33,10 @@ import { ScreeningQueueService } from './screening-queue.service';
 import { ScreeningCalibrationService } from './screening-calibration.service';
 import { ScreeningProcessor } from '../ai/processors/screening.processor';
 import { PipelineService } from '../ai/services/pipeline.service';
+import { ProgressTrackerService } from '../ai/orchestrator/progress-tracker.service';
 import { pipelineRun } from '../ai/entities/pipeline.schema';
 import { screeningDecision } from '../ai/entities/screening-decision.schema';
-import { PipelinePhase, PipelineStatus } from '../ai/interfaces/pipeline.interface';
+import { PhaseStatus, PipelinePhase, PipelineStatus } from '../ai/interfaces/pipeline.interface';
 import { desc, eq } from 'drizzle-orm';
 import { DrizzleService } from '../../database';
 import { randomBytes } from 'node:crypto';
@@ -89,6 +90,7 @@ export class InvestorController {
     private screeningCalibrationService: ScreeningCalibrationService,
     private screeningProcessor: ScreeningProcessor,
     private pipelineCoreService: PipelineService,
+    private progressTracker: ProgressTrackerService,
     private drizzle: DrizzleService,
   ) {}
 
@@ -457,11 +459,61 @@ export class InvestorController {
       startedAt: new Date(),
       completedAt: new Date(),
     });
+
+    // Fix 7 (post-audit): seed the live-progress payload so the admin DS
+    // pipeline view shows upstream phases as "cached/completed" rather
+    // than stalling on "pending". Rescreen-dev intentionally re-runs only
+    // the SCREENING phase — the earlier phases are reused from the original
+    // pipeline run. We mark them COMPLETED for the UI and SCREENING as
+    // RUNNING so the user sees the right state.
+    try {
+      await this.progressTracker.initProgress({
+        startupId,
+        userId: _user.id,
+        pipelineRunId,
+        phases: [
+          PipelinePhase.CLASSIFICATION,
+          PipelinePhase.EXTRACTION,
+          PipelinePhase.ENRICHMENT,
+          PipelinePhase.SCRAPING,
+          PipelinePhase.RESEARCH,
+          PipelinePhase.SCREENING,
+        ],
+        initialPhaseStatuses: {
+          [PipelinePhase.CLASSIFICATION]: PhaseStatus.COMPLETED,
+          [PipelinePhase.EXTRACTION]: PhaseStatus.COMPLETED,
+          [PipelinePhase.ENRICHMENT]: PhaseStatus.COMPLETED,
+          [PipelinePhase.SCRAPING]: PhaseStatus.COMPLETED,
+          [PipelinePhase.RESEARCH]: PhaseStatus.COMPLETED,
+          [PipelinePhase.SCREENING]: PhaseStatus.RUNNING,
+        },
+        currentPhase: PipelinePhase.SCREENING,
+      });
+    } catch (err) {
+      // Non-fatal — progress seeding is UX-only; rescreen still runs.
+      // (Lens-level events are still emitted from runScreening below.)
+      void err;
+    }
+
     const result = await this.screeningProcessor.runScreening(
       startupId,
       pipelineRunId,
       { userId: _user.id },
     );
+
+    // Mark SCREENING phase complete for the live view.
+    try {
+      await this.progressTracker.updatePhaseProgress({
+        startupId,
+        userId: _user.id,
+        pipelineRunId,
+        phase: PipelinePhase.SCREENING,
+        status: PhaseStatus.COMPLETED,
+      });
+    } catch (err) {
+      void err;
+    }
+
     return {
       ok: true,
       pipelineRunId,

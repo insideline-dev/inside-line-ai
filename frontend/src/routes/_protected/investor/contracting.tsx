@@ -9,7 +9,7 @@ export const Route = createFileRoute("/_protected/investor/contracting")({
 
 function ContractingPage() {
   return (
-    <div className="flex flex-col gap-4 p-6">
+    <div className="flex flex-col gap-4">
       <StageNav />
       <div>
         <h1 className="text-2xl font-semibold">Contracting</h1>

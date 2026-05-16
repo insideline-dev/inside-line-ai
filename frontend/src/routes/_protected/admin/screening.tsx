@@ -98,7 +98,9 @@ function AdminScreeningPage() {
     [data],
   );
   const { activeRows, rejectedRows } = useMemo(() => {
-    const active = rows.filter((r) => r.verdict !== "reject");
+    // Show only REVIEW in the active queue; ADVANCED deals belong on
+    // the DD tab. REJECTED deals live in the collapsed archive.
+    const active = rows.filter((r) => r.verdict === "review");
     const rejected = rows.filter((r) => r.verdict === "reject");
     return { activeRows: active, rejectedRows: rejected };
   }, [rows]);

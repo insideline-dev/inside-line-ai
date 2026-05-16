@@ -207,6 +207,21 @@ function ScreeningPage() {
     staleTime: 30_000,
   });
 
+  const invalidateStageQueries = () => {
+    // After PASS or ADVANCE, all four stage surfaces may need to refetch:
+    //   - screening: the row leaves the active queue
+    //   - investor pipeline (DD list): an advanced deal might appear here
+    //     once synthesis completes; even before that, refetching wakes any
+    //     count badges
+    //   - admin screening: admin sees the same row globally
+    //   - startup detail: status/verdict surfaces change
+    queryClient.invalidateQueries({ queryKey: ["investor", "screening"] });
+    queryClient.invalidateQueries({ queryKey: ["investor", "pipeline"] });
+    queryClient.invalidateQueries({ queryKey: ["admin", "screening"] });
+    // Orval generates startup-controller keys with this prefix
+    queryClient.invalidateQueries({ queryKey: ["startupController"] });
+  };
+
   const advanceMutation = useMutation({
     mutationFn: (startupId: string) =>
       customFetch<{ ok: boolean; startupId: string; verdict: "advance"; note: string }>(
@@ -215,7 +230,7 @@ function ScreeningPage() {
       ),
     onSuccess: (res) => {
       toast.success("Advanced to Due Diligence", { description: res.note });
-      queryClient.invalidateQueries({ queryKey: ["investor", "screening"] });
+      invalidateStageQueries();
     },
     onError: (err) =>
       toast.error("Advance failed", { description: (err as Error).message }),
@@ -229,7 +244,7 @@ function ScreeningPage() {
       ),
     onSuccess: () => {
       toast.success("Marked as passed — moved to rejected archive.");
-      queryClient.invalidateQueries({ queryKey: ["investor", "screening"] });
+      invalidateStageQueries();
     },
     onError: (err) =>
       toast.error("Pass failed", { description: (err as Error).message }),
@@ -280,7 +295,13 @@ function ScreeningPage() {
     !isLoading && !error && (!backendRows || backendRows.length === 0);
 
   const { activeRows, rejectedRows, advancedRowIds } = useMemo(() => {
-    const active = rows.filter((r) => r.verdict !== "reject");
+    // Screening tab shows only deals awaiting partner action.
+    //   - REVIEW: needs Pass/Advance
+    //   - REJECT: auto-rejected, lives in collapsed archive
+    //   - ADVANCE: deal has left screening; lives in the DD tab.
+    // Filtering out 'advance' here matches the plan's "ADVANCE → deal
+    // leaves Screening tab" behavior.
+    const active = rows.filter((r) => r.verdict === "review");
     const rejected = rows.filter((r) => r.verdict === "reject");
     const advanced = new Set(
       rows.filter((r) => r.verdict === "advance").map((r) => r.id),

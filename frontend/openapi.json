@@ -3386,6 +3386,20 @@
         ]
       }
     },
+    "/admin/screening": {
+      "get": {
+        "operationId": "AdminController_getScreeningQueue",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
     "/admin/stats": {
       "get": {
         "operationId": "AdminController_getStats",

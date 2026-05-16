@@ -348,7 +348,7 @@ export function RoleSidebar({ role, children }: RoleSidebarProps) {
             <ThemeToggle />
           </div>
         </header>
-        <main className="min-h-0 flex-1 overflow-auto p-6">{children}</main>
+        <main className="min-h-0 flex-1 overflow-auto px-6 py-3">{children}</main>
       </SidebarInset>
     </SidebarProvider>
   );

@@ -354,7 +354,7 @@ function ScreeningPage() {
   }, [openId, rows]);
 
   return (
-    <div className="flex flex-col gap-4 p-6">
+    <div className="flex flex-col gap-4">
       <StageNav counts={{ screening: activeRows.length }} />
 
       <div className="flex items-baseline justify-between">

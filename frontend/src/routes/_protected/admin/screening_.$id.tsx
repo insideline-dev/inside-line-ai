@@ -78,7 +78,7 @@ function AdminScreeningDetailPage() {
   });
 
   return (
-    <div className="flex flex-col gap-4 p-6">
+    <div className="flex flex-col gap-4">
       <StageNav surface="admin" />
 
       <div className="flex items-center justify-between">

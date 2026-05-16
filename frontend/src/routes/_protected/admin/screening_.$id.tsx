@@ -3,17 +3,30 @@ import { ChevronLeft, RefreshCw, Loader2 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@/api/client";
 import { StageNav } from "@/components/investor/StageNav";
-import { ScreeningPipelineLive } from "@/components/admin/ScreeningPipelineLive";
+import { AdminPipelineLivePanel } from "@/components/startup-view/AdminPipelineLivePanel";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useStartupControllerFindOne } from "@/api/generated/startups/startups";
 
-// Note: the `_` after `screening` is a TanStack escape — it keeps the URL
-// path as /admin/screening/$id but opts the route OUT of nesting under the
-// /admin/screening parent (which is a queue page without an <Outlet />).
+/**
+ * Admin DS pipeline detail. Re-uses the same AdminPipelineLivePanel that
+ * the DD view uses — same agent traces, retry surfaces, phase data
+ * inspector, activity stream with filters — scoped to the six DS-side
+ * phases via `phaseFilter`. Investors see the per-deal screening card on
+ * /investor/screening; admin gets full pipeline-debug visibility here.
+ */
 export const Route = createFileRoute("/_protected/admin/screening_/$id")({
   component: AdminScreeningDetailPage,
 });
+
+const DS_PHASES = [
+  "classification",
+  "extraction",
+  "enrichment",
+  "scraping",
+  "research",
+  "screening",
+] as const;
 
 function unwrap<T>(payload: unknown): T | undefined {
   if (
@@ -32,7 +45,7 @@ function AdminScreeningDetailPage() {
   const { data: startupRes } = useStartupControllerFindOne(id, {
     query: { retry: false },
   });
-  const startup = unwrap<{ name?: string }>(startupRes);
+  const startup = unwrap<{ name?: string; status?: string }>(startupRes);
 
   const rescreen = useMutation({
     mutationFn: () =>
@@ -46,6 +59,18 @@ function AdminScreeningDetailPage() {
     },
     onError: (err) =>
       toast.error("Re-screen failed", { description: (err as Error).message }),
+  });
+
+  const cancelPipeline = useMutation({
+    mutationFn: () =>
+      customFetch<{ cancelled: boolean }>(
+        `/admin/startups/${id}/cancel-pipeline`,
+        { method: "POST" },
+      ),
+    onSuccess: () =>
+      toast.success("Pipeline cancellation requested"),
+    onError: (err) =>
+      toast.error("Cancel failed", { description: (err as Error).message }),
   });
 
   return (
@@ -80,7 +105,13 @@ function AdminScreeningDetailPage() {
         </Button>
       </div>
 
-      <ScreeningPipelineLive startupId={id} />
+      <AdminPipelineLivePanel
+        startupId={id}
+        startupStatus={startup?.status ?? "unknown"}
+        phaseFilter={DS_PHASES}
+        title="Screening Pipeline Live"
+        onCancelPipeline={() => cancelPipeline.mutate()}
+      />
     </div>
   );
 }

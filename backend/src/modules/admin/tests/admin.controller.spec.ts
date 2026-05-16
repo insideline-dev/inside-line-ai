@@ -22,6 +22,7 @@ import { AgentConfigService } from '../../ai/services/agent-config.service';
 import { DynamicFlowCatalogService } from '../../ai/services/dynamic-flow-catalog.service';
 import { EarlyAccessService } from '../../early-access';
 import { AdminInvestorService } from '../admin-investor.service';
+import { ScreeningQueueService } from '../../investor/screening-queue.service';
 import { AiConfigService } from '../../ai/services/ai-config.service';
 import { AiModelOverrideService } from '../../ai/services/ai-model-override.service';
 import { UserRole } from '../../../auth/entities/auth.schema';
@@ -256,6 +257,10 @@ describe('AdminController', () => {
             getCalibrationSummary: jest.fn(),
             recomputeCalibrationSummary: jest.fn(),
           },
+        },
+        {
+          provide: ScreeningQueueService,
+          useValue: { getQueue: jest.fn() },
         },
       ],
     }).compile();

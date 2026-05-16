@@ -1993,15 +1993,21 @@ export class PipelineService {
     }
 
     // Honor partner override: if an investor explicitly clicked ADVANCE
-    // (recorded as investor_deal_decision verdict='advance') AFTER the
-    // current pipeline run started, treat the deal as advance regardless
-    // of what this run's automatic screening classification returned.
-    // Otherwise a fresh full pipeline restarted via the advance endpoint
-    // would re-screen and the new (possibly review/reject) verdict would
-    // cancel the partner's intent.
-    const runStartedAt = state.createdAt
-      ? new Date(state.createdAt)
-      : new Date(0);
+    // recently (recorded as investor_deal_decision verdict='advance'),
+    // treat the deal as advance regardless of this run's automatic
+    // screening classification. Otherwise a fresh full pipeline restarted
+    // via the advance endpoint would re-screen and the new (possibly
+    // review/reject) verdict would cancel the partner's intent.
+    //
+    // We use a 1h lookback (rather than strict decidedAt >= runStartedAt)
+    // because the advance endpoint records the decision and starts the
+    // pipeline within ms of each other — clock skew between the DB now()
+    // and JS Date.now() can put decidedAt either side of runStartedAt.
+    // 1h is comfortably longer than any single pipeline run and short
+    // enough that a stale decision from days ago won't pollute a manual
+    // re-run.
+    const OVERRIDE_WINDOW_MS = 60 * 60 * 1000;
+    const cutoff = new Date(Date.now() - OVERRIDE_WINDOW_MS);
     const [recentAdvance] = await this.drizzle.db
       .select({ id: investorDealDecision.id, decidedAt: investorDealDecision.decidedAt })
       .from(investorDealDecision)
@@ -2013,7 +2019,7 @@ export class PipelineService {
       )
       .orderBy(desc(investorDealDecision.decidedAt))
       .limit(1);
-    if (recentAdvance && new Date(recentAdvance.decidedAt) >= runStartedAt) {
+    if (recentAdvance && new Date(recentAdvance.decidedAt) >= cutoff) {
       this.logger.log(
         `[Pipeline] Investor advance override active for startup ${state.startupId} (decision ${recentAdvance.id}); honoring partner intent over auto-classification '${screening.classification}'.`,
       );

@@ -11,9 +11,14 @@ import { useStartupControllerFindOne } from "@/api/generated/startups/startups";
 /**
  * Admin DS pipeline detail. Re-uses the same AdminPipelineLivePanel that
  * the DD view uses — same agent traces, retry surfaces, phase data
- * inspector, activity stream with filters — scoped to the six DS-side
- * phases via `phaseFilter`. Investors see the per-deal screening card on
- * /investor/screening; admin gets full pipeline-debug visibility here.
+ * inspector, activity stream with filters — scoped to the DS-side
+ * phases only.
+ *
+ * DS phases (in order): classification → extraction → enrichment →
+ * scraping → screening. Research / evaluation / synthesis are
+ * intentionally DD-only and hidden from this view; the screening
+ * lenses (market / team / traction) do their own light research
+ * internally as part of the SCREENING phase.
  */
 export const Route = createFileRoute("/_protected/admin/screening_/$id")({
   component: AdminScreeningDetailPage,
@@ -24,7 +29,6 @@ const DS_PHASES = [
   "extraction",
   "enrichment",
   "scraping",
-  "research",
   "screening",
 ] as const;
 

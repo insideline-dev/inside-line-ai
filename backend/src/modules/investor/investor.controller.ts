@@ -508,6 +508,10 @@ export class InvestorController {
     // the SCREENING phase — the earlier phases are reused from the original
     // pipeline run. We mark them COMPLETED for the UI and SCREENING as
     // RUNNING so the user sees the right state.
+    // DS phases only — research/evaluation/synthesis are DD-only and
+    // intentionally not part of the screening live view. The lens agents
+    // (market/team/traction) do their own light research inside the
+    // SCREENING phase.
     try {
       await this.progressTracker.initProgress({
         startupId,
@@ -518,7 +522,6 @@ export class InvestorController {
           PipelinePhase.EXTRACTION,
           PipelinePhase.ENRICHMENT,
           PipelinePhase.SCRAPING,
-          PipelinePhase.RESEARCH,
           PipelinePhase.SCREENING,
         ],
         initialPhaseStatuses: {
@@ -526,7 +529,6 @@ export class InvestorController {
           [PipelinePhase.EXTRACTION]: PhaseStatus.COMPLETED,
           [PipelinePhase.ENRICHMENT]: PhaseStatus.COMPLETED,
           [PipelinePhase.SCRAPING]: PhaseStatus.COMPLETED,
-          [PipelinePhase.RESEARCH]: PhaseStatus.COMPLETED,
           [PipelinePhase.SCREENING]: PhaseStatus.RUNNING,
         },
         currentPhase: PipelinePhase.SCREENING,

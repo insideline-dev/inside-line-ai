@@ -1,7 +1,9 @@
 import { BadRequestException, Injectable, Logger, Optional } from "@nestjs/common";
 import { ModuleRef } from "@nestjs/core";
 import { randomUUID } from "crypto";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
+import { investorDealDecision } from "../../investor/entities/investor-deal-decision.schema";
+import { screeningDecision as screeningDecisionTbl } from "../entities/screening-decision.schema";
 import { DrizzleService } from "../../../database";
 import { StorageService } from "../../../storage";
 import { NotificationType } from "../../../notification/entities";
@@ -1987,6 +1989,54 @@ export class PipelineService {
     )) as ScreeningResult | null;
 
     if (!screening?.classification || screening.classification === "advance") {
+      return;
+    }
+
+    // Honor partner override: if an investor explicitly clicked ADVANCE
+    // (recorded as investor_deal_decision verdict='advance') AFTER the
+    // current pipeline run started, treat the deal as advance regardless
+    // of what this run's automatic screening classification returned.
+    // Otherwise a fresh full pipeline restarted via the advance endpoint
+    // would re-screen and the new (possibly review/reject) verdict would
+    // cancel the partner's intent.
+    const runStartedAt = state.createdAt
+      ? new Date(state.createdAt)
+      : new Date(0);
+    const [recentAdvance] = await this.drizzle.db
+      .select({ id: investorDealDecision.id, decidedAt: investorDealDecision.decidedAt })
+      .from(investorDealDecision)
+      .where(
+        and(
+          eq(investorDealDecision.startupId, state.startupId),
+          eq(investorDealDecision.verdict, "advance"),
+        ),
+      )
+      .orderBy(desc(investorDealDecision.decidedAt))
+      .limit(1);
+    if (recentAdvance && new Date(recentAdvance.decidedAt) >= runStartedAt) {
+      this.logger.log(
+        `[Pipeline] Investor advance override active for startup ${state.startupId} (decision ${recentAdvance.id}); honoring partner intent over auto-classification '${screening.classification}'.`,
+      );
+      // Patch the persisted screening_decision row so the queue + UI
+      // reflect the override too.
+      try {
+        const [latest] = await this.drizzle.db
+          .select({ id: screeningDecisionTbl.id })
+          .from(screeningDecisionTbl)
+          .where(eq(screeningDecisionTbl.startupId, state.startupId))
+          .orderBy(desc(screeningDecisionTbl.createdAt))
+          .limit(1);
+        if (latest) {
+          await this.drizzle.db
+            .update(screeningDecisionTbl)
+            .set({ classification: "advance" })
+            .where(eq(screeningDecisionTbl.id, latest.id));
+        }
+      } catch (err) {
+        this.logger.warn(
+          `[Pipeline] Could not patch screening_decision verdict for advance override on ${state.startupId}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
       return;
     }
 

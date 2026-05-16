@@ -19,6 +19,7 @@ import { ScreeningQueueService } from "../screening-queue.service";
 import { ScreeningCalibrationService } from "../screening-calibration.service";
 import { ScreeningProcessor } from "../../ai/processors/screening.processor";
 import { PipelineService } from "../../ai/services/pipeline.service";
+import { ProgressTrackerService } from "../../ai/orchestrator/progress-tracker.service";
 import { DrizzleService } from "../../../database";
 import { UserRole } from "../../../auth/entities/auth.schema";
 
@@ -74,6 +75,13 @@ describe("InvestorController.rescreenForDev", () => {
         { provide: ScreeningCalibrationService, useValue: {} },
         { provide: ScreeningProcessor, useValue: screeningProcessor },
         { provide: PipelineService, useValue: { rerunFromPhase: jest.fn() } },
+        {
+          provide: ProgressTrackerService,
+          useValue: {
+            initProgress: jest.fn().mockResolvedValue(undefined),
+            updatePhaseProgress: jest.fn().mockResolvedValue(undefined),
+          },
+        },
         {
           provide: DrizzleService,
           useValue: { db: { insert: drizzleInsert } },

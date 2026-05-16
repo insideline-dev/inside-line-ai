@@ -19,6 +19,7 @@ import { ScreeningQueueService } from "../screening-queue.service";
 import { ScreeningCalibrationService } from "../screening-calibration.service";
 import { ScreeningProcessor } from "../../ai/processors/screening.processor";
 import { PipelineService } from "../../ai/services/pipeline.service";
+import { ProgressTrackerService } from "../../ai/orchestrator/progress-tracker.service";
 import { DrizzleService } from "../../../database";
 import { UserRole } from "../../../auth/entities/auth.schema";
 
@@ -79,6 +80,13 @@ describe("InvestorController.advanceFromScreening", () => {
         { provide: ScreeningCalibrationService, useValue: {} },
         { provide: ScreeningProcessor, useValue: {} },
         { provide: PipelineService, useValue: pipelineService },
+        {
+          provide: ProgressTrackerService,
+          useValue: {
+            initProgress: jest.fn(),
+            updatePhaseProgress: jest.fn(),
+          },
+        },
         {
           provide: DrizzleService,
           useValue: {
@@ -167,6 +175,13 @@ describe("InvestorController.passFromScreening", () => {
         { provide: ScreeningCalibrationService, useValue: {} },
         { provide: ScreeningProcessor, useValue: {} },
         { provide: PipelineService, useValue: { rerunFromPhase: jest.fn() } },
+        {
+          provide: ProgressTrackerService,
+          useValue: {
+            initProgress: jest.fn(),
+            updatePhaseProgress: jest.fn(),
+          },
+        },
         {
           provide: DrizzleService,
           useValue: {

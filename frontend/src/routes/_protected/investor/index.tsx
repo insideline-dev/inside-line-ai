@@ -116,7 +116,18 @@ type PipelineData = {
   engaged: PipelineMatch[];
   closed: PipelineMatch[];
   passed: PipelineMatch[];
-  stats: { total: number; byStatus: Record<string, number> };
+  inFlight?: Array<{
+    startupId: string;
+    startupName: string;
+    startupLogoUrl: string | null;
+    startupStage: string | null;
+    startupIndustry: string | null;
+    startupDescription: string | null;
+    startupStatus: string;
+    createdAt: string;
+    verdict: string;
+  }>;
+  stats: { total: number; byStatus: Record<string, number>; inFlight?: number };
 };
 
 type Status = PipelineMatch["status"];
@@ -1512,9 +1523,33 @@ function InvestorDashboard() {
     );
   }
 
+  const inFlightDeals = pipeline?.inFlight ?? [];
+
   return (
     <div className="space-y-6">
-      <StageNav />
+      <StageNav counts={{ dd: (pipeline?.stats?.total ?? 0) }} />
+      {inFlightDeals.length > 0 && (
+        <div className="flex flex-col gap-2 rounded-md border border-sky-300 bg-sky-50 p-4 text-sky-900">
+          <div className="flex items-center gap-2 font-semibold">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            {inFlightDeals.length} deal{inFlightDeals.length === 1 ? "" : "s"} in due diligence (synthesis in progress)
+          </div>
+          <ul className="text-sm pl-6 list-disc">
+            {inFlightDeals.map((d) => (
+              <li key={d.startupId}>
+                <Link
+                  to="/investor/startup/$id"
+                  params={{ id: d.startupId }}
+                  className="hover:underline"
+                >
+                  {d.startupName}
+                </Link>
+                {d.startupStage ? ` — ${d.startupStage}` : ""}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {showThesisWarning && (
         <div className="flex flex-col gap-3 border border-amber-300 bg-amber-50 p-4 text-amber-900 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3">

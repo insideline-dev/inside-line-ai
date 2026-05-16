@@ -326,27 +326,51 @@ export class InvestorController {
     });
 
     // 3. Re-run from EVALUATION. rerunFromPhase preserves all upstream phase
-    //    outputs — exactly the reuse semantics §10/PR4 specifies.
+    //    outputs (extraction / enrichment / scraping / research / screening) —
+    //    exactly the reuse semantics §10/PR4 specifies. If no live or
+    //    snapshot state exists (e.g. an old rescreen-dev-only deal whose
+    //    Redis state has expired and never produced a snapshot), fall back
+    //    to a fresh full pipeline — slower but correct.
+    let path: 'rerun_from_eval' | 'fresh_full_pipeline' = 'rerun_from_eval';
     try {
       await this.pipelineCoreService.rerunFromPhase(
         startupId,
         PipelinePhase.EVALUATION,
       );
     } catch (err) {
-      // Surface a clearer error if no live pipeline state exists (e.g. an
-      // old deal whose screening ran via the dev rescreen path). Caller can
-      // fall back to a fresh startPipeline if they want.
       const message = err instanceof Error ? err.message : String(err);
-      throw new NotFoundException(
-        `Could not start DD from screening — ${message}. Try restarting the full pipeline.`,
-      );
+      const isStateMissing = /not found/i.test(message);
+      if (!isStateMissing) {
+        throw new NotFoundException(
+          `Could not start DD from screening — ${message}`,
+        );
+      }
+      try {
+        // skipExtraction reuses the cached extraction result if any.
+        await this.pipelineCoreService.startPipeline(startupId, user.id, {
+          skipExtraction: true,
+        });
+        path = 'fresh_full_pipeline';
+      } catch (fallbackErr) {
+        const fbMsg =
+          fallbackErr instanceof Error
+            ? fallbackErr.message
+            : String(fallbackErr);
+        throw new NotFoundException(
+          `Could not start DD from screening — ${fbMsg}`,
+        );
+      }
     }
 
     return {
       ok: true,
       startupId,
       verdict: 'advance' as const,
-      note: 'Evaluation + synthesis queued; deal will move to DD when complete.',
+      path,
+      note:
+        path === 'rerun_from_eval'
+          ? 'Evaluation + synthesis queued; deal will move to DD when complete.'
+          : 'No prior pipeline state — full pipeline restarted; deal will move to DD when complete.',
     };
   }
 

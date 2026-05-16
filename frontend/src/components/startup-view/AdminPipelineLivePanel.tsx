@@ -43,6 +43,17 @@ interface AdminPipelineLivePanelProps {
   } | null;
   onClearTrackedRetry?: () => void;
   onCancelPipeline?: () => void;
+  /**
+   * Optional whitelist of phases to render. When set, only phases in the
+   * list appear in the phase list, the activity stream, and the trace
+   * filters — used by the admin DS pipeline view to scope the existing
+   * full DD-panel UI to the six screening-side phases (classification →
+   * extraction → enrichment → scraping → research → screening) without
+   * forking the component.
+   */
+  phaseFilter?: ReadonlyArray<string>;
+  /** Override panel title (default "Pipeline (Live)"). */
+  title?: string;
 }
 
 type FlattenedAgent = {
@@ -1025,6 +1036,8 @@ export function AdminPipelineLivePanel({
   trackedRetry,
   onClearTrackedRetry,
   onCancelPipeline,
+  phaseFilter,
+  title,
 }: AdminPipelineLivePanelProps) {
   const [selectedTrace, setSelectedTrace] = useState<PipelineAgentTrace | null>(null);
   const [retryingAgentKey, setRetryingAgentKey] = useState<string | null>(null);
@@ -1033,6 +1046,11 @@ export function AdminPipelineLivePanel({
     pollMs: 1500,
     useSocket: true,
   });
+
+  const phaseAllowSet = useMemo(
+    () => (phaseFilter ? new Set(phaseFilter) : null),
+    [phaseFilter],
+  );
 
   const phaseEntries = useMemo(() => {
     const tracesByPhaseAgent = new Map<string, number>();
@@ -1053,6 +1071,7 @@ export function AdminPipelineLivePanel({
       ...Object.keys(progress?.phases ?? {}),
     ]);
     return Array.from(keys)
+      .filter((phase) => !phaseAllowSet || phaseAllowSet.has(phase))
       .sort((a, b) => phaseSortKey(a) - phaseSortKey(b))
       .map((phase) => {
         const data = progress?.phases?.[phase] ?? {
@@ -1096,7 +1115,7 @@ export function AdminPipelineLivePanel({
           totalOpenAiCostUsd,
         };
       });
-  }, [progress?.agentTraces, progress?.phases, progress?.pipelineStatus]);
+  }, [progress?.agentTraces, progress?.phases, progress?.pipelineStatus, phaseAllowSet]);
 
   const flattenedAgents = useMemo<FlattenedAgent[]>(() => {
     const rows: FlattenedAgent[] = [];
@@ -1124,9 +1143,10 @@ export function AdminPipelineLivePanel({
     const events = Array.isArray(progress?.agentEvents)
       ? progress.agentEvents.filter(
           (event) =>
-            !activeRunId ||
-            !event.pipelineRunId ||
-            event.pipelineRunId === activeRunId,
+            (!activeRunId ||
+              !event.pipelineRunId ||
+              event.pipelineRunId === activeRunId) &&
+            (!phaseAllowSet || phaseAllowSet.has(String(event.phase))),
         )
       : [];
     events.sort(
@@ -1145,13 +1165,15 @@ export function AdminPipelineLivePanel({
       }
     }
     return deduped;
-  }, [progress?.agentEvents, progress?.pipelineRunId]);
+  }, [progress?.agentEvents, progress?.pipelineRunId, phaseAllowSet]);
 
   const agentTraceTimeline = useMemo<PipelineAgentTrace[]>(() => {
     const activeRunId = progress?.pipelineRunId;
     const traces = Array.isArray(progress?.agentTraces)
       ? progress.agentTraces.filter(
-          (trace) => !activeRunId || trace.pipelineRunId === activeRunId,
+          (trace) =>
+            (!activeRunId || trace.pipelineRunId === activeRunId) &&
+            (!phaseAllowSet || phaseAllowSet.has(String(trace.phase))),
         )
       : [];
     traces.sort(
@@ -1160,7 +1182,7 @@ export function AdminPipelineLivePanel({
         new Date(a.startedAt ?? a.completedAt ?? 0).getTime(),
     );
     return traces.slice(0, 100);
-  }, [progress?.agentTraces, progress?.pipelineRunId]);
+  }, [progress?.agentTraces, progress?.pipelineRunId, phaseAllowSet]);
 
   const aiAgentTraceTimeline = useMemo(
     () => agentTraceTimeline.filter((trace) => !isPhaseStepTrace(trace)),
@@ -1467,7 +1489,7 @@ export function AdminPipelineLivePanel({
       <CardHeader className="pb-4">
         <CardTitle className="flex flex-wrap items-center gap-2 text-lg">
           <Activity className="h-5 w-5 text-primary" />
-          Pipeline Live
+          {title ?? "Pipeline Live"}
           {totalOpenAiCost && (
             <Badge variant="outline" className="border-border bg-muted/50 text-xs text-foreground">
               Total cost {totalOpenAiCost}

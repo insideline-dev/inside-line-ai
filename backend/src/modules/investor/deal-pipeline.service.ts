@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, or, sql } from 'drizzle-orm';
 import { DrizzleService } from '../../database';
 import { startupMatch, type MatchStatus } from './entities/investor.schema';
 import { startup, StartupStatus } from '../startup/entities/startup.schema';
 import { screeningDecision } from '../ai/entities/screening-decision.schema';
+import { investorDealDecision } from './entities/investor-deal-decision.schema';
 
 @Injectable()
 export class DealPipelineService {
@@ -50,11 +51,16 @@ export class DealPipelineService {
       statuses.map((s) => [s, matches.filter((m) => m.status === s)]),
     ) as Record<MatchStatus, typeof matches>;
 
-    // In-flight DD: startups the investor owns that are mid-DD (status
-    // ANALYZING) and have an `advance` screening_decision but haven't
-    // produced a startup_match row yet (synthesis hasn't finished). Without
-    // this, an investor who just clicked ADVANCE sees the deal disappear
-    // from Screening and never appears on DD until synthesis (~8min) lands.
+    // In-flight DD: startups the investor owns that are post-advance and
+    // not yet visible in the match list. Two cases:
+    //   - status ANALYZING + screening verdict='advance': DD pipeline is
+    //     running right now (eval/synthesis in flight).
+    //   - status PENDING_REVIEW + investor recorded a verdict='advance'
+    //     decision: DD pipeline finished, deal is awaiting admin approval
+    //     before it gets matched against the investor base.
+    // Both cases would otherwise leave the deal invisible to the partner
+    // who clicked ADVANCE — it leaves Screening but doesn't yet appear in
+    // the match list. Surfacing them here closes the sync loop.
     const inFlightRows = await this.drizzle.db
       .select({
         startupId: startup.id,
@@ -72,11 +78,27 @@ export class DealPipelineService {
         screeningDecision,
         eq(screeningDecision.startupId, startup.id),
       )
+      .leftJoin(
+        investorDealDecision,
+        and(
+          eq(investorDealDecision.startupId, startup.id),
+          eq(investorDealDecision.investorId, investorId),
+          eq(investorDealDecision.verdict, 'advance'),
+        ),
+      )
       .where(
         and(
           eq(startup.userId, investorId),
-          eq(startup.status, StartupStatus.ANALYZING),
-          eq(screeningDecision.classification, 'advance'),
+          or(
+            and(
+              eq(startup.status, StartupStatus.ANALYZING),
+              eq(screeningDecision.classification, 'advance'),
+            ),
+            and(
+              eq(startup.status, StartupStatus.PENDING_REVIEW),
+              sql`${investorDealDecision.id} is not null`,
+            ),
+          ),
         ),
       )
       .orderBy(desc(startup.createdAt));

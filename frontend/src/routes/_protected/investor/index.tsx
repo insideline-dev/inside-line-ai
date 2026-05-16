@@ -1532,21 +1532,32 @@ function InvestorDashboard() {
         <div className="flex flex-col gap-2 rounded-md border border-sky-300 bg-sky-50 p-4 text-sky-900">
           <div className="flex items-center gap-2 font-semibold">
             <Loader2 className="h-4 w-4 animate-spin" />
-            {inFlightDeals.length} deal{inFlightDeals.length === 1 ? "" : "s"} in due diligence (synthesis in progress)
+            {inFlightDeals.length} deal{inFlightDeals.length === 1 ? "" : "s"} in due diligence
           </div>
-          <ul className="text-sm pl-6 list-disc">
-            {inFlightDeals.map((d) => (
-              <li key={d.startupId}>
-                <Link
-                  to="/investor/startup/$id"
-                  params={{ id: d.startupId }}
-                  className="hover:underline"
-                >
-                  {d.startupName}
-                </Link>
-                {d.startupStage ? ` — ${d.startupStage}` : ""}
-              </li>
-            ))}
+          <ul className="text-sm pl-6 list-disc space-y-0.5">
+            {inFlightDeals.map((d) => {
+              const stateLabel =
+                d.startupStatus === "analyzing"
+                  ? "running"
+                  : d.startupStatus === "pending_review"
+                    ? "awaiting review"
+                    : d.startupStatus;
+              return (
+                <li key={d.startupId}>
+                  <Link
+                    to="/investor/startup/$id"
+                    params={{ id: d.startupId }}
+                    className="hover:underline font-medium"
+                  >
+                    {d.startupName}
+                  </Link>
+                  {d.startupStage ? ` — ${d.startupStage}` : ""}
+                  <span className="ml-2 text-xs uppercase tracking-wide text-sky-700">
+                    {stateLabel}
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}

@@ -15,7 +15,6 @@ import {
   ThesisAxisFilter,
   matchesThesisAxis,
 } from "@/components/investor/ThesisAxisFilter";
-import { CalibrationCard } from "@/components/investor/CalibrationCard";
 import { StageNav } from "@/components/investor/StageNav";
 import { useFilterStore } from "@/stores";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -1690,9 +1689,10 @@ function InvestorDashboard() {
           Renders only when the investor's thesis declares industries. */}
       <ThesisAxisFilter className="px-1" />
 
-      {/* DS-E7-F3-S1 — calibration card. Auto-hides until the investor has
-          recorded a few decisions; surfaces aggregate mismatch counts. */}
-      <CalibrationCard />
+      {/* Calibration card disabled — to be rebuilt from scratch.
+          The component, hooks, and backend services are intact; only
+          the mount is removed. Restore by uncommenting and re-importing.
+          <CalibrationCard /> */}
 
 
       {/* ─── Content Area ───

@@ -378,7 +378,8 @@ function AdminInvestorsPage() {
                     Matches ({detail.matches.length})
                   </TabsTrigger>
                   <TabsTrigger value="scoring">Scoring</TabsTrigger>
-                  <TabsTrigger value="calibration">Calibration</TabsTrigger>
+                  {/* Calibration tab disabled — to be rebuilt from scratch.
+                      <TabsTrigger value="calibration">Calibration</TabsTrigger> */}
                 </TabsList>
 
                 <ScrollArea className="flex-1">

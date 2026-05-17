@@ -1,5 +1,8 @@
 import { Link, useLocation } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
+import { customFetch } from "@/api/client";
+import { useInvestorControllerGetPipeline } from "@/api/generated/investor/investor";
 import { cn } from "@/lib/utils";
 
 export interface StageCounts {
@@ -10,6 +13,7 @@ export interface StageCounts {
 }
 
 interface StageNavProps {
+  /** Optional manual override. Counts not supplied here are fetched. */
   counts?: StageCounts;
   className?: string;
   /**
@@ -60,6 +64,69 @@ function stagesFor(surface: "investor" | "admin"): StageDef[] {
   ];
 }
 
+interface PipelineLike {
+  stats?: { total?: number; inFlight?: number };
+}
+
+function unwrap<T>(payload: unknown): T | null {
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "data" in (payload as Record<string, unknown>)
+  ) {
+    return ((payload as Record<string, unknown>).data ?? null) as T | null;
+  }
+  return (payload ?? null) as T | null;
+}
+
+function useAutoCounts(surface: "investor" | "admin", overrides: StageCounts) {
+  // Screening: count REVIEW-verdict rows. Shared key with the screening
+  // page so a single fetch serves both.
+  const screeningEnabled =
+    surface === "investor" && overrides.screening === undefined;
+  const screeningQ = useQuery({
+    queryKey: ["investor", "screening"],
+    queryFn: () =>
+      customFetch<Array<{ verdict?: string }>>("/investor/screening"),
+    staleTime: 30_000,
+    enabled: screeningEnabled,
+  });
+
+  // DD: investor pipeline stats.total (active deals). Reuses the Orval hook
+  // so it shares cache with the DD home page.
+  const pipelineQ = useInvestorControllerGetPipeline({
+    query: {
+      staleTime: 30_000,
+      enabled: surface === "investor" && overrides.dd === undefined,
+    },
+  });
+
+  // Portfolio: number of items in the investor portfolio.
+  const portfolioQ = useQuery({
+    queryKey: ["investor", "portfolio"],
+    queryFn: () => customFetch<unknown[]>("/investor/portfolio"),
+    staleTime: 60_000,
+    enabled: surface === "investor" && overrides.portfolio === undefined,
+  });
+
+  const pipeline = unwrap<PipelineLike>(pipelineQ.data);
+
+  return {
+    screening:
+      overrides.screening ??
+      (Array.isArray(screeningQ.data)
+        ? screeningQ.data.filter((r) => r.verdict === "review").length
+        : undefined),
+    dd:
+      overrides.dd ??
+      (pipeline?.stats?.total !== undefined ? pipeline.stats.total : undefined),
+    contracting: overrides.contracting ?? 0,
+    portfolio:
+      overrides.portfolio ??
+      (Array.isArray(portfolioQ.data) ? portfolioQ.data.length : undefined),
+  };
+}
+
 export function StageNav({
   counts = {},
   className,
@@ -67,6 +134,7 @@ export function StageNav({
 }: StageNavProps) {
   const { pathname } = useLocation();
   const STAGES = stagesFor(surface);
+  const resolved = useAutoCounts(surface, counts);
 
   return (
     <nav
@@ -78,7 +146,7 @@ export function StageNav({
     >
       {STAGES.map((stage) => {
         const active = stage.matches(pathname);
-        const count = counts[stage.key];
+        const count = resolved[stage.key];
         return (
           <Link
             key={stage.key}
@@ -92,8 +160,14 @@ export function StageNav({
             data-testid={`stage-nav-${stage.key}`}
           >
             {stage.label}
-            {typeof count === "number" && count > 0 && (
-              <Badge variant="secondary" className="h-5 px-1.5 text-xs">
+            {typeof count === "number" && (
+              <Badge
+                variant="secondary"
+                className={cn(
+                  "h-5 px-1.5 text-xs",
+                  count === 0 && !active && "opacity-60",
+                )}
+              >
                 {count}
               </Badge>
             )}

@@ -79,124 +79,6 @@ function mapBackendRow(row: BackendScreeningRow): ScreeningRow {
   };
 }
 
-// PLACEHOLDER seed rows so the page renders end-to-end before PR4 wires
-// the real screening pipeline to a real endpoint. Includes the
-// California/US regression case (Acme — geography MATCH despite being
-// labelled California) to validate the thesis-fit shape end-to-end.
-const SEED_ROWS: ScreeningRow[] = [
-  {
-    id: "seed-1",
-    companyName: "Acme AI",
-    industry: "AI infrastructure",
-    verdict: "review",
-    submittedAt: new Date(Date.now() - 1000 * 60 * 7).toISOString(),
-    fit: {
-      geography: { status: "match", note: "California is part of US thesis" },
-      stage: { status: "borderline", note: "Pre-seed against seed thesis" },
-      sector: { status: "match", note: "AI infra aligned" },
-      checkSize: { status: "mismatch", note: "$5M round vs $2M cap" },
-      overall: 62,
-      rationale:
-        "Sector and geography are strong; check size is the blocker.",
-    },
-    lensScores: [
-      { key: "market", label: "Market", score: 78, note: "Strong TAM signal" },
-      { key: "team", label: "Team", score: 65, note: "Ex-Stripe founders, no domain expertise" },
-      { key: "traction", label: "Traction", score: 41, note: "Pre-revenue, design partners only" },
-    ],
-    triageRationale:
-      "Mixed signals — fit hits 3/4 axes but check-size exceeds policy. Worth a 5-minute review.",
-  },
-  {
-    id: "seed-2",
-    companyName: "Beta Labs",
-    industry: "Devtools",
-    verdict: "advance",
-    submittedAt: new Date(Date.now() - 1000 * 60 * 22).toISOString(),
-    fit: {
-      geography: { status: "match", note: "Berlin matches EU thesis" },
-      stage: { status: "match", note: "Seed-stage" },
-      sector: { status: "match", note: "Devtools aligned" },
-      checkSize: { status: "match", note: "$1.5M within range" },
-      overall: 88,
-      rationale: "Clean fit across all four axes.",
-    },
-    lensScores: [
-      { key: "market", label: "Market", score: 82 },
-      { key: "team", label: "Team", score: 84 },
-      { key: "traction", label: "Traction", score: 79 },
-    ],
-    triageRationale:
-      "Clean across the board — no flags. Advanced automatically to DD.",
-  },
-  {
-    id: "seed-3",
-    companyName: "Delta Co",
-    industry: "Climate hardware",
-    verdict: "review",
-    submittedAt: new Date(Date.now() - 1000 * 60 * 90).toISOString(),
-    fit: {
-      geography: { status: "match", note: "US-based" },
-      stage: { status: "match", note: "Seed-stage" },
-      sector: { status: "borderline", note: "Hardware adjacent to thesis" },
-      checkSize: { status: "match", note: "Within range" },
-      overall: 74,
-      rationale: "Sector is the open question.",
-    },
-    lensScores: [
-      { key: "market", label: "Market", score: 70 },
-      { key: "team", label: "Team", score: 72, note: "Strong climate operator" },
-      { key: "traction", label: "Traction", score: 55, note: "Two pilot LOIs" },
-    ],
-    triageRationale:
-      "Borderline on sector — adjacent but not core. Investor judgement needed.",
-  },
-  {
-    id: "seed-4",
-    companyName: "Gamma Inc",
-    industry: "Crypto",
-    verdict: "reject",
-    submittedAt: new Date(Date.now() - 1000 * 60 * 60 * 18).toISOString(),
-    dealbreakerNote: "Crypto is in dealbreakers",
-    fit: {
-      geography: { status: "match", note: "US-based" },
-      stage: { status: "match", note: "Seed" },
-      sector: { status: "mismatch", note: "Crypto dealbreaker triggered" },
-      checkSize: { status: "borderline", note: "Range unclear" },
-      overall: 18,
-      rationale: "Dealbreaker on sector.",
-    },
-    lensScores: [
-      { key: "market", label: "Market", score: 40 },
-      { key: "team", label: "Team", score: 55 },
-      { key: "traction", label: "Traction", score: 30 },
-    ],
-    triageRationale: "Auto-rejected — dealbreaker on sector.",
-  },
-  {
-    id: "seed-5",
-    companyName: "Epsilon Health",
-    industry: "Digital health",
-    verdict: "reject",
-    submittedAt: new Date(Date.now() - 1000 * 60 * 60 * 36).toISOString(),
-    dealbreakerNote: "Stage mismatch (pre-product)",
-    fit: {
-      geography: { status: "match", note: "US-based" },
-      stage: { status: "mismatch", note: "Pre-product vs seed thesis" },
-      sector: { status: "borderline", note: "Health-adjacent" },
-      checkSize: { status: "borderline", note: "Below floor" },
-      overall: 22,
-      rationale: "Too early.",
-    },
-    lensScores: [
-      { key: "market", label: "Market", score: 50 },
-      { key: "team", label: "Team", score: 60 },
-      { key: "traction", label: "Traction", score: 15 },
-    ],
-    triageRationale: "Auto-rejected — pre-product, below stage floor.",
-  },
-];
-
 function ScreeningPage() {
   const queryClient = useQueryClient();
   const { data: backendRows, isLoading, error } = useQuery({
@@ -250,12 +132,10 @@ function ScreeningPage() {
 
   // Pessimistic local mirror so PASS/ADVANCE update the row immediately.
   // Source of truth is the backend; we patch verdict in-place on action.
-  const sourceRows = useMemo<ScreeningRow[]>(() => {
-    if (Array.isArray(backendRows) && backendRows.length > 0) {
-      return backendRows.map(mapBackendRow);
-    }
-    return SEED_ROWS;
-  }, [backendRows]);
+  const sourceRows = useMemo<ScreeningRow[]>(
+    () => (Array.isArray(backendRows) ? backendRows.map(mapBackendRow) : []),
+    [backendRows],
+  );
 
   const [overrides, setOverrides] = useState<
     Record<string, Partial<ScreeningRow>>
@@ -288,8 +168,6 @@ function ScreeningPage() {
   );
 
   const [showRejected, setShowRejected] = useState(false);
-  const usingPlaceholder =
-    !isLoading && !error && (!backendRows || backendRows.length === 0);
 
   const { activeRows, rejectedRows, advancedRowIds } = useMemo(() => {
     // Screening tab shows only deals awaiting partner action.
@@ -417,14 +295,6 @@ function ScreeningPage() {
         </div>
       )}
 
-      {usingPlaceholder && (
-        <div className="rounded-md border border-dashed border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
-          <strong>No screened deals yet.</strong> Showing placeholder rows
-          until the first triage decision lands. Submit a startup from{" "}
-          <em>Analyze Startup</em> — once the pipeline finishes, the real
-          row replaces these.
-        </div>
-      )}
       {error && (
         <div className="rounded-md border border-red-300 bg-red-50 p-3 text-xs text-red-900">
           Failed to load screening queue: {(error as Error).message}

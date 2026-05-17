@@ -63,6 +63,7 @@ import { Route as ProtectedAdminAnalyticsRouteImport } from './routes/_protected
 import { Route as ProtectedAdminAgentsRouteImport } from './routes/_protected/admin/agents'
 import { Route as ProtectedScoutStartupIdRouteImport } from './routes/_protected/scout/startup.$id'
 import { Route as ProtectedInvestorStartupIdRouteImport } from './routes/_protected/investor/startup.$id'
+import { Route as ProtectedInvestorScreeningIdRouteImport } from './routes/_protected/investor/screening_.$id'
 import { Route as ProtectedInvestorOnboardingWebsiteRouteImport } from './routes/_protected/investor/onboarding.website'
 import { Route as ProtectedFounderStartupIdRouteImport } from './routes/_protected/founder/startup.$id'
 import { Route as ProtectedAdminStartupIdRouteImport } from './routes/_protected/admin/startup.$id'
@@ -353,6 +354,12 @@ const ProtectedInvestorStartupIdRoute =
     path: '/startup/$id',
     getParentRoute: () => ProtectedInvestorRoute,
   } as any)
+const ProtectedInvestorScreeningIdRoute =
+  ProtectedInvestorScreeningIdRouteImport.update({
+    id: '/screening_/$id',
+    path: '/screening/$id',
+    getParentRoute: () => ProtectedInvestorRoute,
+  } as any)
 const ProtectedInvestorOnboardingWebsiteRoute =
   ProtectedInvestorOnboardingWebsiteRouteImport.update({
     id: '/onboarding/website',
@@ -433,6 +440,7 @@ export interface FileRoutesByFullPath {
   '/admin/startup/$id': typeof ProtectedAdminStartupIdRoute
   '/founder/startup/$id': typeof ProtectedFounderStartupIdRoute
   '/investor/onboarding/website': typeof ProtectedInvestorOnboardingWebsiteRoute
+  '/investor/screening/$id': typeof ProtectedInvestorScreeningIdRoute
   '/investor/startup/$id': typeof ProtectedInvestorStartupIdRoute
   '/scout/startup/$id': typeof ProtectedScoutStartupIdRoute
 }
@@ -488,6 +496,7 @@ export interface FileRoutesByTo {
   '/admin/startup/$id': typeof ProtectedAdminStartupIdRoute
   '/founder/startup/$id': typeof ProtectedFounderStartupIdRoute
   '/investor/onboarding/website': typeof ProtectedInvestorOnboardingWebsiteRoute
+  '/investor/screening/$id': typeof ProtectedInvestorScreeningIdRoute
   '/investor/startup/$id': typeof ProtectedInvestorStartupIdRoute
   '/scout/startup/$id': typeof ProtectedScoutStartupIdRoute
 }
@@ -549,6 +558,7 @@ export interface FileRoutesById {
   '/_protected/admin/startup/$id': typeof ProtectedAdminStartupIdRoute
   '/_protected/founder/startup/$id': typeof ProtectedFounderStartupIdRoute
   '/_protected/investor/onboarding/website': typeof ProtectedInvestorOnboardingWebsiteRoute
+  '/_protected/investor/screening_/$id': typeof ProtectedInvestorScreeningIdRoute
   '/_protected/investor/startup/$id': typeof ProtectedInvestorStartupIdRoute
   '/_protected/scout/startup/$id': typeof ProtectedScoutStartupIdRoute
 }
@@ -610,6 +620,7 @@ export interface FileRouteTypes {
     | '/admin/startup/$id'
     | '/founder/startup/$id'
     | '/investor/onboarding/website'
+    | '/investor/screening/$id'
     | '/investor/startup/$id'
     | '/scout/startup/$id'
   fileRoutesByTo: FileRoutesByTo
@@ -665,6 +676,7 @@ export interface FileRouteTypes {
     | '/admin/startup/$id'
     | '/founder/startup/$id'
     | '/investor/onboarding/website'
+    | '/investor/screening/$id'
     | '/investor/startup/$id'
     | '/scout/startup/$id'
   id:
@@ -725,6 +737,7 @@ export interface FileRouteTypes {
     | '/_protected/admin/startup/$id'
     | '/_protected/founder/startup/$id'
     | '/_protected/investor/onboarding/website'
+    | '/_protected/investor/screening_/$id'
     | '/_protected/investor/startup/$id'
     | '/_protected/scout/startup/$id'
   fileRoutesById: FileRoutesById
@@ -1122,6 +1135,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedInvestorStartupIdRouteImport
       parentRoute: typeof ProtectedInvestorRoute
     }
+    '/_protected/investor/screening_/$id': {
+      id: '/_protected/investor/screening_/$id'
+      path: '/screening/$id'
+      fullPath: '/investor/screening/$id'
+      preLoaderRoute: typeof ProtectedInvestorScreeningIdRouteImport
+      parentRoute: typeof ProtectedInvestorRoute
+    }
     '/_protected/investor/onboarding/website': {
       id: '/_protected/investor/onboarding/website'
       path: '/onboarding/website'
@@ -1229,6 +1249,7 @@ interface ProtectedInvestorRouteChildren {
   ProtectedInvestorThesisRoute: typeof ProtectedInvestorThesisRoute
   ProtectedInvestorIndexRoute: typeof ProtectedInvestorIndexRoute
   ProtectedInvestorOnboardingWebsiteRoute: typeof ProtectedInvestorOnboardingWebsiteRoute
+  ProtectedInvestorScreeningIdRoute: typeof ProtectedInvestorScreeningIdRoute
   ProtectedInvestorStartupIdRoute: typeof ProtectedInvestorStartupIdRoute
 }
 
@@ -1246,6 +1267,7 @@ const ProtectedInvestorRouteChildren: ProtectedInvestorRouteChildren = {
   ProtectedInvestorIndexRoute: ProtectedInvestorIndexRoute,
   ProtectedInvestorOnboardingWebsiteRoute:
     ProtectedInvestorOnboardingWebsiteRoute,
+  ProtectedInvestorScreeningIdRoute: ProtectedInvestorScreeningIdRoute,
   ProtectedInvestorStartupIdRoute: ProtectedInvestorStartupIdRoute,
 }
 

@@ -9,7 +9,7 @@ import type { ThesisFitOutput } from "@/types/thesis-fit";
 import type {
   LensScore,
   ScreeningVerdict,
-} from "@/components/investor/ScreeningDetailModal";
+} from "@/components/investor/screening-types";
 
 interface BackendScreeningRow {
   id: string;

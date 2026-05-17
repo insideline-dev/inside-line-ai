@@ -1,4 +1,5 @@
 import { formatDistanceToNow } from "date-fns";
+import { Link } from "@tanstack/react-router";
 import { ArrowUpRight, Check, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,10 +10,7 @@ import { StartupFavicon } from "./StartupFavicon";
 import { cn } from "@/lib/utils";
 import { formatIndustry } from "@/lib/kpi-metrics";
 import type { ThesisFitOutput } from "@/types/thesis-fit";
-import type {
-  LensScore,
-  ScreeningVerdict,
-} from "./ScreeningDetailModal";
+import type { LensScore, ScreeningVerdict } from "./screening-types";
 
 export interface ScreeningDealCardData {
   id: string;
@@ -31,7 +29,8 @@ export interface ScreeningDealCardData {
 
 interface ScreeningDealCardProps {
   data: ScreeningDealCardData;
-  onOpen: (id: string) => void;
+  /** Optional override; defaults to navigating to /investor/screening/:id. */
+  onOpen?: (id: string) => void;
   onPass?: (id: string) => void;
   onAdvance?: (id: string) => void;
   className?: string;
@@ -227,15 +226,32 @@ export function ScreeningDealCard({
                 </Button>
               </>
             )}
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => onOpen(data.id)}
-              data-testid={`screening-card-open-${data.id}`}
-            >
-              Open
-              <ArrowUpRight className="ml-1 h-3.5 w-3.5" />
-            </Button>
+            {onOpen ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => onOpen(data.id)}
+                data-testid={`screening-card-open-${data.id}`}
+              >
+                Open
+                <ArrowUpRight className="ml-1 h-3.5 w-3.5" />
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                asChild
+                data-testid={`screening-card-open-${data.id}`}
+              >
+                <Link
+                  to="/investor/screening/$id"
+                  params={{ id: data.id }}
+                >
+                  Open
+                  <ArrowUpRight className="ml-1 h-3.5 w-3.5" />
+                </Link>
+              </Button>
+            )}
           </div>
         </div>
       </CardContent>

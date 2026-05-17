@@ -22,7 +22,10 @@ export interface ScreeningQueueLensScore {
   label: string;
   score: number;
   signal: string;
+  /** First line of rationale (truncated) — used as the card subtitle. */
   note?: string;
+  /** Full prose rationale — surfaced on the detail page. */
+  rationale?: string;
 }
 
 export interface ScreeningQueueRow {
@@ -32,6 +35,16 @@ export interface ScreeningQueueRow {
   stage: string | null;
   /** Raw website URL; favicon resolution happens client-side with chained CDN fallbacks. */
   website: string | null;
+  /** Public URL to the pitch deck PDF. */
+  pitchDeckUrl: string | null;
+  /** Storage-bucket path to the pitch deck. */
+  pitchDeckPath: string | null;
+  /** Short founder-supplied description (used on the detail page). */
+  description: string | null;
+  /** Round size in USD, if known. */
+  fundingTarget: number | null;
+  /** Country/region the company is based in. */
+  location: string | null;
   verdict: Verdict;
   overallScore: number;
   fit: ScreeningDecisionThesisFit | null;
@@ -84,11 +97,13 @@ export function buildTriageRationale(
 
 
 export function dealbreakerNoteFromReasonCodes(codes: string[]): string | null {
+  // Only surface genuine thesis dealbreakers/exclusions — not lens evaluation
+  // outcomes (lens.*.reject). Lens results are surfaced in the lens write-up
+  // cards, not as a banner note.
   const breaker = codes.find(
     (c) =>
-      c.includes("dealbreaker") ||
-      c.includes("exclusion") ||
-      c.endsWith(".reject"),
+      !c.startsWith("lens.") &&
+      (c.includes("dealbreaker") || c.includes("exclusion")),
   );
   return breaker ? breaker.replace(/_/g, " ") : null;
 }
@@ -144,6 +159,8 @@ export class ScreeningQueueService {
       industry: string | null;
       sector_industry: string | null;
       funding_target: number | null;
+      pitch_deck_url: string | null;
+      pitch_deck_path: string | null;
       submitted_at: Date;
     }
     const decisionRows = (await db.execute(sql`
@@ -179,6 +196,8 @@ export class ScreeningQueueService {
         s.sector_industry,
         s.website as startup_website,
         s.funding_target,
+        s.pitch_deck_url,
+        s.pitch_deck_path,
         s.created_at as submitted_at
       from latest l
       join startups s on s.id = l.startup_id
@@ -257,6 +276,7 @@ export class ScreeningQueueService {
             score: snap.score,
             signal: snap.signal,
             note: detail?.rationale.split("\n")[0]?.slice(0, 140),
+            rationale: detail?.rationale,
           };
         },
       );
@@ -290,6 +310,11 @@ export class ScreeningQueueService {
         industry: r.sector_industry ?? r.industry ?? null,
         stage: r.startup_stage,
         website: r.startup_website,
+        pitchDeckUrl: r.pitch_deck_url,
+        pitchDeckPath: r.pitch_deck_path,
+        description: r.startup_description,
+        fundingTarget: r.funding_target,
+        location: r.startup_location,
         verdict,
         overallScore: r.overall_score,
         fit,

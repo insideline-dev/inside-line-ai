@@ -1,4 +1,6 @@
 import {
+  forwardRef,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
@@ -22,6 +24,7 @@ import { AiProviderService } from '../ai/providers/ai-provider.service';
 import { ModelPurpose } from '../ai/interfaces/pipeline.interface';
 import { generateText } from 'ai';
 import { buildThesisSummary } from './thesis-summary.util';
+import { InvestorOnboardingService } from './onboarding/investor-onboarding.service';
 
 const THESIS_SUMMARY_BATCH_SIZE = 10;
 
@@ -33,6 +36,9 @@ export class ThesisService {
     private drizzle: DrizzleService,
     @Optional() private startupMatching?: StartupMatchingPipelineService,
     @Optional() private aiProviders?: AiProviderService,
+    @Optional()
+    @Inject(forwardRef(() => InvestorOnboardingService))
+    private onboarding?: InvestorOnboardingService,
   ) {}
 
   async findOne(userId: string) {
@@ -132,6 +138,35 @@ export class ThesisService {
           const msg = err instanceof Error ? err.message : String(err);
           this.logger.error(`Failed to trigger re-matching after thesis update for user ${userId}: ${msg}`);
         });
+      }
+
+      // DS-E3-F1-S2 — re-scrape the fund website when it changes on an
+      // already-registered investor (e.g. a partner pastes a new domain on
+      // /investor/thesis). The onboarding service handles normalization,
+      // dedup, and enqueues the scrape job; failures are logged but never
+      // block the thesis save.
+      const dtoSentWebsite = Object.prototype.hasOwnProperty.call(
+        dto,
+        'website',
+      );
+      const websiteValue =
+        dtoSentWebsite && typeof (dto as { website?: unknown }).website === 'string'
+          ? ((dto as { website: string }).website).trim()
+          : '';
+      const websiteChanged =
+        dtoSentWebsite &&
+        websiteValue.length > 0 &&
+        websiteValue !== (existing?.website ?? '');
+
+      if (websiteChanged && this.onboarding) {
+        void this.onboarding
+          .submitWebsite(userId, { website: websiteValue })
+          .catch((err: unknown) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            this.logger.warn(
+              `Failed to re-scrape investor website on thesis update for user ${userId}: ${msg}`,
+            );
+          });
       }
 
       return result;

@@ -6,12 +6,10 @@ import { toast } from "sonner";
 import { customFetch } from "@/api/client";
 import { StageNav } from "@/components/investor/StageNav";
 import { ScreeningDealCard } from "@/components/investor/ScreeningDealCard";
-import {
-  ScreeningDetailModal,
-  type LensScore,
-  type ScreeningDetail,
-  type ScreeningVerdict,
-} from "@/components/investor/ScreeningDetailModal";
+import type {
+  LensScore,
+  ScreeningVerdict,
+} from "@/components/investor/screening-types";
 import type { ThesisFitOutput } from "@/types/thesis-fit";
 
 interface BackendScreeningRow {
@@ -289,7 +287,6 @@ function ScreeningPage() {
     [sourceRows, overrides],
   );
 
-  const [openId, setOpenId] = useState<string | null>(null);
   const [showRejected, setShowRejected] = useState(false);
   const usingPlaceholder =
     !isLoading && !error && (!backendRows || backendRows.length === 0);
@@ -309,9 +306,6 @@ function ScreeningPage() {
     return { activeRows: active, rejectedRows: rejected, advancedRowIds: advanced };
   }, [rows]);
 
-  const openRow = useCallback((id: string) => setOpenId(id), []);
-  const closeModal = useCallback(() => setOpenId(null), []);
-
   const handlePass = useCallback(
     (id: string) => {
       // Optimistic local update; the mutation invalidates the query on
@@ -321,10 +315,9 @@ function ScreeningPage() {
           r.id === id ? { ...r, verdict: "reject", dealbreakerNote: "Passed by investor" } : r,
         ),
       );
-      setOpenId(null);
       passMutation.mutate(id);
     },
-    [passMutation],
+    [passMutation, setRows],
   );
 
   const handleAdvance = useCallback(
@@ -332,26 +325,10 @@ function ScreeningPage() {
       setRows((prev) =>
         prev.map((r) => (r.id === id ? { ...r, verdict: "advance" } : r)),
       );
-      setOpenId(null);
       advanceMutation.mutate(id);
     },
-    [advanceMutation],
+    [advanceMutation, setRows],
   );
-
-  const openDetail = useMemo<ScreeningDetail | null>(() => {
-    if (!openId) return null;
-    const row = rows.find((r) => r.id === openId);
-    if (!row) return null;
-    return {
-      id: row.id,
-      companyName: row.companyName,
-      industry: row.industry,
-      verdict: row.verdict,
-      fit: row.fit,
-      lensScores: row.lensScores,
-      triageRationale: row.triageRationale,
-    };
-  }, [openId, rows]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -393,7 +370,6 @@ function ScreeningPage() {
                 dealbreakerNote: row.dealbreakerNote,
                 isAutoAdvanced: advancedRowIds.has(row.id),
               }}
-              onOpen={openRow}
               onPass={handlePass}
               onAdvance={handleAdvance}
             />
@@ -434,7 +410,6 @@ function ScreeningPage() {
                     submittedAt: row.submittedAt,
                     dealbreakerNote: row.dealbreakerNote,
                   }}
-                  onOpen={openRow}
                 />
               ))}
             </div>
@@ -455,14 +430,6 @@ function ScreeningPage() {
           Failed to load screening queue: {(error as Error).message}
         </div>
       )}
-
-      <ScreeningDetailModal
-        detail={openDetail}
-        open={!!openId}
-        onOpenChange={(v) => !v && closeModal()}
-        onPass={handlePass}
-        onAdvance={handleAdvance}
-      />
     </div>
   );
 }

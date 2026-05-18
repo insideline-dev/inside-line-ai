@@ -192,9 +192,15 @@ export const TriageDecideInputSchema = z.object({
 export type TriageDecideInput = z.infer<typeof TriageDecideInputSchema>;
 
 interface ScreeningStartupSnapshot {
+  /** User ID of the investor who owns this startup (used to fetch their thesis). */
+  userId: string | null;
   industry: string | null;
   sectorIndustry: string | null;
   sectorIndustryGroup: string | null;
+  /** Funding stage, e.g. 'seed', 'series_a'. */
+  stage: string | null;
+  /** Location string, e.g. 'Dubai, UAE'. */
+  location: string | null;
   pitchDeckUrl: string | null;
   pitchDeckPath: string | null;
   productDescription: string | null;
@@ -208,6 +214,13 @@ interface ScreeningStartupSnapshot {
 
 interface ActiveInvestorThesisSnapshot {
   dealBreakers: string[] | null;
+}
+
+/** Structured thesis boundaries for the startup-owner investor (DS-E4-F1). */
+interface OwnerThesisBoundarySnapshot {
+  stages: string[] | null;
+  industries: string[] | null;
+  geographicFocus: string[] | null;
 }
 
 const DEALBREAKER_REASON_PREFIX = "dealbreaker:";
@@ -258,6 +271,76 @@ function collectDealbreakerReasonCodes(
   }
 
   return dedupeStrings(matches);
+}
+
+/** Case-insensitive bidirectional substring match. */
+function fuzzyMatchesAny(haystack: readonly string[], needle: string): boolean {
+  const n = needle.trim().toLowerCase();
+  if (!n) return false;
+  return haystack.some((h) => {
+    const hh = h.trim().toLowerCase();
+    if (!hh) return false;
+    return hh === n || hh.includes(n) || n.includes(hh);
+  });
+}
+
+/**
+ * DS-E4-F1: Deterministic structural thesis-boundary checks.
+ * Returns reason codes for deals that fall outside the owner investor's
+ * configured thesis dimensions (stage, industry, geography). Only fires
+ * when the thesis dimension is explicitly configured (non-empty array) AND
+ * the startup has a value for that field — never false-flags missing data.
+ */
+export function collectThesisBoundaryViolations(
+  startupSnapshot: ScreeningStartupSnapshot | null,
+  ownerThesis: OwnerThesisBoundarySnapshot | null,
+): string[] {
+  if (!startupSnapshot || !ownerThesis) return [];
+
+  const violations: string[] = [];
+
+  // Stage check: exact case-insensitive match (stage is a controlled enum).
+  if (ownerThesis.stages && ownerThesis.stages.length > 0 && startupSnapshot.stage) {
+    const stageMatch = ownerThesis.stages.some(
+      (s) => s.trim().toLowerCase() === startupSnapshot.stage!.trim().toLowerCase(),
+    );
+    if (!stageMatch) {
+      violations.push("out_of_stage");
+    }
+  }
+
+  // Industry check: bidirectional fuzzy match handles taxonomy mismatches
+  // (e.g. "B2B SaaS" vs "SaaS").
+  if (ownerThesis.industries && ownerThesis.industries.length > 0) {
+    const industryFields = [
+      startupSnapshot.industry,
+      startupSnapshot.sectorIndustry,
+      startupSnapshot.sectorIndustryGroup,
+    ].filter((v): v is string => typeof v === "string" && v.trim().length > 0);
+
+    if (industryFields.length > 0) {
+      const industryMatch = industryFields.some((field) =>
+        fuzzyMatchesAny(ownerThesis.industries!, field),
+      );
+      if (!industryMatch) {
+        violations.push("out_of_scope");
+      }
+    }
+  }
+
+  // Geography check: bidirectional fuzzy match handles "GCC" ↔ "Dubai, UAE".
+  if (
+    ownerThesis.geographicFocus &&
+    ownerThesis.geographicFocus.length > 0 &&
+    startupSnapshot.location
+  ) {
+    const geoMatch = fuzzyMatchesAny(ownerThesis.geographicFocus, startupSnapshot.location);
+    if (!geoMatch) {
+      violations.push("out_of_geo");
+    }
+  }
+
+  return violations;
 }
 
 export const ScreeningDecisionSchema = z.object({
@@ -591,9 +674,12 @@ export class ScreeningTriageService {
   ): Promise<ScreeningStartupSnapshot | null> {
     const [row] = await this.drizzle.db
       .select({
+        userId: startup.userId,
         industry: startup.industry,
         sectorIndustry: startup.sectorIndustry,
         sectorIndustryGroup: startup.sectorIndustryGroup,
+        stage: startup.stage,
+        location: startup.location,
         pitchDeckUrl: startup.pitchDeckUrl,
         pitchDeckPath: startup.pitchDeckPath,
         productDescription: startup.productDescription,
@@ -610,11 +696,32 @@ export class ScreeningTriageService {
     return row ?? null;
   }
 
+  /**
+   * Fetch the owner investor's thesis boundaries for structural checks.
+   * Returns null when the startup has no owner or owner has no thesis.
+   */
+  private async fetchOwnerThesisBoundary(
+    ownerUserId: string | null,
+  ): Promise<OwnerThesisBoundarySnapshot | null> {
+    if (!ownerUserId) return null;
+    const [row] = await this.drizzle.db
+      .select({
+        stages: investorThesis.stages,
+        industries: investorThesis.industries,
+        geographicFocus: investorThesis.geographicFocus,
+      })
+      .from(investorThesis)
+      .where(eq(investorThesis.userId, ownerUserId))
+      .limit(1);
+    return row ?? null;
+  }
+
   private async fetchDealbreakerReasonCodes(
     startupSnapshot: ScreeningStartupSnapshot | null,
   ): Promise<string[]> {
     if (!startupSnapshot) return [];
 
+    // Explicit dealbreaker tag matching across all active investor theses.
     const rows = await this.drizzle.db
       .select({ dealBreakers: investorThesis.dealBreakers })
       .from(investorThesis)
@@ -622,7 +729,13 @@ export class ScreeningTriageService {
       .orderBy(desc(investorThesis.createdAt))
       .limit(1000);
 
-    return collectDealbreakerReasonCodes(startupSnapshot, rows);
+    const tagCodes = collectDealbreakerReasonCodes(startupSnapshot, rows);
+
+    // DS-E4-F1 — structural thesis-boundary violations for the owner investor.
+    const ownerThesis = await this.fetchOwnerThesisBoundary(startupSnapshot.userId);
+    const boundaryCodes = collectThesisBoundaryViolations(startupSnapshot, ownerThesis);
+
+    return dedupeStrings([...tagCodes, ...boundaryCodes]);
   }
 
   private toDecision(

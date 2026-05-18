@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   Check,
   CheckCircle2,
+  ShieldAlert,
   Sparkles,
   X,
   XCircle,
@@ -24,6 +25,8 @@ import type {
   ScreeningVerdict,
 } from "@/components/investor/screening-types";
 import type { FitStatus, ThesisFitOutput } from "@/types/thesis-fit";
+import type { PortfolioConflict } from "@/lib/screening/portfolio-conflicts";
+import { reasonLabel } from "@/lib/screening/portfolio-conflicts";
 
 const VERDICT_BADGE: Record<
   ScreeningVerdict,
@@ -267,11 +270,51 @@ export function ScreeningDetailHeader({
   );
 }
 
-export function ScreeningDetailBody({ row }: { row: ScreeningRow }) {
+function PortfolioConflictBanner({ conflicts }: { conflicts: PortfolioConflict[] }) {
+  if (conflicts.length === 0) return null;
+  return (
+    <div
+      className="flex flex-col gap-2 rounded-md border border-amber-300 bg-amber-50 px-4 py-3"
+      data-testid="portfolio-conflict-banner"
+    >
+      <div className="flex items-center gap-2 text-sm font-semibold text-amber-900">
+        <ShieldAlert className="h-4 w-4 shrink-0" />
+        Portfolio conflict — {conflicts.length === 1 ? "1 existing company may overlap" : `${conflicts.length} existing companies may overlap`}
+      </div>
+      <div className="flex flex-col gap-1.5">
+        {conflicts.map((c) => (
+          <div key={c.portfolioName} className="flex flex-wrap items-baseline gap-1.5 text-xs text-amber-800">
+            <span className="font-medium">{c.portfolioName}</span>
+            <span className="text-amber-600">·</span>
+            {c.reasons.map((r) => (
+              <span key={r} className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-700">
+                {reasonLabel(r)}
+              </span>
+            ))}
+            {c.portfolioDescription && (
+              <span className="text-amber-600/80">{c.portfolioDescription.slice(0, 80)}{c.portfolioDescription.length > 80 ? "…" : ""}</span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function ScreeningDetailBody({
+  row,
+  portfolioConflicts,
+}: {
+  row: ScreeningRow;
+  portfolioConflicts?: PortfolioConflict[];
+}) {
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
       {/* Left: rich write-ups */}
       <div className="flex flex-col gap-4">
+        {portfolioConflicts && portfolioConflicts.length > 0 && (
+          <PortfolioConflictBanner conflicts={portfolioConflicts} />
+        )}
         {row.fit?.rationale && (
           <section
             className="flex flex-col gap-2 rounded-lg border border-primary/20 bg-primary/[0.04] p-4"

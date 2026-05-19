@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { Link } from "@tanstack/react-router";
 import {
@@ -5,6 +6,7 @@ import {
   ArrowLeft,
   Check,
   CheckCircle2,
+  ExternalLink,
   ShieldAlert,
   Sparkles,
   X,
@@ -13,6 +15,11 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { FitChips } from "@/components/investor/FitChips";
 import { StartupFavicon } from "@/components/investor/StartupFavicon";
 import { ScoreRing } from "@/components/analysis/ScoreRing";
@@ -24,6 +31,11 @@ import type {
   ScreeningRow,
   ScreeningVerdict,
 } from "@/components/investor/screening-types";
+import type {
+  ScreeningEvidence,
+  ScreeningLensV1,
+  ScreeningOutputV1,
+} from "@/lib/screening/useScreeningOutput";
 import type { FitStatus, ThesisFitOutput } from "@/types/thesis-fit";
 import type { PortfolioConflict } from "@/lib/screening/portfolio-conflicts";
 import { reasonLabel } from "@/lib/screening/portfolio-conflicts";
@@ -107,7 +119,93 @@ function FitTable({ fit }: { fit: ThesisFitOutput }) {
   );
 }
 
-function LensWriteup({ lens }: { lens: LensScore }) {
+function EvidenceSourceLabel({ evidence }: { evidence: ScreeningEvidence }) {
+  const label =
+    evidence.sourceType === "deck_page" && evidence.pageNumber
+      ? `Pitch deck • page ${evidence.pageNumber}`
+      : evidence.sourceLabel ?? evidence.sourceRef ?? evidence.source ?? null;
+
+  if (!label) return null;
+
+  return (
+    <span className="text-[11px] text-muted-foreground">
+      {label}
+    </span>
+  );
+}
+
+function LensEvidenceClaim({
+  evidence,
+  onDeckPageSelect,
+}: {
+  evidence: ScreeningEvidence;
+  onDeckPageSelect: (pageNumber: number) => void;
+}) {
+  const href = evidence.url ?? evidence.source;
+
+  if (
+    evidence.sourceType === "deck_page" &&
+    typeof evidence.pageNumber === "number"
+  ) {
+    return (
+      <button
+        type="button"
+        className="text-left text-sm leading-relaxed text-foreground hover:underline"
+        onClick={() => onDeckPageSelect(evidence.pageNumber!)}
+      >
+        {evidence.claim}
+      </button>
+    );
+  }
+
+  if (href && /^https?:\/\//.test(href)) {
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-start gap-1 text-sm leading-relaxed text-foreground hover:underline"
+      >
+        <span>{evidence.claim}</span>
+        <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-60" />
+      </a>
+    );
+  }
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="text-left text-sm leading-relaxed text-foreground hover:underline"
+        >
+          {evidence.claim}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-80 p-3">
+        <div className="space-y-2">
+          <div className="text-sm font-medium">{evidence.claim}</div>
+          <EvidenceSourceLabel evidence={evidence} />
+          {evidence.quote && (
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              {evidence.quote}
+            </p>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function LensWriteup({
+  lens,
+  detail,
+  onDeckPageSelect,
+}: {
+  lens: LensScore;
+  detail?: ScreeningLensV1;
+  onDeckPageSelect: (pageNumber: number) => void;
+}) {
   return (
     <Card>
       <CardContent className="flex flex-col gap-3 p-4">
@@ -135,6 +233,24 @@ function LensWriteup({ lens }: { lens: LensScore }) {
           <p className="text-sm italic text-muted-foreground">
             No rationale recorded for this lens.
           </p>
+        )}
+        {detail && detail.evidence.length > 0 && (
+          <div className="space-y-2 rounded-md border border-border/60 bg-muted/20 p-3">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Source-linked claims
+            </div>
+            <ul className="space-y-2">
+              {detail.evidence.map((evidence, idx) => (
+                <li key={`${detail.key}-${idx}`} className="space-y-1">
+                  <LensEvidenceClaim
+                    evidence={evidence}
+                    onDeckPageSelect={onDeckPageSelect}
+                  />
+                  <EvidenceSourceLabel evidence={evidence} />
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </CardContent>
     </Card>
@@ -304,10 +420,19 @@ function PortfolioConflictBanner({ conflicts }: { conflicts: PortfolioConflict[]
 export function ScreeningDetailBody({
   row,
   portfolioConflicts,
+  screeningOutput,
 }: {
   row: ScreeningRow;
   portfolioConflicts?: PortfolioConflict[];
+  screeningOutput?: ScreeningOutputV1 | null;
 }) {
+  const [deckPage, setDeckPage] = useState(1);
+  const lensDetails = useMemo(
+    () => new Map((screeningOutput?.lenses ?? []).map((lens) => [lens.key, lens])),
+    [screeningOutput],
+  );
+
+
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
       {/* Left: rich write-ups */}
@@ -355,7 +480,12 @@ export function ScreeningDetailBody({
               </p>
             ) : (
               row.lensScores.map((lens) => (
-                <LensWriteup key={lens.key} lens={lens} />
+                <LensWriteup
+                  key={lens.key}
+                  lens={lens}
+                  detail={lensDetails.get(lens.key)}
+                  onDeckPageSelect={setDeckPage}
+                />
               ))
             )}
           </div>
@@ -392,7 +522,11 @@ export function ScreeningDetailBody({
         <h3 className="text-xs font-semibold uppercase text-muted-foreground">
           Pitch deck
         </h3>
-        <ScreeningPitchDeckViewer url={row.pitchDeckUrl} />
+        <ScreeningPitchDeckViewer
+          url={row.pitchDeckUrl}
+          pageIndex={deckPage}
+          onPageChange={setDeckPage}
+        />
       </div>
     </div>
   );

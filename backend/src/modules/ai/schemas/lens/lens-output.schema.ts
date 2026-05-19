@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  LENS_EVIDENCE_SOURCE_TYPES,
+  normalizeLensEvidenceLink,
+} from "./evidence-link";
 
 /**
  * Shared schema produced by every screening lens. Per-lens schemas extend this
@@ -12,11 +16,52 @@ export type LensSignal = z.infer<typeof LensSignalSchema>;
 export const LensConfidenceSchema = z.enum(["low", "medium", "high"]);
 export type LensConfidence = z.infer<typeof LensConfidenceSchema>;
 
-export const LensEvidenceSchema = z.object({
-  claim: z.string().min(1),
-  source: z.string().optional().nullable(),
-  confidence: LensConfidenceSchema,
-});
+export const LensEvidenceSourceTypeSchema = z.enum(LENS_EVIDENCE_SOURCE_TYPES);
+
+export const LensEvidenceSchema = z
+  .object({
+    claim: z.string().min(1),
+    source: z.string().min(1),
+    confidence: LensConfidenceSchema,
+    sourceType: LensEvidenceSourceTypeSchema.optional(),
+    sourceLabel: z.string().min(1).optional(),
+    sourceRef: z.string().min(1).optional(),
+    url: z.url().optional(),
+    pageNumber: z.number().int().min(1).optional(),
+    quote: z.string().min(1).optional(),
+  })
+  .superRefine((value, ctx) => {
+    try {
+      const normalized = normalizeLensEvidenceLink(value.source);
+      if (value.sourceType && value.sourceType !== normalized.sourceType) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["sourceType"],
+          message: `sourceType must match normalized source type ${normalized.sourceType}`,
+        });
+      }
+      if (value.pageNumber !== undefined && normalized.pageNumber !== value.pageNumber) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["pageNumber"],
+          message: "pageNumber must match the cited deck page",
+        });
+      }
+      if (value.url !== undefined && normalized.url !== value.url) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["url"],
+          message: "url must match the cited public URL",
+        });
+      }
+    } catch (error) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["source"],
+        message: error instanceof Error ? error.message : "Invalid evidence source",
+      });
+    }
+  });
 export type LensEvidenceItem = z.infer<typeof LensEvidenceSchema>;
 
 export const LensOutputSchema = z.object({

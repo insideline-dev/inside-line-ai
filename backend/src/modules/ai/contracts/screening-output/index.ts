@@ -10,6 +10,7 @@
 export {
   ScreeningEvidenceConfidenceSchema,
   ScreeningEvidenceSchema,
+  ScreeningEvidenceSourceTypeSchema,
   ScreeningHandoffEvidenceSchema,
   ScreeningHandoffIssueSchema,
   ScreeningHandoffSchema,
@@ -34,6 +35,7 @@ export {
 export type {
   ScreeningEvidence,
   ScreeningEvidenceConfidence,
+  ScreeningEvidenceSourceType,
   ScreeningHandoff,
   ScreeningHandoffEvidence,
   ScreeningHandoffIssue,

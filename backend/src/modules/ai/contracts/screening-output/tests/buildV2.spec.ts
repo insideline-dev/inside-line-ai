@@ -92,4 +92,33 @@ describe("ScreeningOutputService.buildV2", () => {
     expect(out.overall).toBeDefined();
     expect(out.handoff).toBeDefined();
   });
+
+  it("normalizes legacy deck and URL sources into typed citation metadata", () => {
+    const row = lensRow("market", 70, "advance");
+    row.evidence = [
+      {
+        claim: "Deck shows 92% gross margin",
+        source: "deck:p7",
+        confidence: "high",
+      },
+      {
+        claim: "Website confirms enterprise focus",
+        source: "https://example.com/customers",
+        confidence: "medium",
+      },
+    ];
+
+    const out = svc.buildV2(STARTUP_ID, "run-1", [row], null, null, null);
+
+    expect(out.lenses[0]?.evidence[0]).toMatchObject({
+      sourceType: "deck_page",
+      pageNumber: 7,
+      sourceRef: "deck:p7",
+    });
+    expect(out.lenses[0]?.evidence[1]).toMatchObject({
+      sourceType: "public_url",
+      url: "https://example.com/customers",
+      sourceRef: "https://example.com/customers",
+    });
+  });
 });

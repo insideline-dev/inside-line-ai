@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { eq, ilike } from 'drizzle-orm';
 import { DrizzleService } from '../../database';
+import { UserRole } from '../../auth/entities/auth.schema';
 import {
   PipelineService,
   PIPELINE_MISSING_FIELDS_ERROR_PREFIX,
@@ -32,7 +33,14 @@ export interface StartupIntakeParams {
   fromName?: string;
   bodyText?: string;
   pitchDeckPath?: string;
-  source: string; // 'clara' | 'investor-inbox' | etc
+  source: string;
+  ownerUserId?: string;
+  submittedByRole?: UserRole.ADMIN | UserRole.INVESTOR;
+  isPrivate?: boolean;
+  website?: string;
+  stage?: StartupStage;
+  location?: string;
+  notificationPath?: string;
 }
 
 export interface StartupIntakeResult {
@@ -40,6 +48,10 @@ export interface StartupIntakeResult {
   startupName: string;
   isDuplicate: boolean;
   status: string;
+}
+
+export interface StartupIntakeRecordResult extends StartupIntakeResult {
+  ownerUserId: string;
 }
 
 @Injectable()
@@ -53,7 +65,73 @@ export class StartupIntakeService {
   ) {}
 
   async createStartup(params: StartupIntakeParams): Promise<StartupIntakeResult> {
-    const { adminUserId, companyName, fromEmail, fromName, bodyText, pitchDeckPath, source } = params;
+    const created = await this.findOrCreateStartupRecord(params);
+    const notificationPath =
+      params.notificationPath ??
+      (params.isPrivate ? `/investor/startup/${created.startupId}` : `/admin/startup/${created.startupId}`);
+
+    if (created.isDuplicate) {
+      return created;
+    }
+
+    const pitchDeckRecord = await this.loadPitchDeckSnapshot(created.startupId);
+    if (pitchDeckRecord?.pitchDeckPath || pitchDeckRecord?.pitchDeckUrl) {
+      try {
+        const prefill = await this.pipeline.prefillCriticalFieldsFromDeckExtraction(
+          created.startupId,
+        );
+        this.logger.log(
+          `[Intake] Pre-pipeline extraction for ${created.startupId} | source=${prefill.extractionSource} | updated=${prefill.updatedFields.join(",") || "none"} | missingCritical=${prefill.missingCriticalFields.join(",") || "none"}`,
+        );
+      } catch (error) {
+        const message = this.getErrorMessage(error);
+        this.logger.warn(
+          `[Intake] Pre-pipeline extraction failed for ${created.startupId}: ${message}`,
+        );
+      }
+    }
+
+    try {
+      await this.pipeline.startPipeline(created.startupId, created.ownerUserId);
+    } catch (error) {
+      const message = this.getErrorMessage(error);
+      if (!message.includes(PIPELINE_MISSING_FIELDS_ERROR_PREFIX)) {
+        throw error;
+      }
+      this.logger.warn(
+        `[Intake] Pipeline start deferred for ${created.startupId}: ${message}`,
+      );
+    }
+
+    await this.notifications.createAndBroadcast(
+      created.ownerUserId,
+      `New startup submitted via ${params.source}`,
+      `${created.startupName} was submitted by ${params.fromEmail}`,
+      NotificationType.INFO,
+      notificationPath,
+    );
+
+    return created;
+  }
+
+  async findOrCreateStartupRecord(
+    params: StartupIntakeParams,
+  ): Promise<StartupIntakeRecordResult> {
+    const {
+      adminUserId,
+      companyName,
+      fromEmail,
+      fromName,
+      bodyText,
+      pitchDeckPath,
+      source,
+      ownerUserId,
+      submittedByRole,
+      isPrivate,
+      website,
+      stage,
+      location,
+    } = params;
 
     const duplicate = await this.findDuplicate(companyName);
     if (duplicate) {
@@ -62,23 +140,30 @@ export class StartupIntakeService {
         startupName: duplicate.name,
         isDuplicate: true,
         status: duplicate.status,
+        ownerUserId: ownerUserId ?? adminUserId,
       };
     }
 
-    const location = 'Unknown';
-    const geography = deriveStartupGeography(location);
+    const startupLocation = location ?? 'Unknown';
+    const geography = deriveStartupGeography(startupLocation);
     const slug = this.generateSlug(companyName);
+    const resolvedOwnerUserId = ownerUserId ?? adminUserId;
+    const sourceLabel = this.describeSource(source);
 
     const [created] = await this.drizzle.db
       .insert(startup)
       .values({
-        userId: adminUserId,
+        userId: resolvedOwnerUserId,
+        submittedByRole: submittedByRole ?? UserRole.ADMIN,
+        isPrivate: isPrivate ?? false,
         name: companyName,
         slug,
-        tagline: `Submitted via ${source} by ${fromEmail}`,
-        description: bodyText?.slice(0, 5000) || `Submitted via ${source}. Details will be extracted from the pitch deck.`,
-        website: '',
-        location,
+        tagline: `Submitted via ${sourceLabel} by ${fromEmail}`,
+        description:
+          bodyText?.slice(0, 5000) ||
+          `Submitted via ${sourceLabel}. Details will be extracted from the pitch deck.`,
+        website: website?.trim() ?? '',
+        location: startupLocation,
         normalizedRegion: geography.normalizedRegion,
         geoCountryCode: geography.countryCode,
         geoLevel1: geography.level1,
@@ -86,7 +171,7 @@ export class StartupIntakeService {
         geoLevel3: geography.level3,
         geoPath: geography.path,
         industry: 'Unknown',
-        stage: StartupStage.SEED,
+        stage: stage ?? StartupStage.SEED,
         fundingTarget: 0,
         teamSize: 1,
         contactEmail: fromEmail,
@@ -100,47 +185,12 @@ export class StartupIntakeService {
     await this.normalizeLegacyPlaceholderDefaults(created.id);
     this.logger.log(`Created startup ${created.id} (${companyName}) from ${source} by ${fromEmail}`);
 
-    if (created.pitchDeckPath || created.pitchDeckUrl) {
-      try {
-        const prefill = await this.pipeline.prefillCriticalFieldsFromDeckExtraction(
-          created.id,
-        );
-        this.logger.log(
-          `[Intake] Pre-pipeline extraction for ${created.id} | source=${prefill.extractionSource} | updated=${prefill.updatedFields.join(",") || "none"} | missingCritical=${prefill.missingCriticalFields.join(",") || "none"}`,
-        );
-      } catch (error) {
-        const message = this.getErrorMessage(error);
-        this.logger.warn(
-          `[Intake] Pre-pipeline extraction failed for ${created.id}: ${message}`,
-        );
-      }
-    }
-
-    try {
-      await this.pipeline.startPipeline(created.id, adminUserId);
-    } catch (error) {
-      const message = this.getErrorMessage(error);
-      if (!message.includes(PIPELINE_MISSING_FIELDS_ERROR_PREFIX)) {
-        throw error;
-      }
-      this.logger.warn(
-        `[Intake] Pipeline start deferred for ${created.id}: ${message}`,
-      );
-    }
-
-    await this.notifications.createAndBroadcast(
-      adminUserId,
-      `New startup submitted via ${source}`,
-      `${companyName} was submitted by ${fromEmail}`,
-      NotificationType.INFO,
-      `/admin/startup/${created.id}`,
-    );
-
     return {
       startupId: created.id,
       startupName: companyName,
       isDuplicate: false,
       status: StartupStatus.SUBMITTED,
+      ownerUserId: resolvedOwnerUserId,
     };
   }
 
@@ -272,6 +322,21 @@ export class StartupIntakeService {
     return name || undefined;
   }
 
+  private describeSource(source: string): string {
+    switch (source) {
+      case 'whatsapp-forward':
+        return 'WhatsApp forward';
+      case 'email-forward':
+        return 'email forward';
+      case 'investor-inbox':
+        return 'investor inbox';
+      case 'bulk-upload':
+        return 'bulk upload';
+      default:
+        return source.replace(/[-_]+/g, ' ');
+    }
+  }
+
   private generateSlug(name: string): string {
     const base = name
       .toLowerCase()
@@ -279,6 +344,22 @@ export class StartupIntakeService {
       .replace(/^-+|-+$/g, '');
     const suffix = Math.random().toString(36).slice(2, 6);
     return `${base}-${suffix}`;
+  }
+
+  private async loadPitchDeckSnapshot(startupId: string): Promise<{
+    pitchDeckPath: string | null;
+    pitchDeckUrl: string | null;
+  } | null> {
+    const [record] = await this.drizzle.db
+      .select({
+        pitchDeckPath: startup.pitchDeckPath,
+        pitchDeckUrl: startup.pitchDeckUrl,
+      })
+      .from(startup)
+      .where(eq(startup.id, startupId))
+      .limit(1);
+
+    return record ?? null;
   }
 
   private getErrorMessage(error: unknown): string {

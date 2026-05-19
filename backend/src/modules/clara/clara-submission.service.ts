@@ -6,10 +6,10 @@ import { StorageService } from "../../storage";
 import { AssetService } from "../../storage/asset.service";
 import { ASSET_TYPES } from "../../storage/storage.config";
 import { DataRoomService } from "../startup/data-room.service";
+import { StartupIntakeService } from "../startup/startup-intake.service";
 import { UserRole } from "../../auth/entities/auth.schema";
 import { AgentMailClientService } from "../integrations/agentmail/agentmail-client.service";
 import { startup, StartupStatus, StartupStage } from "../startup/entities/startup.schema";
-import { STARTUP_DESCRIPTION_PLACEHOLDER } from "../startup/startup.constants";
 import { PipelineService } from "../ai/services/pipeline.service";
 import { PipelinePhase } from "../ai/interfaces/pipeline.interface";
 import {
@@ -20,7 +20,6 @@ import {
 import { NotificationService } from "../../notification/notification.service";
 import { NotificationType } from "../../notification/entities";
 import { ClaraAiService } from "./clara-ai.service";
-import { deriveStartupGeography } from "../geography";
 import type {
   AttachmentMeta,
   ClassifiedDocumentSummary,
@@ -71,6 +70,7 @@ export class ClaraSubmissionService {
     private notifications: NotificationService,
     private claraAi: ClaraAiService,
     private dataRoomService: DataRoomService,
+    private startupIntake: StartupIntakeService,
   ) {}
 
   /**
@@ -147,25 +147,34 @@ export class ClaraSubmissionService {
       `[ClaraSubmission] Company name resolution | body=${companyFromBody ?? "none"} classifier=${companyFromClassifier ?? "none"} chosen=${companyName} hasDeck=${hasPitchDeckAttachment}`,
     );
 
-    const shouldAttemptDuplicateMatch =
-      this.isReliableCompanyNameForDuplicateMatching(companyName);
-    const duplicate = shouldAttemptDuplicateMatch
-      ? await this.findExactDuplicate(companyName, ownerUserId)
-      : null;
-    if (!shouldAttemptDuplicateMatch) {
-      this.logger.debug(
-        `[ClaraSubmission] Skipping duplicate name match for startup candidate "${companyName}"`,
-      );
-    }
-    if (duplicate) {
-      const duplicateSnapshot = await this.loadCriticalStartupSnapshot(duplicate.id);
-      const duplicateName = duplicateSnapshot?.name ?? duplicate.name;
-      const duplicateStatus = duplicateSnapshot?.status ?? duplicate.status;
+    const websiteFromMessage = extractWebsiteFromText(ctx.bodyText);
+    const stageFromMessage = extractStageFromText(ctx.bodyText);
+    const source = ctx.channel === "whatsapp" ? "whatsapp-forward" : "email-forward";
+    const intakeResult = await this.startupIntake.findOrCreateStartupRecord({
+      adminUserId,
+      ownerUserId,
+      companyName,
+      fromEmail: ctx.fromEmail,
+      fromName: ctx.fromName ?? undefined,
+      bodyText: ctx.bodyText ?? undefined,
+      pitchDeckPath: deckAttachment?.storagePath ?? undefined,
+      source,
+      submittedByRole: isInvestorSubmission ? UserRole.INVESTOR : UserRole.ADMIN,
+      isPrivate: isInvestorSubmission,
+      website: websiteFromMessage ?? undefined,
+      stage: stageFromMessage ?? StartupStage.SEED,
+      location: "Unknown",
+    });
+
+    if (intakeResult.isDuplicate) {
+      const duplicateSnapshot = await this.loadCriticalStartupSnapshot(intakeResult.startupId);
+      const duplicateName = duplicateSnapshot?.name ?? intakeResult.startupName;
+      const duplicateStatus = duplicateSnapshot?.status ?? intakeResult.status;
       this.logger.warn(
-        `[ClaraSubmission] Duplicate startup detected for "${companyName}" -> ${duplicate.id} (${duplicateName}, status=${duplicateStatus})`,
+        `[ClaraSubmission] Duplicate startup detected for "${companyName}" -> ${intakeResult.startupId} (${duplicateName}, status=${duplicateStatus})`,
       );
       return {
-        startupId: duplicate.id,
+        startupId: intakeResult.startupId,
         startupName: duplicateName,
         isDuplicate: true,
         duplicateBlocked: true,
@@ -173,81 +182,43 @@ export class ClaraSubmissionService {
       };
     }
 
-    const websiteFromEmail = extractWebsiteFromText(ctx.bodyText);
-    const stageFromEmail = extractStageFromText(ctx.bodyText);
-    const location = "Unknown";
-    const geography = deriveStartupGeography(location);
-
-    const slug = this.generateSlug(companyName);
-    const [created] = await this.drizzle.db
-      .insert(startup)
-      .values({
-        userId: ownerUserId,
-        submittedByRole: isInvestorSubmission ? UserRole.INVESTOR : UserRole.ADMIN,
-        isPrivate: isInvestorSubmission,
-        name: companyName,
-        slug,
-        tagline: `Submitted via email by ${ctx.fromEmail}`,
-        description: STARTUP_DESCRIPTION_PLACEHOLDER,
-        website: websiteFromEmail ?? "",
-        location,
-        normalizedRegion: geography.normalizedRegion,
-        geoCountryCode: geography.countryCode,
-        geoLevel1: geography.level1,
-        geoLevel2: geography.level2,
-        geoLevel3: geography.level3,
-        geoPath: geography.path,
-        industry: "Unknown",
-        stage: stageFromEmail ?? StartupStage.SEED,
-        fundingTarget: 0,
-        teamSize: 1,
-        contactEmail: ctx.fromEmail,
-        contactName: ctx.fromName ?? undefined,
-        pitchDeckPath: deckAttachment?.storagePath ?? undefined,
-        files: uploadedFiles.length > 0 ? uploadedFiles : undefined,
-        status: StartupStatus.SUBMITTED,
-        submittedAt: new Date(),
-      })
-      .returning();
-
-    await this.normalizeLegacyPlaceholderDefaults(created.id);
     if (uploadedFiles.length > 0) {
-      await this.mergeUploadedFilesIntoStartup(created.id, uploadedFiles);
+      await this.mergeUploadedFilesIntoStartup(intakeResult.startupId, uploadedFiles);
     }
     await this.registerAttachmentsToDataRoom(
-      created.id,
+      intakeResult.startupId,
       ownerUserId,
       processedAttachments,
     );
     this.logger.log(
-      `Created startup ${created.id} (${companyName}) from email by ${ctx.fromEmail}`,
+      `Created startup ${intakeResult.startupId} (${companyName}) from ${source} by ${ctx.fromEmail}`,
     );
 
     const classifiedDocuments = await this.classifyDataRoomInline(
-      created.id,
+      intakeResult.startupId,
       processedAttachments,
     );
 
-    await this.runPrePipelineExtraction(created.id);
-    const refreshedCreated = await this.loadCriticalStartupSnapshot(created.id);
+    await this.runPrePipelineExtraction(intakeResult.startupId);
+    const refreshedCreated = await this.loadCriticalStartupSnapshot(intakeResult.startupId);
     const resolvedStartupName = refreshedCreated?.name ?? companyName;
     const resolvedStatus = refreshedCreated?.status ?? StartupStatus.SUBMITTED;
-    const pipelineStart = await this.startPipelineIfReady(created.id, ownerUserId, {
+    const pipelineStart = await this.startPipelineIfReady(intakeResult.startupId, ownerUserId, {
       skipExtraction: true,
     });
 
     await this.notifications.create(
       ownerUserId,
       "Clara: New startup submitted",
-      `${resolvedStartupName} was submitted via email by ${ctx.fromEmail}`,
+      `${resolvedStartupName} was submitted via ${ctx.channel === "whatsapp" ? "WhatsApp" : "email"} by ${ctx.fromEmail}`,
       NotificationType.INFO,
       isInvestorSubmission
-        ? `/investor/startup/${created.id}`
-        : `/admin/startup/${created.id}`,
+        ? `/investor/startup/${intakeResult.startupId}`
+        : `/admin/startup/${intakeResult.startupId}`,
     );
 
     return {
-      startupId: created.id,
+      startupId: intakeResult.startupId,
       startupName: resolvedStartupName,
       isDuplicate: false,
       status: resolvedStatus,

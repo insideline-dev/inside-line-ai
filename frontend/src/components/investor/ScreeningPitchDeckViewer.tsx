@@ -24,6 +24,8 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 interface ScreeningPitchDeckViewerProps {
   url: string | null;
   className?: string;
+  pageIndex?: number;
+  onPageChange?: (pageNumber: number) => void;
 }
 
 const MIN_SCALE = 0.5;
@@ -32,12 +34,29 @@ const MAX_SCALE = 2.5;
 export function ScreeningPitchDeckViewer({
   url,
   className,
+  pageIndex: controlledPageIndex,
+  onPageChange,
 }: ScreeningPitchDeckViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [numPages, setNumPages] = useState<number | null>(null);
-  const [pageIndex, setPageIndex] = useState(1);
-  const [pageInput, setPageInput] = useState("1");
+  const [internalPageIndex, setInternalPageIndex] = useState(1);
+  const pageIndex = controlledPageIndex ?? internalPageIndex;
+  const [pageInput, setPageInput] = useState(String(pageIndex));
   const [scale, setScale] = useState(1);
+
+  const setPageIndex = useCallback(
+    (next: number | ((current: number) => number)) => {
+      const candidate =
+        typeof next === "function" ? next(pageIndex) : next;
+      const maxPage = numPages ?? Number.MAX_SAFE_INTEGER;
+      const clamped = Math.min(maxPage, Math.max(1, candidate));
+      if (controlledPageIndex === undefined) {
+        setInternalPageIndex(clamped);
+      }
+      onPageChange?.(clamped);
+    },
+    [controlledPageIndex, numPages, onPageChange, pageIndex],
+  );
 
   useEffect(() => {
     setPageInput(String(pageIndex));
@@ -79,19 +98,22 @@ export function ScreeningPitchDeckViewer({
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)
         return;
       if (e.key === "ArrowRight" || e.key === "PageDown") {
-        setPageIndex((p) => Math.min(numPages, p + 1));
+        setPageIndex((p) => p + 1);
       } else if (e.key === "ArrowLeft" || e.key === "PageUp") {
-        setPageIndex((p) => Math.max(1, p - 1));
+        setPageIndex((p) => p - 1);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [numPages]);
+  }, [numPages, setPageIndex]);
 
   const handleLoadSuccess = useCallback(({ numPages: n }: { numPages: number }) => {
     setNumPages(n);
     setLoadError(null);
-  }, []);
+    if (pageIndex > n) {
+      setPageIndex(n);
+    }
+  }, [pageIndex, setPageIndex]);
 
   const handleLoadError = useCallback((err: Error) => {
     setLoadError(err.message || "Failed to load PDF");

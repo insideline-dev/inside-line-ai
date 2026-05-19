@@ -18,8 +18,19 @@ import { pipelineRun } from "./pipeline.schema";
  */
 export interface LensEvidence {
   claim: string;
-  source?: string;
+  source: string;
   confidence: "low" | "medium" | "high";
+  sourceType?:
+    | "deck_page"
+    | "public_url"
+    | "enrichment_call"
+    | "research_source"
+    | "internal_trace";
+  sourceLabel?: string;
+  sourceRef?: string;
+  url?: string;
+  pageNumber?: number;
+  quote?: string;
 }
 
 /**

@@ -7,7 +7,12 @@ import {
 } from '../ai/services/pipeline.service';
 import { NotificationService } from '../../notification/notification.service';
 import { NotificationType } from '../../notification/entities';
-import { startup, StartupStatus, StartupStage } from './entities/startup.schema';
+import {
+  startup,
+  StartupSourcePath,
+  StartupStatus,
+  StartupStage,
+} from './entities/startup.schema';
 import { deriveStartupGeography } from '../geography';
 import {
   findCanonicalStartupDuplicate,
@@ -38,7 +43,7 @@ export interface StartupIntakeParams {
   fromName?: string;
   bodyText?: string;
   pitchDeckPath?: string;
-  source: string; // 'clara' | 'investor-inbox' | etc
+  source: StartupSourcePath;
 }
 
 export interface StartupIntakeResult {
@@ -90,6 +95,7 @@ export class StartupIntakeService {
         tagline: `Submitted via ${source} by ${fromEmail}`,
         description: normalizedDescription || `Submitted via ${source}. Details will be extracted from the pitch deck.`,
         website: normalizedWebsite ?? '',
+        sourcePath: source,
         location,
         normalizedRegion: geography.normalizedRegion,
         geoCountryCode: geography.countryCode,
@@ -197,6 +203,7 @@ export class StartupIntakeService {
       .insert(startup)
       .values({
         userId: params.adminUserId,
+        sourcePath: StartupSourcePath.ADMIN_MANUAL,
         name: normalized.name,
         slug,
         tagline: normalized.tagline,

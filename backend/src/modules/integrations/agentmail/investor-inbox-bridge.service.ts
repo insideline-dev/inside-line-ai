@@ -4,6 +4,7 @@ import { DrizzleService } from '../../../database';
 import { NotificationService } from '../../../notification/notification.service';
 import { NotificationType } from '../../../notification/entities';
 import { StartupIntakeService } from '../../startup/startup-intake.service';
+import { StartupSourcePath } from '../../startup/entities/startup.schema';
 import { AttachmentService } from './attachment.service';
 import { investorInboxSubmission, type InvestorInboxSubmissionRecord } from './entities';
 
@@ -117,7 +118,7 @@ export class InvestorInboxBridgeService {
       fromEmail: submission.fromEmail,
       bodyText: submission.bodyText ?? undefined,
       pitchDeckPath,
-      source: 'investor-inbox',
+      source: StartupSourcePath.INVESTOR_INBOX,
     });
 
     const [updated] = await this.drizzle.db

@@ -169,6 +169,13 @@
       "when": 1778867881224,
       "tag": "0023_funny_magus",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1778565600000,
+      "tag": "0024_startup_source_path",
+      "breakpoints": true
     }
   ]
 }

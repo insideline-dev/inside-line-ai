@@ -75,6 +75,28 @@ export const startupStageEnum = pgEnum('startup_stage', [
   StartupStage.SERIES_F_PLUS,
 ]);
 
+export enum StartupSourcePath {
+  FOUNDER_SUBMITTED = 'founder-submitted',
+  FOUNDER_MANUAL = 'founder-manual',
+  INVESTOR_MANUAL = 'investor-manual',
+  SCOUT_SUBMITTED = 'scout-submitted',
+  INVESTOR_INBOX = 'investor-inbox',
+  CLARA = 'clara',
+  ADMIN_MANUAL = 'admin-manual',
+  ADMIN_CSV = 'admin-csv',
+}
+
+export const startupSourcePathEnum = pgEnum('startup_source_path', [
+  StartupSourcePath.FOUNDER_SUBMITTED,
+  StartupSourcePath.FOUNDER_MANUAL,
+  StartupSourcePath.INVESTOR_MANUAL,
+  StartupSourcePath.SCOUT_SUBMITTED,
+  StartupSourcePath.INVESTOR_INBOX,
+  StartupSourcePath.CLARA,
+  StartupSourcePath.ADMIN_MANUAL,
+  StartupSourcePath.ADMIN_CSV,
+]);
+
 export enum TRL {
   IDEA = 'idea',
   MVP = 'mvp',
@@ -134,6 +156,7 @@ export const startup = pgTable(
 
     // Submission tracking
     submittedByRole: userRoleEnum('submitted_by_role').default(UserRole.FOUNDER),
+    sourcePath: startupSourcePathEnum('source_path'),
     scoutId: uuid('scout_id').references(() => user.id),
     isPrivate: boolean('is_private').default(false),
 
@@ -236,6 +259,7 @@ export const startup = pgTable(
     // Indexes for common queries
     index('startup_userId_status_idx').on(table.userId, table.status),
     index('startup_status_created_idx').on(table.status, table.createdAt),
+    index('startup_source_path_idx').on(table.sourcePath),
     index('startup_industry_idx').on(table.industry),
     index('startup_stage_idx').on(table.stage),
     index('startup_location_idx').on(table.location),

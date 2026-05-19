@@ -21,7 +21,11 @@ import {
   PortalSubmissionAuditOutcome,
   PortalLinkIntegrity,
 } from './entities';
-import { startup, StartupStatus } from '../startup/entities/startup.schema';
+import {
+  startup,
+  StartupSourcePath,
+  StartupStatus,
+} from '../startup/entities/startup.schema';
 import { deriveStartupGeography } from '../geography';
 import {
   findCanonicalStartupDuplicate,
@@ -201,6 +205,7 @@ export class SubmissionService {
           .insert(startup)
           .values({
             userId: foundUser.id,
+            sourcePath: StartupSourcePath.FOUNDER_SUBMITTED,
             slug,
             name: normalizedStartup.name,
             tagline: normalizedStartup.tagline,

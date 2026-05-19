@@ -96,10 +96,22 @@ export function buildTriageRationale(
 }
 
 
+const BOUNDARY_CODE_LABELS: Record<string, string> = {
+  out_of_stage: "Stage is outside this investor's thesis",
+  out_of_scope: "Industry is outside this investor's thesis",
+  out_of_geo: "Geography is outside this investor's thesis",
+};
+
 export function dealbreakerNoteFromReasonCodes(codes: string[]): string | null {
   // Only surface genuine thesis dealbreakers/exclusions — not lens evaluation
   // outcomes (lens.*.reject). Lens results are surfaced in the lens write-up
   // cards, not as a banner note.
+  //
+  // Priority: structural boundary violations first (DS-E4-F1), then explicit
+  // dealbreaker tags (DS-E4-F3).
+  const boundaryCode = codes.find((c) => c in BOUNDARY_CODE_LABELS);
+  if (boundaryCode) return BOUNDARY_CODE_LABELS[boundaryCode]!;
+
   const breaker = codes.find(
     (c) =>
       !c.startsWith("lens.") &&

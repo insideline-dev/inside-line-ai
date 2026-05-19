@@ -10,9 +10,16 @@ import {
   ScreeningDetailHeader,
 } from "@/components/investor/ScreeningDetail";
 import type { ScreeningRow } from "@/components/investor/screening-types";
+import type { InvestmentThesis } from "@/types/investor";
+import { findPortfolioConflicts } from "@/lib/screening/portfolio-conflicts";
+import type { Startup } from "@/types/startup";
 
 function fetchScreeningQueue() {
   return customFetch<ScreeningRow[]>("/investor/screening");
+}
+
+function fetchThesis() {
+  return customFetch<InvestmentThesis | null>("/investor/thesis");
 }
 
 export const Route = createFileRoute("/_protected/investor/screening_/$id")({
@@ -30,7 +37,26 @@ function ScreeningDetailPage() {
     staleTime: 30_000,
   });
 
+  const { data: thesis } = useQuery({
+    queryKey: ["investor", "thesis"],
+    queryFn: fetchThesis,
+    staleTime: 60_000,
+  });
+
   const row = useMemo(() => rows?.find((r) => r.id === id) ?? null, [rows, id]);
+
+  const portfolioConflicts = useMemo(() => {
+    if (!row || !thesis?.portfolioCompanies?.length) return [];
+    // findPortfolioConflicts only reads name/website/description/industry —
+    // cast to satisfy the Startup param type without a full object construction.
+    const startupLike = {
+      name: row.companyName,
+      website: row.website ?? undefined,
+      description: row.description ?? undefined,
+      industry: row.industry ?? undefined,
+    } as unknown as Startup;
+    return findPortfolioConflicts(startupLike, thesis);
+  }, [row, thesis]);
 
   const invalidateAndBack = () => {
     queryClient.invalidateQueries({ queryKey: ["investor", "screening"] });
@@ -116,7 +142,7 @@ function ScreeningDetailPage() {
         onAdvance={handleAdvance}
         busy={advanceMutation.isPending || passMutation.isPending}
       />
-      <ScreeningDetailBody row={row} />
+      <ScreeningDetailBody row={row} portfolioConflicts={portfolioConflicts} />
     </div>
   );
 }

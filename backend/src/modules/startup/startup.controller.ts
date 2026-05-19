@@ -39,6 +39,8 @@ import { DataRoomService } from './data-room.service';
 import { InvestorInterestService } from './investor-interest.service';
 import { MeetingService } from './meeting.service';
 import { DealEventService } from './deal-event.service';
+import { OpenQuestionService } from '../dd/open-question.service';
+import { UpdateOpenQuestionDto } from '../dd/dto/open-question.dto';
 import { RolesGuard } from './guards';
 import { Roles } from './decorators/roles.decorator';
 import {
@@ -78,6 +80,7 @@ export class StartupController {
     private interestService: InvestorInterestService,
     private meetingService: MeetingService,
     private dealEvents: DealEventService,
+    private openQuestions: OpenQuestionService,
   ) {}
 
   // ============ OWNER ENDPOINTS (FOUNDER/INVESTOR) ============
@@ -391,6 +394,26 @@ export class StartupController {
   @Roles(UserRole.FOUNDER, UserRole.INVESTOR, UserRole.ADMIN)
   async getEvents(@CurrentUser() user: User, @Param('id') startupId: string) {
     return this.dealEvents.forStartup(startupId, { viewerRole: user.role });
+  }
+
+  @Get(':id/open-questions')
+  @Roles(UserRole.INVESTOR, UserRole.ADMIN)
+  async getOpenQuestions(
+    @CurrentUser() user: User,
+    @Param('id') startupId: string,
+  ) {
+    return this.openQuestions.listForStartup(startupId, user.id);
+  }
+
+  @Patch(':id/open-questions/:questionId')
+  @Roles(UserRole.INVESTOR, UserRole.ADMIN)
+  async updateOpenQuestion(
+    @CurrentUser() user: User,
+    @Param('id') startupId: string,
+    @Param('questionId') questionId: string,
+    @Body() dto: UpdateOpenQuestionDto,
+  ) {
+    return this.openQuestions.update(startupId, questionId, user.id, dto);
   }
 
   // ============ INVESTOR ENDPOINTS ============

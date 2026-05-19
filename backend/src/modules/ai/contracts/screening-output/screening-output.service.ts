@@ -373,7 +373,17 @@ export class ScreeningOutputService {
     materials: MaterialsInput | null,
     decision: { signal: ScreeningSignal; score: number; reasonCodes: string[] } | null,
   ): ScreeningOverallV1 {
-    const missingMaterials = materials ? detectMissingMaterials(materials) : [];
+    let missingMaterials = materials ? detectMissingMaterials(materials) : [];
+    const linkedEvidenceCount = lenses.reduce(
+      (sum, lens) =>
+        sum +
+        lens.evidence.filter((e) => typeof e.source === "string" && e.source.trim().length > 0)
+          .length,
+      0,
+    );
+    if (linkedEvidenceCount < 3 && !missingMaterials.includes("evidence_claims")) {
+      missingMaterials = [...missingMaterials, "evidence_claims"];
+    }
     const canonicalBase = decision ?? this.computeFallbackDecision(lenses);
     const canonical = resolveCanonicalScreeningOutcome({
       signal: canonicalBase.signal,
@@ -527,6 +537,7 @@ export class ScreeningOutputService {
       team: "Team info",
       deal_terms: "Deal terms",
       website: "Website",
+      evidence_claims: "Source-linked evidence (≥3 claims)",
     };
 
     return labels[value] ?? this.formatLensLabel(value);

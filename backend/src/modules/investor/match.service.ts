@@ -8,7 +8,7 @@ import { eq, and, gte, desc, sql } from 'drizzle-orm';
 import { DrizzleService } from '../../database';
 import { startup, StartupStatus } from '../startup/entities/startup.schema';
 import { StartupMatchingPipelineService } from '../ai/services/startup-matching-pipeline.service';
-import { startupMatch } from './entities/investor.schema';
+import { startupMatch, type MatchStatus } from './entities/investor.schema';
 import { GetMatchesQuery, UpdateMatchStatus } from './dto';
 
 const DEFAULT_SCORING_WEIGHTS = {
@@ -98,12 +98,27 @@ export class MatchService {
     return this.drizzle.withRLS(investorId, async (db) => {
       const match = await this.findOne(investorId, startupId);
 
+      const isBookmarked = match.status === "bookmarked";
+      const updates: Record<string, unknown> = {
+        updatedAt: new Date(),
+        statusChangedAt: new Date(),
+        isSaved: !isBookmarked,
+      };
+
+      if (isBookmarked) {
+        const restore =
+          (match.statusBeforeBookmark as MatchStatus | null) ?? "new";
+        updates.status = restore;
+        updates.statusBeforeBookmark = null;
+      } else {
+        updates.statusBeforeBookmark = match.status;
+        updates.status = "bookmarked";
+        updates.isSaved = true;
+      }
+
       const [updated] = await db
         .update(startupMatch)
-        .set({
-          isSaved: !match.isSaved,
-          updatedAt: new Date(),
-        })
+        .set(updates)
         .where(
           and(
             eq(startupMatch.investorId, investorId),
@@ -113,7 +128,7 @@ export class MatchService {
         .returning();
 
       this.logger.log(
-        `Toggled saved status for match ${investorId}/${startupId}`,
+        `Toggled bookmark for match ${investorId}/${startupId} → ${updated.status}`,
       );
       return updated;
     });
@@ -162,7 +177,14 @@ export class MatchService {
         status: dto.status,
         statusChangedAt: new Date(),
         updatedAt: new Date(),
+        isSaved: dto.status === "bookmarked",
       };
+
+      if (dto.status === "bookmarked" && match.status !== "bookmarked") {
+        updates.statusBeforeBookmark = match.status;
+      } else if (dto.status !== "bookmarked") {
+        updates.statusBeforeBookmark = null;
+      }
 
       if (dto.status === 'passed') {
         updates.passReason = dto.passReason;

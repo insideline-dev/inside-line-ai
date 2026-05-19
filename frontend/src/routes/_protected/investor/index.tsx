@@ -94,7 +94,7 @@ type PipelineMatch = {
   startupId: string;
   overallScore: number;
   isSaved?: boolean;
-  status: "new" | "reviewing" | "engaged" | "closed" | "passed";
+  status: "new" | "reviewing" | "engaged" | "closed" | "passed" | "bookmarked";
   statusChangedAt: string | null;
   passReason: string | null;
   investmentAmount: number | null;
@@ -115,6 +115,7 @@ type PipelineData = {
   engaged: PipelineMatch[];
   closed: PipelineMatch[];
   passed: PipelineMatch[];
+  bookmarked: PipelineMatch[];
   inFlight?: Array<{
     startupId: string;
     startupName: string;
@@ -167,7 +168,14 @@ type PipelineCardItem = {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const STATUSES: Status[] = ["new", "reviewing", "engaged", "closed", "passed"];
+const STATUSES: Status[] = [
+  "new",
+  "reviewing",
+  "engaged",
+  "closed",
+  "passed",
+  "bookmarked",
+];
 
 const STATUS_CONFIG: Record<
   Status,
@@ -207,6 +215,13 @@ const STATUS_CONFIG: Record<
     iconClass: "text-muted-foreground",
     badgeClass: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
     borderClass: "border-red-500",
+  },
+  bookmarked: {
+    label: "Bookmarked",
+    icon: Bookmark,
+    iconClass: "text-primary",
+    badgeClass: "bg-primary/10 text-primary",
+    borderClass: "border-primary",
   },
 };
 
@@ -358,7 +373,7 @@ function filterPipelineItems(
 
     if (activeTab !== "all") {
       if (activeTab === "bookmarked") {
-        if (!item.isSaved) return false;
+        if (item.pipelineStatus !== "bookmarked") return false;
       } else if (item.pipelineStatus !== activeTab) {
         return false;
       }
@@ -465,7 +480,7 @@ function PipelineCard({
                 </Badge>
               ) : (
                 <Badge className={`${config.badgeClass} text-[11px]`}>
-                  {item.isSaved ? "Bookmarked" : config.label}
+                  {config.label}
                 </Badge>
               )}
             </div>
@@ -475,10 +490,12 @@ function PipelineCard({
                 size="icon"
                 className="h-7 w-7 shrink-0 opacity-60 hover:opacity-100"
                 onClick={handleBookmark}
-                aria-label={item.isSaved ? "Remove bookmark" : "Bookmark"}
+                aria-label={
+                  item.pipelineStatus === "bookmarked" ? "Remove bookmark" : "Bookmark"
+                }
               >
                 <Bookmark
-                  className={`h-4 w-4 ${item.isSaved ? "fill-current text-primary" : ""}`}
+                  className={`h-4 w-4 ${item.pipelineStatus === "bookmarked" ? "fill-current text-primary" : ""}`}
                 />
               </Button>
             )}
@@ -763,7 +780,7 @@ function BoardView({
   matchingJobs: Record<string, "queued" | "running">;
 }) {
   return (
-    <div className="grid grid-cols-1 gap-4 xl:grid-cols-5 md:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6">
       {STATUSES.map((status) => {
         const items = grouped[status];
         return (
@@ -954,7 +971,9 @@ function KanbanCard({
                     onToggleBookmark(item.startupId);
                   }}
                 >
-                  <Bookmark className={`h-3.5 w-3.5 ${item.isSaved ? "fill-current text-primary" : "text-muted-foreground"}`} />
+                  <Bookmark
+                    className={`h-3.5 w-3.5 ${item.pipelineStatus === "bookmarked" ? "fill-current text-primary" : "text-muted-foreground"}`}
+                  />
                 </button>
               )}
               <GripVertical className="h-4 w-4 text-muted-foreground" />
@@ -1403,7 +1422,10 @@ function InvestorDashboard() {
       if (activeTab === "all") return baseGrouped;
       if (activeTab === "bookmarked") {
         return Object.fromEntries(
-          STATUSES.map((status) => [status, baseGrouped[status].filter((item) => item.isSaved)]),
+          STATUSES.map((status) => [
+            status,
+            status === "bookmarked" ? baseGrouped[status] : [],
+          ]),
         ) as Record<Status, PipelineCardItem[]>;
       }
       return Object.fromEntries(
@@ -1419,7 +1441,12 @@ function InvestorDashboard() {
     }
     if (activeTab === "bookmarked") {
       return Object.fromEntries(
-        STATUSES.map((s) => [s, baseFiltered.filter((item) => item.pipelineStatus === s && item.isSaved)]),
+        STATUSES.map((s) => [
+          s,
+          s === "bookmarked"
+            ? baseFiltered.filter((item) => item.pipelineStatus === "bookmarked")
+            : [],
+        ]),
       ) as Record<Status, PipelineCardItem[]>;
     }
     return Object.fromEntries(
@@ -1439,7 +1466,7 @@ function InvestorDashboard() {
       engaged: items.filter(i => i.pipelineStatus === "engaged").length,
       closed: items.filter(i => i.pipelineStatus === "closed").length,
       passed: items.filter(i => i.pipelineStatus === "passed").length,
-      bookmarked: items.filter(i => i.isSaved).length,
+      bookmarked: items.filter((i) => i.pipelineStatus === "bookmarked").length,
     };
   }, [allItems, filters.source]);
 
@@ -1513,8 +1540,8 @@ function InvestorDashboard() {
             <p className="text-muted-foreground">Startups matched to your investment thesis</p>
           </div>
         </div>
-        <div className="grid gap-4 md:grid-cols-5">
-          {Array.from({ length: 5 }).map((_, i) => (
+        <div className="grid gap-4 md:grid-cols-6">
+          {Array.from({ length: 6 }).map((_, i) => (
             <Skeleton key={i} className="h-64 w-full" />
           ))}
         </div>

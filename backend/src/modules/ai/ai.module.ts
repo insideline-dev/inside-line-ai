@@ -9,6 +9,7 @@ import { OrchestratorModule } from "./orchestrator";
 import { LensesModule } from "./lenses";
 import { ContractsModule } from "./contracts/contracts.module";
 import { ScreeningTriageModule } from "./screening/triage";
+import { DdModule } from "../dd/dd.module";
 import { ScreeningCascadeService } from "./screening/cascade.service";
 import { AiProviderService } from "./providers/ai-provider.service";
 import {
@@ -102,6 +103,7 @@ import { OpenAiTextGenerationService } from "./services/openai-text-generation.s
     LensesModule,
     ContractsModule,
     ScreeningTriageModule,
+    DdModule,
     // DS-E11-F2-S1 — EvaluationProcessor injects LensDeltaService (in
     // InvestorModule) to persist DD-vs-screening deltas. forwardRef
     // because InvestorModule already depends on AiModule.

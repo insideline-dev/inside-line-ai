@@ -33,6 +33,7 @@ export const INVESTOR_EVENT_TYPES = [
   "calibration_proposal_created",
   "calibration_proposal_approved",
   "calibration_proposal_rejected",
+  "dealbreakers.updated",
 ] as const;
 
 export type InvestorEventType = (typeof INVESTOR_EVENT_TYPES)[number];

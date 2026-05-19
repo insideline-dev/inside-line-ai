@@ -4,12 +4,20 @@
 // with a suggestion banner that parses the investor's anti-portfolio
 // narrative and proposes candidates; one tap applies them.
 
-import { useMemo, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { format } from "date-fns";
+import { customFetch } from "@/api/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, X, Sparkles } from "lucide-react";
+import { ChevronDown, Plus, X, Sparkles } from "lucide-react";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   parseDealbreakerSuggestions,
   diffNewSuggestions,
@@ -32,6 +40,12 @@ interface DealbreakersEditorProps {
 const MAX_DEALBREAKERS = 30;
 const MAX_TAG_LENGTH = 40;
 
+type DealbreakerHistoryVersion = {
+  versionNumber: number;
+  rules: string[];
+  createdAt: string;
+};
+
 export function DealbreakersEditor({
   value,
   onChange,
@@ -40,10 +54,52 @@ export function DealbreakersEditor({
 }: DealbreakersEditorProps) {
   const [draft, setDraft] = useState("");
 
-  const suggestions = useMemo(
+  const parseMutation = useMutation({
+    mutationFn: async (narrative: string) =>
+      customFetch<{ suggestions: string[] }>("/investor/thesis/parse-dealbreakers", {
+        method: "POST",
+        body: JSON.stringify({ narrative }),
+      }),
+  });
+
+  const historyQuery = useQuery({
+    queryKey: ["investor", "thesis", "dealbreaker-history"],
+    queryFn: () =>
+      customFetch<DealbreakerHistoryVersion[]>("/investor/thesis/dealbreaker-history"),
+    staleTime: 30_000,
+  });
+  const [historyOpen, setHistoryOpen] = useState(false);
+
+  const historyVersions = useMemo(() => {
+    const payload = historyQuery.data;
+    if (!payload) return [];
+    if (Array.isArray(payload)) return payload;
+    if (
+      typeof payload === "object" &&
+      "data" in payload &&
+      Array.isArray((payload as { data: unknown }).data)
+    ) {
+      return (payload as { data: DealbreakerHistoryVersion[] }).data;
+    }
+    return [];
+  }, [historyQuery.data]);
+
+  const deterministicSuggestions = useMemo(
     () => parseDealbreakerSuggestions(exclusionNarrative ?? ""),
     [exclusionNarrative],
   );
+
+  const llmSuggestions = parseMutation.data?.suggestions ?? null;
+  const suggestions = llmSuggestions ?? deterministicSuggestions;
+
+  useEffect(() => {
+    const narrative = exclusionNarrative?.trim() ?? "";
+    if (narrative.length < 12) return;
+    const timer = setTimeout(() => {
+      parseMutation.mutate(narrative);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [exclusionNarrative]);
   const newSuggestions = useMemo(
     () => diffNewSuggestions(suggestions, value),
     [suggestions, value],
@@ -177,6 +233,35 @@ export function DealbreakersEditor({
         <p className="text-[11px] text-muted-foreground">
           {MAX_DEALBREAKERS}-tag limit reached.
         </p>
+      )}
+
+      {historyVersions.length > 0 && (
+        <Collapsible open={historyOpen} onOpenChange={setHistoryOpen}>
+          <CollapsibleTrigger className="flex w-full items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+            <ChevronDown
+              className={`h-4 w-4 transition-transform ${historyOpen ? "rotate-180" : ""}`}
+            />
+            Change history ({historyVersions.length})
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-2 space-y-2">
+            {historyVersions.map((version) => (
+              <div
+                key={version.versionNumber}
+                className="rounded-md border bg-muted/30 px-3 py-2 text-xs"
+              >
+                <p className="font-medium text-foreground">
+                  v{version.versionNumber}
+                  <span className="ml-2 font-normal text-muted-foreground">
+                    {format(new Date(version.createdAt), "MMM d, yyyy HH:mm")}
+                  </span>
+                </p>
+                <p className="mt-1 text-muted-foreground">
+                  {version.rules.length > 0 ? version.rules.join(" · ") : "—"}
+                </p>
+              </div>
+            ))}
+          </CollapsibleContent>
+        </Collapsible>
       )}
     </div>
   );

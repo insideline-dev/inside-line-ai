@@ -3,7 +3,10 @@ import { ConfigService } from "@nestjs/config";
 import { eq } from "drizzle-orm";
 import { marked } from "marked";
 import { RedisFallbackClient } from "../ai/services/redis-fallback.service";
-import { detectMissingMaterials } from "../ai/contracts/screening-output/missing-materials";
+import {
+  detectMissingMaterials,
+  type MissingMaterialCode,
+} from "../ai/contracts/screening-output/missing-materials";
 import type { AgentMail } from "agentmail";
 import { DrizzleService } from "../../database";
 import { user } from "../../auth/entities/auth.schema";
@@ -1436,7 +1439,7 @@ export class ClaraService {
 
   async notifyScreeningMissingMaterials(
     startupId: string,
-    missingMaterials: Array<"deck" | "product_description" | "team" | "deal_terms" | "website">,
+    missingMaterials: MissingMaterialCode[],
     options?: {
       pipelineRunId?: string | null;
     },
@@ -1446,12 +1449,13 @@ export class ClaraService {
     const normalizedMissing = Array.from(
       new Set(
         missingMaterials.filter(
-          (material): material is "deck" | "product_description" | "team" | "deal_terms" | "website" =>
+          (material): material is MissingMaterialCode =>
             material === "deck" ||
             material === "product_description" ||
             material === "team" ||
             material === "deal_terms" ||
-            material === "website",
+            material === "website" ||
+            material === "evidence_claims",
         ),
       ),
     );
@@ -1608,14 +1612,15 @@ export class ClaraService {
   }
 
   private formatMissingMaterialLabels(
-    fields: Array<"deck" | "product_description" | "team" | "deal_terms" | "website">,
+    fields: MissingMaterialCode[],
   ): string[] {
-    const labels: Record<"deck" | "product_description" | "team" | "deal_terms" | "website", string> = {
+    const labels: Record<MissingMaterialCode, string> = {
       deck: "pitch deck / presentation",
       product_description: "product description",
       team: "team members and roles",
       deal_terms: "deal terms (funding target, valuation, or raise type)",
       website: "company website URL",
+      evidence_claims: "at least 3 source-linked evidence claims",
     };
     return fields
       .map((field) => labels[field])
@@ -1623,7 +1628,7 @@ export class ClaraService {
   }
 
   private formatMaterialAcknowledgement(
-    fields: Array<"deck" | "product_description" | "team" | "deal_terms" | "website">,
+    fields: MissingMaterialCode[],
   ): string {
     const labels = this.formatMissingMaterialLabels(fields);
     if (labels.length === 0) {

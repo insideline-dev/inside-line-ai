@@ -8,7 +8,12 @@ import { ASSET_TYPES } from "../../storage/storage.config";
 import { DataRoomService } from "../startup/data-room.service";
 import { UserRole } from "../../auth/entities/auth.schema";
 import { AgentMailClientService } from "../integrations/agentmail/agentmail-client.service";
-import { startup, StartupStatus, StartupStage } from "../startup/entities/startup.schema";
+import {
+  startup,
+  StartupSourcePath,
+  StartupStatus,
+  StartupStage,
+} from "../startup/entities/startup.schema";
 import { STARTUP_DESCRIPTION_PLACEHOLDER } from "../startup/startup.constants";
 import { PipelineService } from "../ai/services/pipeline.service";
 import { PipelinePhase } from "../ai/interfaces/pipeline.interface";
@@ -184,6 +189,9 @@ export class ClaraSubmissionService {
       .values({
         userId: ownerUserId,
         submittedByRole: isInvestorSubmission ? UserRole.INVESTOR : UserRole.ADMIN,
+        sourcePath: isInvestorSubmission
+          ? StartupSourcePath.INVESTOR_INBOX
+          : StartupSourcePath.CLARA,
         isPrivate: isInvestorSubmission,
         name: companyName,
         slug,

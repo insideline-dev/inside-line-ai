@@ -6,7 +6,12 @@ import {
 import { eq } from 'drizzle-orm';
 import { DrizzleService } from '../../database';
 import { user, UserRole } from '../../auth/entities/auth.schema';
-import { startup, StartupStatus, StartupStage } from '../startup/entities/startup.schema';
+import {
+  startup,
+  StartupSourcePath,
+  StartupStatus,
+  StartupStage,
+} from '../startup/entities/startup.schema';
 import { deriveStartupGeography } from '../geography';
 import { ExportUsersQuery, ExportStartupsQuery } from './dto';
 
@@ -182,6 +187,7 @@ export class DataImportService {
 
         await this.drizzle.db.insert(startup).values({
           userId: foundUser.id,
+          sourcePath: StartupSourcePath.ADMIN_CSV,
           name: row.name.trim(),
           slug,
           tagline: row.tagline.trim(),

@@ -15,7 +15,11 @@ import {
   PortalSubmissionStatus,
   portal,
 } from './entities';
-import { startup, StartupStatus } from '../startup/entities/startup.schema';
+import {
+  startup,
+  StartupSourcePath,
+  StartupStatus,
+} from '../startup/entities/startup.schema';
 import { deriveStartupGeography } from '../geography';
 import { SubmitToPortal, GetSubmissionsQuery } from './dto';
 import { NotificationType } from '../../notification/entities';
@@ -85,6 +89,7 @@ export class SubmissionService {
         .insert(startup)
         .values({
           userId: foundUser.id,
+          sourcePath: StartupSourcePath.FOUNDER_SUBMITTED,
           slug,
           name: dto.name,
           tagline: dto.tagline,

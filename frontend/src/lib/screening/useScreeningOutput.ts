@@ -11,19 +11,28 @@ import { ApiError, customFetch } from "@/api/client";
 
 export type ScreeningSignal = "advance" | "review" | "reject";
 export type ScreeningEvidenceConfidence = "low" | "medium" | "high";
+export type ScreeningEvidenceSourceType =
+  | "deck_page"
+  | "public_url"
+  | "enrichment_call"
+  | "research_source"
+  | "internal_trace";
 
 export interface ScreeningEvidence {
   claim: string;
   source?: string;
   confidence: ScreeningEvidenceConfidence;
+  sourceType?: ScreeningEvidenceSourceType;
+  sourceLabel?: string;
+  sourceRef?: string;
+  url?: string;
+  pageNumber?: number;
+  quote?: string;
 }
 
-export interface ScreeningHandoffEvidenceV1 {
+export interface ScreeningHandoffEvidenceV1 extends ScreeningEvidence {
   lensKey: string;
   lensLabel: string;
-  claim: string;
-  source?: string;
-  confidence: ScreeningEvidenceConfidence;
   lensScore: number;
   signal: ScreeningSignal;
 }
@@ -63,14 +72,23 @@ export interface ScreeningOverallV1 {
   missingMaterials: string[];
 }
 
+export interface ScreeningLensScoreV2 {
+  key: "market" | "team" | "traction";
+  score: number;
+  signal: ScreeningSignal;
+  rationale?: string;
+}
+
 export interface ScreeningOutputV1 {
-  version: 1;
+  version: 1 | 2;
   startupId: string;
   pipelineRunId: string | null;
   generatedAt: string;
   overall: ScreeningOverallV1;
   handoff?: ScreeningHandoffV1;
   lenses: ScreeningLensV1[];
+  thesisFit?: unknown | null;
+  lensScores?: ScreeningLensScoreV2[];
 }
 
 export const screeningOutputQueryKey = (startupId: string) =>

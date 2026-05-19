@@ -10,6 +10,7 @@ import {
   ScreeningDetailHeader,
 } from "@/components/investor/ScreeningDetail";
 import type { ScreeningRow } from "@/components/investor/screening-types";
+import { useScreeningOutput } from "@/lib/screening/useScreeningOutput";
 
 function fetchScreeningQueue() {
   return customFetch<ScreeningRow[]>("/investor/screening");
@@ -31,6 +32,7 @@ function ScreeningDetailPage() {
   });
 
   const row = useMemo(() => rows?.find((r) => r.id === id) ?? null, [rows, id]);
+  const screeningOutput = useScreeningOutput(id);
 
   const invalidateAndBack = () => {
     queryClient.invalidateQueries({ queryKey: ["investor", "screening"] });
@@ -116,7 +118,7 @@ function ScreeningDetailPage() {
         onAdvance={handleAdvance}
         busy={advanceMutation.isPending || passMutation.isPending}
       />
-      <ScreeningDetailBody row={row} />
+      <ScreeningDetailBody row={row} screeningOutput={screeningOutput.data} />
     </div>
   );
 }

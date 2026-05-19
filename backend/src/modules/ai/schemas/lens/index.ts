@@ -1,3 +1,4 @@
+export * from "./evidence-link";
 export * from "./lens-output.schema";
 export * from "./market.lens.schema";
 export * from "./team.lens.schema";

@@ -29,6 +29,8 @@ interface LensEvidencePopoverProps {
   lens?: ScreeningLensV1;
   /** True while the screening output is being fetched. */
   isLoading?: boolean;
+  /** Optional direct handler for deck citations. */
+  onDeckPageSelect?: (pageNumber: number) => void;
 }
 
 const CONFIDENCE_COLORS: Record<ScreeningEvidence["confidence"], string> = {
@@ -37,14 +39,24 @@ const CONFIDENCE_COLORS: Record<ScreeningEvidence["confidence"], string> = {
   low: "border-muted-foreground/30 bg-muted/40 text-muted-foreground",
 };
 
-function isHttpUrl(s: string | undefined | null): s is string {
-  if (!s) return false;
+function getEvidenceHref(item: ScreeningEvidence): string | null {
+  const candidate = item.url ?? item.source;
+  if (!candidate) return null;
   try {
-    const url = new URL(s);
-    return url.protocol === "http:" || url.protocol === "https:";
+    const url = new URL(candidate);
+    return url.protocol === "http:" || url.protocol === "https:"
+      ? candidate
+      : null;
   } catch {
-    return false;
+    return null;
   }
+}
+
+function getEvidenceSourceLabel(item: ScreeningEvidence): string | null {
+  if (item.sourceType === "deck_page" && item.pageNumber) {
+    return `Pitch deck • page ${item.pageNumber}`;
+  }
+  return item.sourceLabel ?? item.sourceRef ?? item.source ?? null;
 }
 
 export function LensEvidencePopover({
@@ -53,6 +65,7 @@ export function LensEvidencePopover({
   children,
   lens,
   isLoading,
+  onDeckPageSelect,
 }: LensEvidencePopoverProps) {
   return (
     <Popover>
@@ -90,7 +103,8 @@ export function LensEvidencePopover({
           ) : (
             <ul className="space-y-2.5">
               {lens.evidence.map((item, idx) => {
-                const url = isHttpUrl(item.source) ? item.source : null;
+                const url = getEvidenceHref(item);
+                const sourceLabel = getEvidenceSourceLabel(item);
                 const claimText = (
                   <span className="break-words text-xs leading-snug">
                     {item.claim}
@@ -112,7 +126,16 @@ export function LensEvidencePopover({
                       {item.confidence}
                     </Badge>
                     <div className="min-w-0 flex-1">
-                      {url ? (
+                      {item.sourceType === "deck_page" && item.pageNumber && onDeckPageSelect ? (
+                        <button
+                          type="button"
+                          className="group flex items-start gap-1 text-left hover:underline"
+                          onClick={() => onDeckPageSelect(item.pageNumber!)}
+                          data-testid="lens-evidence-deck-link"
+                        >
+                          {claimText}
+                        </button>
+                      ) : url ? (
                         <a
                           href={url}
                           target="_blank"
@@ -126,9 +149,9 @@ export function LensEvidencePopover({
                       ) : (
                         <>{claimText}</>
                       )}
-                      {item.source && !url && (
+                      {sourceLabel && (
                         <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
-                          source: {item.source}
+                          source: {sourceLabel}
                         </span>
                       )}
                     </div>

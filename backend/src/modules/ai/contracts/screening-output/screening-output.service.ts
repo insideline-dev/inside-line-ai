@@ -28,6 +28,7 @@ import type {
   ScreeningOutputV2,
 } from "./v2.schema";
 import type { ThesisFitOutput } from "../../schemas/thesis-fit.schema";
+import { normalizeLensEvidenceLink } from "../../schemas/lens";
 
 /**
  * Builds the public {@link ScreeningOutputV1} contract from persisted
@@ -315,17 +316,43 @@ export class ScreeningOutputService {
           claim: string;
           source?: unknown;
           confidence?: unknown;
+          sourceType?: unknown;
+          sourceLabel?: unknown;
+          sourceRef?: unknown;
+          url?: unknown;
+          pageNumber?: unknown;
+          quote?: unknown;
         };
+        const source =
+          typeof candidate.source === "string" ? candidate.source.trim() : undefined;
+        const normalized = source ? normalizeLensEvidenceLink(source) : null;
         out.push({
           claim: candidate.claim,
-          source:
-            typeof candidate.source === "string" ? candidate.source : undefined,
+          source,
           confidence:
             candidate.confidence === "low" ||
             candidate.confidence === "medium" ||
             candidate.confidence === "high"
               ? candidate.confidence
               : "low",
+          sourceType:
+            typeof candidate.sourceType === "string"
+              ? (candidate.sourceType as ScreeningEvidence["sourceType"])
+              : normalized?.sourceType,
+          sourceLabel:
+            typeof candidate.sourceLabel === "string"
+              ? candidate.sourceLabel
+              : normalized?.sourceLabel,
+          sourceRef:
+            typeof candidate.sourceRef === "string"
+              ? candidate.sourceRef
+              : normalized?.sourceRef,
+          url: typeof candidate.url === "string" ? candidate.url : normalized?.url,
+          pageNumber:
+            typeof candidate.pageNumber === "number"
+              ? candidate.pageNumber
+              : normalized?.pageNumber,
+          quote: typeof candidate.quote === "string" ? candidate.quote : undefined,
         });
       }
     }
@@ -397,6 +424,12 @@ export class ScreeningOutputService {
           claim,
           source,
           confidence: evidence.confidence,
+          sourceType: evidence.sourceType,
+          sourceLabel: evidence.sourceLabel,
+          sourceRef: evidence.sourceRef,
+          url: evidence.url,
+          pageNumber: evidence.pageNumber,
+          quote: evidence.quote,
           lensScore: lens.score,
           signal: lens.signal,
         });

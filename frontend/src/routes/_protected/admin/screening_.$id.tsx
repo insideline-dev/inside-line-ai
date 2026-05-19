@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useStartupControllerFindOne } from "@/api/generated/startups/startups";
 import type { ScreeningRow } from "@/components/investor/screening-types";
+import { useScreeningOutput } from "@/lib/screening/useScreeningOutput";
 
 /**
  * Admin DS detail. Shares the header + rich detail body with the investor
@@ -62,6 +63,7 @@ function AdminScreeningDetailPage() {
     staleTime: 30_000,
   });
   const row = useMemo(() => rows?.find((r) => r.id === id) ?? null, [rows, id]);
+  const screeningOutput = useScreeningOutput(id);
 
   const { data: startupRes, isLoading: startupLoading } =
     useStartupControllerFindOne(id, { query: { retry: false } });
@@ -169,7 +171,7 @@ function AdminScreeningDetailPage() {
 
         <TabsContent value="details" className="mt-0">
           {row ? (
-            <ScreeningDetailBody row={row} />
+            <ScreeningDetailBody row={row} screeningOutput={screeningOutput.data} />
           ) : (
             <div className="rounded-md border border-dashed bg-muted/30 p-6 text-sm text-muted-foreground">
               No screening details available for this startup yet. The

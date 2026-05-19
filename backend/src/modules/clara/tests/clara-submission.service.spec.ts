@@ -207,7 +207,7 @@ describe("ClaraSubmissionService", () => {
     expect(startupIntake.findOrCreateStartupRecord).toHaveBeenCalledWith(
       expect.objectContaining({
         companyName: "Acme Corp",
-        source: "email-forward",
+        source: "clara",
         website: undefined,
       }),
     );
@@ -238,7 +238,7 @@ describe("ClaraSubmissionService", () => {
         ownerUserId: "investor-1",
         submittedByRole: "investor",
         isPrivate: true,
-        source: "email-forward",
+        source: "clara",
       }),
     );
     expect(pipeline.startPipeline).toHaveBeenCalledWith(
@@ -745,7 +745,7 @@ describe("ClaraSubmissionService", () => {
       expect.objectContaining({
         fromEmail: "ceo@example.com",
         fromName: "Jane CEO",
-        source: "email-forward",
+        source: "clara",
       }),
     );
   });
@@ -777,7 +777,7 @@ describe("ClaraSubmissionService", () => {
 
     expect(startupIntake.findOrCreateStartupRecord).toHaveBeenCalledWith(
       expect.objectContaining({
-        source: "whatsapp-forward",
+        source: "clara",
         website: "https://acme.example/",
       }),
     );

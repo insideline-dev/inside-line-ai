@@ -23,12 +23,12 @@ export const LensEvidenceSchema = z
     claim: z.string().min(1),
     source: z.string().min(1),
     confidence: LensConfidenceSchema,
-    sourceType: LensEvidenceSourceTypeSchema.optional(),
-    sourceLabel: z.string().min(1).optional(),
-    sourceRef: z.string().min(1).optional(),
-    url: z.url().optional(),
-    pageNumber: z.number().int().min(1).optional(),
-    quote: z.string().min(1).optional(),
+    sourceType: LensEvidenceSourceTypeSchema.nullable().optional(),
+    sourceLabel: z.string().min(1).nullable().optional(),
+    sourceRef: z.string().min(1).nullable().optional(),
+    url: z.url().nullable().optional(),
+    pageNumber: z.number().int().min(1).nullable().optional(),
+    quote: z.string().min(1).nullable().optional(),
   })
   .superRefine((value, ctx) => {
     try {

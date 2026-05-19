@@ -4,14 +4,13 @@ import { StorageService } from "../../../storage";
 import { AssetService } from "../../../storage/asset.service";
 import { AgentMailClientService } from "../../integrations/agentmail/agentmail-client.service";
 import { DataRoomService } from "../../startup/data-room.service";
+import { StartupIntakeService } from "../../startup/startup-intake.service";
 import { PipelineService } from "../../ai/services/pipeline.service";
 import { NotificationService } from "../../../notification/notification.service";
 import { ClaraAiService } from "../clara-ai.service";
 import { ClaraSubmissionService } from "../clara-submission.service";
 import { StartupStatus } from "../../startup/entities/startup.schema";
-import { STARTUP_DESCRIPTION_PLACEHOLDER } from "../../startup/startup.constants";
 import { PipelinePhase } from "../../ai/interfaces/pipeline.interface";
-import { ConversationStatus } from "../interfaces/clara.interface";
 import type { MessageContext, AttachmentMeta } from "../interfaces/clara.interface";
 
 const createMessageContext = (
@@ -39,7 +38,7 @@ const createAttachment = (
 describe("ClaraSubmissionService", () => {
   let service: ClaraSubmissionService;
   let drizzle: jest.Mocked<DrizzleService>;
-  let queue: object;
+  let queue: { addJob: jest.Mock };
   let storage: jest.Mocked<StorageService>;
   let assetService: jest.Mocked<AssetService>;
   let dataRoomService: jest.Mocked<DataRoomService>;
@@ -47,6 +46,7 @@ describe("ClaraSubmissionService", () => {
   let pipeline: jest.Mocked<PipelineService>;
   let notifications: jest.Mocked<NotificationService>;
   let claraAi: jest.Mocked<ClaraAiService>;
+  let startupIntake: jest.Mocked<StartupIntakeService>;
 
   const mockDbChain = {
     insert: jest.fn().mockReturnThis(),
@@ -102,7 +102,10 @@ describe("ClaraSubmissionService", () => {
     mockDbChain.limit.mockResolvedValue([]); // No duplicates by default
 
     drizzle = { db: mockDb } as unknown as jest.Mocked<DrizzleService>;
-    queue = {};
+
+    queue = {
+      addJob: jest.fn(),
+    };
 
     storage = {
       uploadGeneratedContent: jest.fn().mockResolvedValue({
@@ -137,6 +140,16 @@ describe("ClaraSubmissionService", () => {
       extractCompanyFromFilename: jest.fn().mockReturnValue(null),
     } as unknown as jest.Mocked<ClaraAiService>;
 
+    startupIntake = {
+      findOrCreateStartupRecord: jest.fn().mockResolvedValue({
+        startupId: "startup-1",
+        startupName: "Acme Corp",
+        isDuplicate: false,
+        status: StartupStatus.SUBMITTED,
+        ownerUserId: "admin-1",
+      }),
+    } as unknown as jest.Mocked<StartupIntakeService>;
+
     assetService = {
       uploadAndTrack: jest.fn().mockResolvedValue({
         id: "asset-1",
@@ -147,6 +160,8 @@ describe("ClaraSubmissionService", () => {
 
     dataRoomService = {
       uploadDocument: jest.fn().mockResolvedValue({ id: "doc-1" }),
+      registerFiles: jest.fn().mockResolvedValue(undefined),
+      reclassifyAll: jest.fn().mockResolvedValue([]),
     } as unknown as jest.Mocked<DataRoomService>;
 
     // Mock global fetch for attachment downloads
@@ -167,6 +182,7 @@ describe("ClaraSubmissionService", () => {
       notifications,
       claraAi,
       dataRoomService,
+      startupIntake,
     );
   });
 
@@ -175,15 +191,6 @@ describe("ClaraSubmissionService", () => {
       bodyText: "No company here",
       attachments: [createAttachment()],
     });
-
-    mockDbChain.returning.mockResolvedValueOnce([
-      {
-        id: "startup-1",
-        name: "Acme Corp",
-        slug: "acme-corp-xyz1",
-        userId: "admin-1",
-      },
-    ]);
 
     const result = await service.handleSubmission(ctx, "admin-1", "Acme Corp");
 
@@ -194,9 +201,16 @@ describe("ClaraSubmissionService", () => {
       status: StartupStatus.SUBMITTED,
       pipelineStarted: true,
       missingFields: [],
+      classifiedDocuments: [],
     });
 
-    expect(mockDb.insert).toHaveBeenCalled();
+    expect(startupIntake.findOrCreateStartupRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        companyName: "Acme Corp",
+        source: "email-forward",
+        website: undefined,
+      }),
+    );
     expect(mockDb.update).not.toHaveBeenCalled();
     expect(pipeline.startPipeline).toHaveBeenCalledWith("startup-1", "admin-1", {
       skipExtraction: true,
@@ -219,11 +233,12 @@ describe("ClaraSubmissionService", () => {
 
     await service.handleSubmission(ctx, "admin-1", "Acme Corp");
 
-    expect(mockDb.values).toHaveBeenCalledWith(
+    expect(startupIntake.findOrCreateStartupRecord).toHaveBeenCalledWith(
       expect.objectContaining({
-        userId: "investor-1",
+        ownerUserId: "investor-1",
         submittedByRole: "investor",
         isPrivate: true,
+        source: "email-forward",
       }),
     );
     expect(pipeline.startPipeline).toHaveBeenCalledWith(
@@ -243,13 +258,13 @@ describe("ClaraSubmissionService", () => {
   });
 
   it("detects duplicate startup by name", async () => {
-    mockDb.limit.mockResolvedValueOnce([
-      {
-        id: "existing-startup",
-        name: "Acme Corp",
-        status: StartupStatus.SUBMITTED,
-      },
-    ]);
+    startupIntake.findOrCreateStartupRecord.mockResolvedValueOnce({
+      startupId: "existing-startup",
+      startupName: "Acme Corp",
+      isDuplicate: true,
+      status: StartupStatus.SUBMITTED,
+      ownerUserId: "admin-1",
+    });
 
     const ctx = createMessageContext({
       attachments: [createAttachment()],
@@ -265,20 +280,12 @@ describe("ClaraSubmissionService", () => {
       status: StartupStatus.SUBMITTED,
     });
 
-    expect(mockDb.insert).not.toHaveBeenCalled();
+    expect(startupIntake.findOrCreateStartupRecord).toHaveBeenCalled();
     expect(mockDb.update).not.toHaveBeenCalled();
     expect(pipeline.startPipeline).not.toHaveBeenCalled();
   });
 
   it("does not treat fuzzy similar names as duplicates", async () => {
-    mockDb.limit.mockResolvedValueOnce([
-      {
-        id: "existing-startup",
-        name: "Acme 2025",
-        status: StartupStatus.SUBMITTED,
-      },
-    ]);
-
     const ctx = createMessageContext({
       attachments: [createAttachment()],
     });
@@ -287,7 +294,11 @@ describe("ClaraSubmissionService", () => {
 
     expect(result.isDuplicate).toBe(false);
     expect(result.startupId).toBe("startup-1");
-    expect(mockDb.insert).toHaveBeenCalled();
+    expect(startupIntake.findOrCreateStartupRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        companyName: "Acme",
+      }),
+    );
     expect(pipeline.startPipeline).toHaveBeenCalledWith(
       "startup-1",
       "admin-1",
@@ -298,13 +309,13 @@ describe("ClaraSubmissionService", () => {
   });
 
   it("matches duplicates when the only difference is a legal suffix", async () => {
-    mockDb.limit.mockResolvedValueOnce([
-      {
-        id: "existing-startup",
-        name: "Acme, Inc.",
-        status: StartupStatus.SUBMITTED,
-      },
-    ]);
+    startupIntake.findOrCreateStartupRecord.mockResolvedValueOnce({
+      startupId: "existing-startup",
+      startupName: "Acme, Inc.",
+      isDuplicate: true,
+      status: StartupStatus.SUBMITTED,
+      ownerUserId: "admin-1",
+    });
 
     const ctx = createMessageContext({
       attachments: [createAttachment()],
@@ -320,7 +331,7 @@ describe("ClaraSubmissionService", () => {
       status: StartupStatus.SUBMITTED,
     });
 
-    expect(mockDb.insert).not.toHaveBeenCalled();
+    expect(startupIntake.findOrCreateStartupRecord).toHaveBeenCalled();
     expect(pipeline.startPipeline).not.toHaveBeenCalled();
   });
 
@@ -373,193 +384,6 @@ describe("ClaraSubmissionService", () => {
       PipelinePhase.ENRICHMENT,
     );
     expect(pipeline.startPipeline).not.toHaveBeenCalled();
-  });
-
-  it("restarts screening from the screening phase when text-only follow-up fills all missing materials", async () => {
-    mockDb.limit
-      .mockResolvedValueOnce([
-        {
-          id: "existing-startup",
-          userId: "admin-1",
-          name: "Acme Corp",
-          pitchDeckUrl: "https://drive/deck.pdf",
-          pitchDeckPath: null,
-          productDescription: null,
-          description: null,
-          teamMembers: [],
-          fundingTarget: 0,
-          valuation: null,
-          raiseType: null,
-          website: null,
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          id: "existing-startup",
-          userId: "admin-1",
-          name: "Acme Corp",
-          pitchDeckUrl: "https://drive/deck.pdf",
-          pitchDeckPath: null,
-          productDescription:
-            "We build billing software for clinics that automates claims reconciliation.",
-          description:
-            "We build billing software for clinics that automates claims reconciliation.",
-          teamMembers: [
-            { name: "Jane Doe", role: "CEO", linkedinUrl: "" },
-            { name: "John Smith", role: "CTO", linkedinUrl: "" },
-          ],
-          fundingTarget: 500000,
-          valuation: null,
-          raiseType: "safe",
-          website: "https://acme.com",
-        },
-      ]);
-
-    const resolution = await service.resolveScreeningFollowUpFromReply(
-      "existing-startup",
-      {
-        inboxId: "inbox-1",
-        messageId: "msg-123",
-        fromEmail: "founder@acme.com",
-        fromName: "Jane Doe",
-        subject: "Re: missing materials",
-        bodyText:
-          "Website: https://acme.com\n\nProduct: We build billing software for clinics that automates claims reconciliation.\n\nTeam:\nJane Doe - CEO\nJohn Smith - CTO\n\nWe are raising a SAFE round for $500k.",
-        attachments: [],
-        conversationHistory: [],
-        actorUserId: null,
-        actorRole: null,
-        investorUserId: null,
-        startupId: "existing-startup",
-        startupStage: null,
-        conversationStatus: ConversationStatus.AWAITING_INFO,
-        conversationMemory: null,
-      },
-      "admin-1",
-    );
-
-    expect(resolution).toEqual({
-      startupId: "existing-startup",
-      startupName: "Acme Corp",
-      updatedMaterials: expect.arrayContaining([
-        "website",
-        "product_description",
-        "team",
-        "deal_terms",
-      ]),
-      remainingMissing: [],
-      pipelineStarted: true,
-      rerunPhase: PipelinePhase.SCREENING,
-    });
-    expect(pipeline.prepareFreshAnalysis).not.toHaveBeenCalled();
-    expect(pipeline.rerunFromPhase).toHaveBeenCalledWith(
-      "existing-startup",
-      PipelinePhase.SCREENING,
-    );
-  });
-
-  it("parses team members from a reply and persists a screening-ready team row", async () => {
-    mockDb.limit
-      .mockResolvedValueOnce([
-        {
-          id: "existing-startup",
-          userId: "admin-1",
-          name: "Path Robotics",
-          pitchDeckUrl: null,
-          pitchDeckPath: "startups/admin-1/deck.pdf",
-          productDescription:
-            "Path Robotics builds autonomous warehouse robots for mid-market logistics operators.",
-          description:
-            "Path Robotics builds autonomous warehouse robots for mid-market logistics operators.",
-          teamMembers: [],
-          teamSize: 1,
-          fundingTarget: 2500000,
-          valuation: null,
-          raiseType: "safe",
-          website: "https://pathrobotics.com",
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          id: "existing-startup",
-          userId: "admin-1",
-          name: "Path Robotics",
-          pitchDeckUrl: null,
-          pitchDeckPath: "startups/admin-1/deck.pdf",
-          productDescription:
-            "Path Robotics builds autonomous warehouse robots for mid-market logistics operators.",
-          description:
-            "Path Robotics builds autonomous warehouse robots for mid-market logistics operators.",
-          teamMembers: [
-            { name: "Alice Chen", role: "CEO", linkedinUrl: "" },
-            { name: "Bob Smith", role: "CTO", linkedinUrl: "" },
-          ],
-          teamSize: 2,
-          fundingTarget: 2500000,
-          valuation: null,
-          raiseType: "safe",
-          website: "https://pathrobotics.com",
-        },
-      ]);
-
-    const resolution = await service.resolveScreeningFollowUpFromReply(
-      "existing-startup",
-      {
-        inboxId: "inbox-1",
-        messageId: "msg-456",
-        fromEmail: "founder@pathrobotics.com",
-        fromName: "Alice Chen",
-        subject: "Re: missing screening materials",
-        bodyText:
-          "Team members and roles:\n- Alice Chen — CEO\n- Bob Smith — CTO",
-        attachments: [],
-        conversationHistory: [],
-        actorUserId: null,
-        actorRole: null,
-        investorUserId: null,
-        startupId: "existing-startup",
-        startupStage: null,
-        conversationStatus: ConversationStatus.AWAITING_INFO,
-        conversationMemory: null,
-      },
-      "admin-1",
-    );
-
-    expect(mockDb.update).toHaveBeenCalledTimes(1);
-    expect(mockDb.set).toHaveBeenCalledWith(
-      expect.objectContaining({
-        teamMembers: [
-          { name: "Alice Chen", role: "CEO", linkedinUrl: "" },
-          { name: "Bob Smith", role: "CTO", linkedinUrl: "" },
-        ],
-        teamSize: 2,
-      }),
-    );
-    expect(resolution).toEqual({
-      startupId: "existing-startup",
-      startupName: "Path Robotics",
-      updatedMaterials: ["team"],
-      remainingMissing: [],
-      pipelineStarted: true,
-      rerunPhase: PipelinePhase.SCREENING,
-    });
-    expect(pipeline.rerunFromPhase).toHaveBeenCalledWith(
-      "existing-startup",
-      PipelinePhase.SCREENING,
-    );
-    expect(pipeline.prepareFreshAnalysis).not.toHaveBeenCalled();
-  });
-
-  it("detects a live-shaped screening reply that lists team members", () => {
-    expect(
-      service.hasScreeningFollowUpSignals(
-        createMessageContext({
-          bodyText:
-            "The team is:\n- Alice Chen — CEO\n- Bob Smith — CTO",
-          attachments: [],
-        }),
-      ),
-    ).toBe(true);
   });
 
 
@@ -670,20 +494,11 @@ describe("ClaraSubmissionService", () => {
       attachments: [createAttachment()],
     });
 
-    mockDbChain.returning.mockResolvedValueOnce([
-      {
-        id: "startup-1",
-        name: "TechCorp Inc",
-        slug: "techcorp-inc-xyz1",
-        userId: "admin-1",
-      },
-    ]);
-
     await service.handleSubmission(ctx, "admin-1");
 
-    expect(mockDb.values).toHaveBeenCalledWith(
+    expect(startupIntake.findOrCreateStartupRecord).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: "TechCorp Inc",
+        companyName: "TechCorp Inc",
       }),
     );
   });
@@ -698,9 +513,9 @@ describe("ClaraSubmissionService", () => {
 
     await service.handleSubmission(ctx, "admin-1");
 
-    expect(mockDb.values).toHaveBeenCalledWith(
+    expect(startupIntake.findOrCreateStartupRecord).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: "Untitled Startup",
+        companyName: "Untitled Startup",
       }),
     );
   });
@@ -713,9 +528,9 @@ describe("ClaraSubmissionService", () => {
 
     await service.handleSubmission(ctx, "admin-1", "Correct Company");
 
-    expect(mockDb.values).toHaveBeenCalledWith(
+    expect(startupIntake.findOrCreateStartupRecord).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: "Correct Company",
+        companyName: "Correct Company",
       }),
     );
   });
@@ -729,10 +544,10 @@ describe("ClaraSubmissionService", () => {
 
     await service.handleSubmission(ctx, "admin-1", "Uber");
 
-    expect(mockDb.values).toHaveBeenCalledWith(
+    expect(startupIntake.findOrCreateStartupRecord).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: "Uber",
-        website: "",
+        companyName: "Uber",
+        website: undefined,
       }),
     );
   });
@@ -745,9 +560,9 @@ describe("ClaraSubmissionService", () => {
 
     await service.handleSubmission(ctx, "admin-1", "uber2");
 
-    expect(mockDb.values).toHaveBeenCalledWith(
+    expect(startupIntake.findOrCreateStartupRecord).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: "Untitled Startup",
+        companyName: "Untitled Startup",
       }),
     );
   });
@@ -760,9 +575,9 @@ describe("ClaraSubmissionService", () => {
 
     await service.handleSubmission(ctx, "admin-1", "2023 Annual Report");
 
-    expect(mockDb.values).toHaveBeenCalledWith(
+    expect(startupIntake.findOrCreateStartupRecord).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: "Untitled Startup",
+        companyName: "Untitled Startup",
       }),
     );
   });
@@ -775,14 +590,14 @@ describe("ClaraSubmissionService", () => {
 
     await service.handleSubmission(ctx, "admin-1");
 
-    expect(mockDb.values).toHaveBeenCalledWith(
+    expect(startupIntake.findOrCreateStartupRecord).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: "Untitled Startup",
+        companyName: "Untitled Startup",
       }),
     );
   });
 
-  it("generates URL-safe slug with random suffix", async () => {
+  it("passes punctuation-preserving company names into the shared intake helper", async () => {
     const ctx = createMessageContext({
       bodyText: "No company here",
       attachments: [createAttachment()],
@@ -790,8 +605,11 @@ describe("ClaraSubmissionService", () => {
 
     await service.handleSubmission(ctx, "admin-1", "Test & Co., Inc.");
 
-    const call = mockDb.values.mock.calls[0][0];
-    expect(call.slug).toMatch(/^test-co-inc-[a-z0-9]{4}$/);
+    expect(startupIntake.findOrCreateStartupRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        companyName: "Test & Co., Inc.",
+      }),
+    );
   });
 
   it("stores all uploaded attachments in startup files metadata", async () => {
@@ -822,21 +640,17 @@ describe("ClaraSubmissionService", () => {
 
     await service.handleSubmission(ctx, "admin-1");
 
-    expect(mockDb.values).toHaveBeenCalledWith(
-      expect.objectContaining({
-        files: [
-          {
-            path: "startups/admin-1/documents/deck.pdf",
-            name: "deck.pdf",
-            type: "application/pdf",
-          },
-          {
-            path: "startups/admin-1/documents/financials.pdf",
-            name: "financials.pdf",
-            type: "application/pdf",
-          },
-        ],
-      }),
+    expect(dataRoomService.registerFiles).toHaveBeenCalledWith(
+      "startup-1",
+      "admin-1",
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "startups/admin-1/documents/deck.pdf",
+        }),
+        expect.objectContaining({
+          path: "startups/admin-1/documents/financials.pdf",
+        }),
+      ]),
     );
   });
 
@@ -858,7 +672,7 @@ describe("ClaraSubmissionService", () => {
     const result = await service.handleSubmission(ctx, "admin-1");
 
     expect(result.noPitchDeck).toBe(true);
-    expect(mockDb.values).not.toHaveBeenCalled();
+    expect(startupIntake.findOrCreateStartupRecord).not.toHaveBeenCalled();
   });
 
   it("does not promote annual/earnings documents as pitch deck", async () => {
@@ -889,17 +703,17 @@ describe("ClaraSubmissionService", () => {
     const result = await service.handleSubmission(ctx, "admin-1");
 
     expect(result.noPitchDeck).toBe(true);
-    expect(mockDb.values).not.toHaveBeenCalled();
+    expect(startupIntake.findOrCreateStartupRecord).not.toHaveBeenCalled();
   });
 
-  it("stores pitch deck path when upload succeeds", async () => {
+  it("passes the uploaded pitch deck path into the shared intake helper", async () => {
     const ctx = createMessageContext({
       attachments: [createAttachment()],
     });
 
     await service.handleSubmission(ctx, "admin-1");
 
-    expect(mockDb.values).toHaveBeenCalledWith(
+    expect(startupIntake.findOrCreateStartupRecord).toHaveBeenCalledWith(
       expect.objectContaining({
         pitchDeckPath: "startups/admin-1/documents/deck.pdf",
       }),
@@ -914,11 +728,11 @@ describe("ClaraSubmissionService", () => {
     const result = await service.handleSubmission(ctx, "admin-1");
 
     expect(result.noPitchDeck).toBe(true);
-    expect(mockDb.values).not.toHaveBeenCalled();
+    expect(startupIntake.findOrCreateStartupRecord).not.toHaveBeenCalled();
     expect(pipeline.startPipeline).not.toHaveBeenCalled();
   });
 
-  it("uses contact info from message context", async () => {
+  it("passes contact info through the shared intake helper", async () => {
     const ctx = createMessageContext({
       fromEmail: "ceo@example.com",
       fromName: "Jane CEO",
@@ -927,11 +741,11 @@ describe("ClaraSubmissionService", () => {
 
     await service.handleSubmission(ctx, "admin-1");
 
-    expect(mockDb.values).toHaveBeenCalledWith(
+    expect(startupIntake.findOrCreateStartupRecord).toHaveBeenCalledWith(
       expect.objectContaining({
-        contactEmail: "ceo@example.com",
-        contactName: "Jane CEO",
-        tagline: "Submitted via email by ceo@example.com",
+        fromEmail: "ceo@example.com",
+        fromName: "Jane CEO",
+        source: "email-forward",
       }),
     );
   });
@@ -944,27 +758,35 @@ describe("ClaraSubmissionService", () => {
 
     await service.handleSubmission(ctx, "admin-1");
 
-    expect(mockDb.values).toHaveBeenCalledWith(
+    expect(startupIntake.findOrCreateStartupRecord).toHaveBeenCalledWith(
       expect.objectContaining({
-        contactEmail: "founder@startup.com",
-        contactName: undefined,
+        fromEmail: "founder@startup.com",
+        fromName: undefined,
       }),
     );
   });
 
-  it("uses a neutral placeholder description regardless of the email body", async () => {
-    const longText = "a".repeat(6000);
+  it("persists WhatsApp-forwarded submissions with a WhatsApp source", async () => {
     const ctx = createMessageContext({
-      bodyText: longText,
+      channel: "whatsapp",
+      bodyText: "See deck and website https://acme.example",
       attachments: [createAttachment()],
     });
 
-    await service.handleSubmission(ctx, "admin-1");
+    await service.handleSubmission(ctx, "admin-1", "Acme Corp");
 
-    expect(mockDb.values).toHaveBeenCalledWith(
+    expect(startupIntake.findOrCreateStartupRecord).toHaveBeenCalledWith(
       expect.objectContaining({
-        description: STARTUP_DESCRIPTION_PLACEHOLDER,
+        source: "whatsapp-forward",
+        website: "https://acme.example/",
       }),
+    );
+    expect(notifications.create).toHaveBeenCalledWith(
+      "admin-1",
+      "Clara: New startup submitted",
+      "Acme Corp was submitted via WhatsApp by founder@startup.com",
+      "info",
+      "/admin/startup/startup-1",
     );
   });
 });

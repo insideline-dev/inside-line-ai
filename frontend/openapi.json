@@ -1769,6 +1769,80 @@
         ]
       }
     },
+    "/startups/{id}/open-questions": {
+      "get": {
+        "operationId": "StartupController_getOpenQuestions",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "tags": [
+          "Startups"
+        ]
+      }
+    },
+    "/startups/{id}/open-questions/{questionId}": {
+      "patch": {
+        "operationId": "StartupController_updateOpenQuestion",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "questionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateOpenQuestionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "tags": [
+          "Startups"
+        ]
+      }
+    },
     "/startups/approved/list": {
       "get": {
         "operationId": "StartupController_findApproved",
@@ -5679,6 +5753,44 @@
         ]
       }
     },
+    "/investor/thesis/dealbreaker-history": {
+      "get": {
+        "operationId": "InvestorController_getDealbreakerHistory",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      }
+    },
+    "/investor/thesis/parse-dealbreakers": {
+      "post": {
+        "operationId": "InvestorController_parseDealbreakers",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ParseDealbreakersDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      }
+    },
     "/investor/deals/{startupId}/decision": {
       "post": {
         "operationId": "InvestorController_recordDealDecision",
@@ -9348,6 +9460,25 @@
           "investorId",
           "scheduledAt"
         ]
+      },
+      "UpdateOpenQuestionDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "open",
+              "resolved",
+              "dismissed"
+            ]
+          },
+          "ownerUserId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "nullable": true
+          }
+        }
       },
       "ApproveStartupDto": {
         "type": "object",
@@ -13928,6 +14059,19 @@
           }
         }
       },
+      "ParseDealbreakersDto": {
+        "type": "object",
+        "properties": {
+          "narrative": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8000
+          }
+        },
+        "required": [
+          "narrative"
+        ]
+      },
       "RecordDealDecisionDto": {
         "type": "object",
         "properties": {
@@ -13979,7 +14123,8 @@
               "reviewing",
               "engaged",
               "closed",
-              "passed"
+              "passed",
+              "bookmarked"
             ]
           },
           "passReason": {
@@ -14769,6 +14914,37 @@
                         "high"
                       ]
                     },
+                    "sourceType": {
+                      "type": "string",
+                      "enum": [
+                        "deck_page",
+                        "public_url",
+                        "enrichment_call",
+                        "research_source",
+                        "internal_trace"
+                      ]
+                    },
+                    "sourceLabel": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "sourceRef": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "url": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "pageNumber": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    },
+                    "quote": {
+                      "type": "string",
+                      "minLength": 1
+                    },
                     "lensScore": {
                       "type": "integer",
                       "minimum": 0,
@@ -14876,6 +15052,37 @@
                           "medium",
                           "high"
                         ]
+                      },
+                      "sourceType": {
+                        "type": "string",
+                        "enum": [
+                          "deck_page",
+                          "public_url",
+                          "enrichment_call",
+                          "research_source",
+                          "internal_trace"
+                        ]
+                      },
+                      "sourceLabel": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "sourceRef": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "url": {
+                        "type": "string",
+                        "format": "uri"
+                      },
+                      "pageNumber": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 9007199254740991
+                      },
+                      "quote": {
+                        "type": "string",
+                        "minLength": 1
                       }
                     },
                     "required": [

@@ -46,6 +46,7 @@ export class DealPipelineService {
       'engaged',
       'closed',
       'passed',
+      'bookmarked',
     ];
     const byStatus = Object.fromEntries(
       statuses.map((s) => [s, matches.filter((m) => m.status === s)]),

@@ -12,7 +12,8 @@ export type MissingMaterialCode =
   | "product_description"
   | "team"
   | "deal_terms"
-  | "website";
+  | "website"
+  | "evidence_claims";
 
 /**
  * Lightweight projection of the startup row used to compute the

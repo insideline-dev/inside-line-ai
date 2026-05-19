@@ -7,6 +7,24 @@ import type { StartupLensResult } from "../../../entities/lens-result.schema";
 const STARTUP_ID = "11111111-1111-1111-1111-111111111111";
 const RUN_ID = "22222222-2222-2222-2222-222222222222";
 
+const DEFAULT_SOURCED_EVIDENCE = [
+  {
+    claim: "Default sourced claim A.",
+    source: "https://example.com/evidence-a",
+    confidence: "high" as const,
+  },
+  {
+    claim: "Default sourced claim B.",
+    source: "https://example.com/evidence-b",
+    confidence: "medium" as const,
+  },
+  {
+    claim: "Default sourced claim C.",
+    source: "https://example.com/evidence-c",
+    confidence: "high" as const,
+  },
+];
+
 type Row = StartupLensResult;
 
 type DecisionRow = {
@@ -25,7 +43,8 @@ function row(partial: Partial<Row> & Pick<Row, "lensKey" | "score" | "signal">):
     score: partial.score,
     signal: partial.signal,
     rationale: partial.rationale ?? "Looks good.",
-    evidence: partial.evidence ?? [],
+    evidence:
+      partial.evidence !== undefined ? partial.evidence : DEFAULT_SOURCED_EVIDENCE,
     modelId: partial.modelId ?? "gpt-test",
     promptKey: partial.promptKey ?? `lens.${partial.lensKey}`,
     latencyMs: partial.latencyMs ?? 1200,
@@ -121,7 +140,7 @@ describe("ScreeningOutputService", () => {
     expect(out.overall.signal).toBe("advance");
     expect(out.overall.nextAction).toBe("continue_evaluation");
     expect(out.overall.missingMaterials).toEqual([]);
-    expect(out.handoff.evidenceSeeds).toHaveLength(0);
+    expect(out.handoff.evidenceSeeds.length).toBeGreaterThanOrEqual(3);
     expect(out.handoff.openIssues).toHaveLength(0);
     // generatedAt parses as a valid ISO datetime
     expect(Number.isNaN(Date.parse(out.generatedAt))).toBe(false);
@@ -204,32 +223,40 @@ describe("ScreeningOutputService", () => {
       }),
     ]);
 
-    expect(out.handoff.openIssues).toEqual([
-      expect.objectContaining({
-        key: "missing:deck",
-        label: "Pitch deck",
-        summary: "Pitch deck is still missing from screening.",
-        source: "screening-output",
-      }),
-      expect.objectContaining({
-        key: "missing:team",
-        label: "Team info",
-        summary: "Team info is still missing from screening.",
-        source: "screening-output",
-      }),
-      expect.objectContaining({
-        key: "decision:borderline_overall_score",
-        label: "Borderline scores",
-        summary: "The overall screening score is still in the review band.",
-        source: "triage-decision",
-      }),
-      expect.objectContaining({
-        key: "decision:lens.gtm.review",
-        label: "Go-to-Market needs follow-up",
-        summary: "Go-to-Market still needs follow-up before DD can rely on it.",
-        source: "triage-decision",
-      }),
-    ]);
+    expect(out.handoff.openIssues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: "missing:evidence_claims",
+          label: "Source-linked evidence (≥3 claims)",
+          source: "screening-output",
+        }),
+        expect.objectContaining({
+          key: "missing:deck",
+          label: "Pitch deck",
+          summary: "Pitch deck is still missing from screening.",
+          source: "screening-output",
+        }),
+        expect.objectContaining({
+          key: "missing:team",
+          label: "Team info",
+          summary: "Team info is still missing from screening.",
+          source: "screening-output",
+        }),
+        expect.objectContaining({
+          key: "decision:borderline_overall_score",
+          label: "Borderline scores",
+          summary: "The overall screening score is still in the review band.",
+          source: "triage-decision",
+        }),
+        expect.objectContaining({
+          key: "decision:lens.gtm.review",
+          label: "Go-to-Market needs follow-up",
+          summary: "Go-to-Market still needs follow-up before DD can rely on it.",
+          source: "triage-decision",
+        }),
+      ]),
+    );
+    expect(out.handoff.openIssues).toHaveLength(5);
   });
 
   it("falls back to lens signals when no triage decision exists", async () => {
@@ -470,10 +497,7 @@ describe("ScreeningOutputService", () => {
 
     expect(out.overall.signal).toBe("review");
     expect(out.overall.nextAction).toBe("request_materials");
-    expect(out.overall.missingMaterials.sort()).toEqual([
-      "deck",
-      "team",
-    ]);
+    expect(out.overall.missingMaterials.sort()).toEqual(["deck", "team"]);
   });
 
   it("treats pitchDeckPath as satisfying the deck requirement", async () => {
@@ -510,10 +534,28 @@ describe("ScreeningOutputService", () => {
   });
 
   it("emits empty missingMaterials when startup is fully resourced", async () => {
+    const sourcedEvidence = (claim: string, source: string) => ({
+      claim,
+      source,
+      confidence: "high" as const,
+    });
     const rows = [
-      row({ lensKey: "market", score: 80, signal: "advance" }),
-      row({ lensKey: "team", score: 75, signal: "advance" }),
-      row({ lensKey: "traction", score: 70, signal: "advance" }),
+      row({
+        lensKey: "market",
+        score: 80,
+        signal: "advance",
+        evidence: [
+          sourcedEvidence("TAM is large.", "https://example.com/market"),
+          sourcedEvidence("Growth is strong.", "https://example.com/growth"),
+        ],
+      }),
+      row({
+        lensKey: "team",
+        score: 75,
+        signal: "advance",
+        evidence: [sourcedEvidence("Team is experienced.", "https://example.com/team")],
+      }),
+      row({ lensKey: "traction", score: 70, signal: "advance", evidence: [] }),
     ];
     const { service } = await buildService(rows, [FULLY_RESOURCED]);
 
@@ -523,11 +565,58 @@ describe("ScreeningOutputService", () => {
     expect(out.overall.missingMaterials).toEqual([]);
   });
 
-  it("returns empty missingMaterials when startup row is not found", async () => {
+  it("flags evidence_claims when fewer than three linked evidence seeds", async () => {
     const rows = [
-      row({ lensKey: "market", score: 80, signal: "advance" }),
-      row({ lensKey: "team", score: 75, signal: "advance" }),
-      row({ lensKey: "traction", score: 70, signal: "advance" }),
+      row({
+        lensKey: "team",
+        score: 80,
+        signal: "advance",
+        evidence: [
+          {
+            claim: "Founder has relevant experience.",
+            source: "https://example.com/team",
+            confidence: "high",
+          },
+        ],
+      }),
+      row({
+        lensKey: "market",
+        score: 75,
+        signal: "advance",
+        evidence: [],
+      }),
+    ];
+    const { service } = await buildService(rows, [FULLY_RESOURCED]);
+
+    const out = await service.buildForStartup(STARTUP_ID, RUN_ID);
+
+    expect(out.handoff.evidenceSeeds).toHaveLength(1);
+    expect(out.overall.missingMaterials).toContain("evidence_claims");
+  });
+
+  it("returns empty missingMaterials when startup row is not found", async () => {
+    const sourcedEvidence = (claim: string, source: string) => ({
+      claim,
+      source,
+      confidence: "high" as const,
+    });
+    const rows = [
+      row({
+        lensKey: "market",
+        score: 80,
+        signal: "advance",
+        evidence: [
+          sourcedEvidence("TAM is large.", "https://example.com/market"),
+          sourcedEvidence("Growth is strong.", "https://example.com/growth"),
+        ],
+      }),
+      row({
+        lensKey: "team",
+        score: 75,
+        signal: "advance",
+        evidence: [sourcedEvidence("Team is experienced.", "https://example.com/team")],
+      }),
+      row({ lensKey: "traction", score: 70, signal: "advance", evidence: [] }),
     ];
     const { service } = await buildService(rows, []); // no materials row
 

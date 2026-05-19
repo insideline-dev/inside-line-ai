@@ -7,6 +7,7 @@ import { AssetService } from "../../storage/asset.service";
 import { ASSET_TYPES } from "../../storage/storage.config";
 import { DataRoomService } from "../startup/data-room.service";
 import { StartupIntakeService } from "../startup/startup-intake.service";
+import { DealTriggerService } from "../startup/deal-trigger.service";
 import { UserRole } from "../../auth/entities/auth.schema";
 import { AgentMailClientService } from "../integrations/agentmail/agentmail-client.service";
 import {
@@ -90,6 +91,7 @@ export class ClaraSubmissionService {
     private claraAi: ClaraAiService,
     private dataRoomService: DataRoomService,
     private startupIntake: StartupIntakeService,
+    private dealTriggers: DealTriggerService,
   ) {}
 
   /**
@@ -1256,6 +1258,10 @@ export class ClaraSubmissionService {
           updatedAt: new Date(),
         })
         .where(eq(startup.id, startupId));
+
+      if (updates.pitchDeckPath) {
+        void this.dealTriggers.notifyDeckRevised(startupId);
+      }
     }
 
     const refreshed = await this.loadScreeningFollowUpSnapshot(startupId);

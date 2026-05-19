@@ -15,4 +15,5 @@ export const UpdateMatchStatusDtoStatus = {
   engaged: 'engaged',
   closed: 'closed',
   passed: 'passed',
+  bookmarked: 'bookmarked',
 } as const;

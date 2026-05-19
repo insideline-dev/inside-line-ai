@@ -6,11 +6,20 @@ import {
   NotFoundException,
   Optional,
 } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { desc, eq, sql } from 'drizzle-orm';
 import { DrizzleService } from '../../database';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type * as schema from '../../database/schema';
 import {
   investorThesis,
 } from './entities/investor.schema';
+import { investorDealbreakerRuleVersion } from './entities/dealbreaker-rule-version.schema';
+import { investorEvent } from './entities/investor-event.schema';
+import {
+  dealbreakerSetsEqual,
+  diffDealbreakerSets,
+} from './dealbreaker-audit.util';
+import { DealTriggerService } from '../startup/deal-trigger.service';
 import { CreateThesis, UpdateThesis } from './dto';
 import {
   canonicalizeGeographicFocus,
@@ -39,7 +48,54 @@ export class ThesisService {
     @Optional()
     @Inject(forwardRef(() => InvestorOnboardingService))
     private onboarding?: InvestorOnboardingService,
+    @Optional() private dealTriggers?: DealTriggerService,
   ) {}
+
+  async getDealbreakerHistory(userId: string, limit = 5) {
+    return this.drizzle.withRLS(userId, async (db) => {
+      return db
+        .select()
+        .from(investorDealbreakerRuleVersion)
+        .where(eq(investorDealbreakerRuleVersion.investorUserId, userId))
+        .orderBy(desc(investorDealbreakerRuleVersion.versionNumber))
+        .limit(Math.min(Math.max(limit, 1), 20));
+    });
+  }
+
+  private async recordDealbreakerChange(
+    db: PostgresJsDatabase<typeof schema>,
+    userId: string,
+    input: { before: string[]; after: string[] },
+  ): Promise<void> {
+    const [{ maxVersion }] = await db
+      .select({
+        maxVersion: sql<number>`coalesce(max(${investorDealbreakerRuleVersion.versionNumber}), 0)`,
+      })
+      .from(investorDealbreakerRuleVersion)
+      .where(eq(investorDealbreakerRuleVersion.investorUserId, userId));
+
+    const versionNumber = Number(maxVersion ?? 0) + 1;
+    const { added, removed } = diffDealbreakerSets(input.before, input.after);
+
+    await db.insert(investorDealbreakerRuleVersion).values({
+      investorUserId: userId,
+      versionNumber,
+      rules: input.after,
+      createdBy: userId,
+    });
+
+    await db.insert(investorEvent).values({
+      investorUserId: userId,
+      type: 'dealbreakers.updated',
+      payload: {
+        before: input.before,
+        after: input.after,
+        added,
+        removed,
+        versionNumber,
+      },
+    });
+  }
 
   async findOne(userId: string) {
     return this.drizzle.withRLS(userId, async (db) => {
@@ -106,6 +162,17 @@ export class ThesisService {
         payload.thesisSummaryGeneratedAt = new Date();
       }
 
+      const dtoSentDealBreakers = Object.prototype.hasOwnProperty.call(
+        dto,
+        'dealBreakers',
+      );
+      const nextDealBreakers = dtoSentDealBreakers
+        ? ((dto.dealBreakers as string[] | null | undefined) ?? [])
+        : (existing?.dealBreakers ?? []);
+      const dealBreakersChanged =
+        dtoSentDealBreakers &&
+        !dealbreakerSetsEqual(existing?.dealBreakers, nextDealBreakers);
+
       let result: typeof investorThesis.$inferSelect;
       if (existing) {
         const [updated] = await db
@@ -119,6 +186,13 @@ export class ThesisService {
 
         this.logger.log(`Updated thesis for user ${userId}`);
         result = updated;
+
+        if (dealBreakersChanged) {
+          await this.recordDealbreakerChange(db, userId, {
+            before: existing.dealBreakers ?? [],
+            after: updated.dealBreakers ?? [],
+          });
+        }
       } else {
         const [created] = await db
           .insert(investorThesis)
@@ -130,6 +204,17 @@ export class ThesisService {
 
         this.logger.log(`Created thesis for user ${userId}`);
         result = created;
+
+        if (dtoSentDealBreakers && (created.dealBreakers?.length ?? 0) > 0) {
+          await this.recordDealbreakerChange(db, userId, {
+            before: [],
+            after: created.dealBreakers ?? [],
+          });
+        }
+      }
+
+      if (dealBreakersChanged && this.dealTriggers) {
+        void this.dealTriggers.notifyThesisUpdated(userId);
       }
 
       // Trigger re-matching for all approved startups when thesis is updated

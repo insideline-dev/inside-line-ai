@@ -99,9 +99,9 @@ describe("MarketLens", () => {
     expect(result.latencyMs).toBeGreaterThanOrEqual(0);
   });
 
-  // DS-E9-F2-S1 — unlinked claims must never reach persistence so the
-  // evidence graph stays clean.
-  it("drops evidence items missing a source (DS-E9-F2-S1)", async () => {
+  // DS-E9-F2-S1 — LensEvidenceSchema requires a non-empty source at parse
+  // time; invalid LLM output fails Zod rather than persisting unlinked claims.
+  it("rejects evidence items missing a source at schema parse (DS-E9-F2-S1)", async () => {
     const generateText = jest.fn().mockResolvedValue({
       output: {
         score: 70,
@@ -109,9 +109,7 @@ describe("MarketLens", () => {
         rationale: "Strong signals.",
         evidence: [
           { claim: "Linked claim", source: "https://example.com/a", confidence: "high" },
-          { claim: "Unlinked claim", confidence: "medium" }, // no source
-          { claim: "Empty source", source: "   ", confidence: "low" }, // whitespace
-          { claim: "Another linked", source: "https://example.com/b", confidence: "medium" },
+          { claim: "Unlinked claim", confidence: "medium" },
         ],
       },
     });
@@ -119,12 +117,9 @@ describe("MarketLens", () => {
     const lens = await buildLens({ generateText });
     const result = await lens.run(CTX);
 
-    expect(result.usedFallback).toBe(false);
-    expect(result.output.evidence).toHaveLength(2);
-    expect(result.output.evidence.map((e) => e.source)).toEqual([
-      "https://example.com/a",
-      "https://example.com/b",
-    ]);
+    expect(result.usedFallback).toBe(true);
+    expect(result.output.evidence).toHaveLength(0);
+    expect(result.error).toBeDefined();
   });
 
   it("preserves evidence array when every item has a source", async () => {

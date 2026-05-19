@@ -40,6 +40,8 @@ export const DEAL_EVENT_TYPES = [
   "decision.recorded",
   "comment.added",
   "thesis.regenerated",
+  "open_questions.seeded",
+  "agent.refresh",
 ] as const;
 
 export type DealEventType = (typeof DEAL_EVENT_TYPES)[number];

@@ -11,6 +11,7 @@ import { NotificationService } from "../../../notification/notification.service"
 import { QueueService } from "../../../queue";
 import { startup, StartupStatus } from "../../startup/entities";
 import { STARTUP_DESCRIPTION_PLACEHOLDER } from "../../startup/startup.constants";
+import type { MissingMaterialCode } from "../contracts/screening-output/missing-materials";
 import { UserRole } from "../../../auth/entities/auth.schema";
 import { startupEvaluation } from "../../analysis/entities";
 import { pipelineRun, pipelineAgentRun } from "../entities";
@@ -299,7 +300,7 @@ export class PipelineService {
 
   private async notifyClaraMissingMaterialsForScreening(
     startupId: string,
-    missingMaterials: Array<"deck" | "product_description" | "team" | "deal_terms" | "website">,
+    missingMaterials: MissingMaterialCode[],
     options?: {
       pipelineRunId?: string | null;
     },
@@ -370,7 +371,7 @@ export class PipelineService {
   }
 
   private humanizeScreeningMissingMaterial(
-    material: "deck" | "product_description" | "team" | "deal_terms" | "website",
+    material: MissingMaterialCode,
   ): string {
     switch (material) {
       case "deck":
@@ -383,6 +384,8 @@ export class PipelineService {
         return "deal terms";
       case "website":
         return "company website URL";
+      case "evidence_claims":
+        return "at least 3 source-linked evidence claims";
     }
   }
 
@@ -1964,7 +1967,7 @@ export class PipelineService {
 
   private normalizeScreeningMissingMaterials(
     missingMaterials: ScreeningResult["missingMaterials"] | null | undefined,
-  ): Array<"deck" | "product_description" | "team" | "deal_terms" | "website"> {
+  ): MissingMaterialCode[] {
     return (
       missingMaterials?.filter(
         (material): material is
@@ -2504,9 +2507,7 @@ export class PipelineService {
     startupId: string,
   ): Promise<{
     shouldSkipClaraCompletionEmail: boolean;
-    missingMaterials: Array<
-      "deck" | "product_description" | "team" | "deal_terms" | "website"
-    >;
+    missingMaterials: MissingMaterialCode[];
     actionNeededNotification?: {
       type: NotificationType;
       title: string;

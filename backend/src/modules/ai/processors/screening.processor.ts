@@ -20,9 +20,10 @@ import { DrizzleService } from "../../../database";
 import { NotificationGateway } from "../../../notification/notification.gateway";
 import { startup } from "../../startup/entities";
 import { DealEventService } from "../../startup/deal-event.service";
+import { OpenQuestionService } from "../../dd/open-question.service";
 import { user, UserRole } from "../../../auth/entities/auth.schema";
 import { investorThesis, startupMatch } from "../../investor/entities/investor.schema";
-import { startupLensResult } from "../entities";
+import { startupLensResult, type LensEvidence } from "../entities";
 import type { SynthesisResult } from "../interfaces/phase-results.interface";
 import { InvestorMatchingService } from "../services/investor-matching.service";
 import { PipelinePhase } from "../interfaces/pipeline.interface";
@@ -88,6 +89,7 @@ export class ScreeningProcessor
     private screeningTriage: ScreeningTriageService,
     private dealEvents: DealEventService,
     private investorMatching: InvestorMatchingService,
+    private openQuestions: OpenQuestionService,
   ) {
     const redisUrl = config.get<string>("REDIS_URL", "redis://localhost:6379");
     const queuePrefix = config.get<string>("QUEUE_PREFIX");
@@ -294,11 +296,29 @@ export class ScreeningProcessor
         }
       >;
       try {
-        normalizedEvidence = result.output.evidence.map((item) => ({
-          ...item,
-          source: item.source.trim(),
-          ...normalizeLensEvidenceLink(item.source),
-        }));
+        normalizedEvidence = result.output.evidence.map((item) => {
+          const link = normalizeLensEvidenceLink(item.source);
+          const url =
+            link.url ?? (item.url === null ? undefined : item.url);
+          const pageNumber =
+            link.pageNumber ??
+            (item.pageNumber === null ? undefined : item.pageNumber);
+          const quote =
+            item.quote === null || item.quote === undefined
+              ? undefined
+              : item.quote;
+          return {
+            claim: item.claim,
+            source: item.source.trim(),
+            confidence: item.confidence,
+            sourceType: link.sourceType,
+            sourceLabel: link.sourceLabel,
+            sourceRef: link.sourceRef,
+            url,
+            pageNumber,
+            quote,
+          };
+        });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         this.logger.warn(
@@ -332,7 +352,7 @@ export class ScreeningProcessor
           score: result.output.score,
           signal: result.output.signal,
           rationale: result.output.rationale,
-          evidence: normalizedEvidence,
+          evidence: normalizedEvidence as LensEvidence[],
           modelId: result.modelId,
           promptKey: result.promptKey,
           // DS-E2-F1-S2 — persist the version pair that produced this row so
@@ -438,6 +458,29 @@ export class ScreeningProcessor
       this.logger.debug(
         `[ScreeningProcessor] ScreeningOutput v${screeningContract.version} for ${startupId} run=${pipelineRunId}: overall=${screeningContract.overall.signal}@${screeningContract.overall.score} lenses=${screeningContract.lenses.length}`,
       );
+
+      try {
+        const seedResult = await this.openQuestions.seedFromHandoff(
+          startupId,
+          screeningContract.handoff.openIssues,
+        );
+        void this.dealEvents.record({
+          startupId,
+          type: "open_questions.seeded",
+          payload: {
+            count:
+              seedResult.seeded +
+              seedResult.updated +
+              screeningContract.handoff.openIssues.length,
+          },
+        });
+      } catch (seedErr) {
+        const seedMsg =
+          seedErr instanceof Error ? seedErr.message : String(seedErr);
+        this.logger.warn(
+          `[ScreeningProcessor] Open question seed failed for ${startupId}: ${seedMsg}`,
+        );
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.logger.warn(

@@ -16,10 +16,12 @@ import {
   Activity,
   Check,
   CheckCircle2,
+  CircleHelp,
   CircleSlash,
   History,
   MessageSquare,
   Pencil,
+  RefreshCw,
   ShieldCheck,
   Sparkles,
   TrendingUp,
@@ -175,6 +177,20 @@ export function formatEvent(event: DealEvent): FormattedEvent {
         label: "Comment added",
         detail: readString(p, "snippet"),
         tone: "default",
+      };
+    case "open_questions.seeded":
+      return {
+        icon: <CircleHelp className="h-3.5 w-3.5" />,
+        label: "Open questions seeded",
+        detail: `${readNumber(p, "count") ?? 0} items`,
+        tone: "neutral",
+      };
+    case "agent.refresh":
+      return {
+        icon: <RefreshCw className="h-3.5 w-3.5" />,
+        label: "Agent refresh",
+        detail: readString(p, "trigger"),
+        tone: "neutral",
       };
     case "thesis.regenerated":
       return {

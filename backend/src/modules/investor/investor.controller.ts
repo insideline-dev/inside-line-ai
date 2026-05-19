@@ -19,6 +19,7 @@ import { StartupStage } from '../startup/entities/startup.schema';
 import { RolesGuard } from '../startup/guards';
 import { Roles } from '../startup/decorators/roles.decorator';
 import { ThesisService } from './thesis.service';
+import { DealbreakerParseService } from './dealbreaker-parse.service';
 import { MatchService } from './match.service';
 import { TeamService } from './team.service';
 import { InvestorNoteService } from './investor-note.service';
@@ -51,6 +52,7 @@ import { ScoringConfigService } from '../admin/scoring-config.service';
 import { StartupMatchingPipelineService } from '../ai/services/startup-matching-pipeline.service';
 import {
   CreateThesisDto,
+  ParseDealbreakersDto,
   GetMatchesQueryDto,
   CreateTeamInviteDto,
   CreateNoteDto,
@@ -75,6 +77,7 @@ type User = {
 export class InvestorController {
   constructor(
     private thesisService: ThesisService,
+    private dealbreakerParse: DealbreakerParseService,
     private matchService: MatchService,
     private teamService: TeamService,
     private noteService: InvestorNoteService,
@@ -127,6 +130,20 @@ export class InvestorController {
   async deleteThesis(@CurrentUser() user: User) {
     await this.thesisService.delete(user.id);
     return { success: true, message: 'Thesis deleted' };
+  }
+
+  @Get('thesis/dealbreaker-history')
+  async getDealbreakerHistory(@CurrentUser() user: User) {
+    return this.thesisService.getDealbreakerHistory(user.id);
+  }
+
+  @Post('thesis/parse-dealbreakers')
+  async parseDealbreakers(
+    @CurrentUser() _user: User,
+    @Body() dto: ParseDealbreakersDto,
+  ) {
+    const suggestions = await this.dealbreakerParse.parseNarrative(dto.narrative);
+    return { suggestions };
   }
 
   // ============ DEAL DECISIONS (DS-E11-F1-S1) ============

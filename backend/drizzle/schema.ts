@@ -34,6 +34,7 @@ export const scoutApplicationStatus = pgEnum("scout_application_status", ['pendi
 export const scoutCommissionStatus = pgEnum("scout_commission_status", ['pending', 'paid'])
 export const startupStage = pgEnum("startup_stage", ['pre_seed', 'seed', 'series_a', 'series_b', 'series_c', 'series_d', 'series_e', 'series_f_plus'])
 export const startupStatus = pgEnum("startup_status", ['draft', 'submitted', 'analyzing', 'pending_review', 'approved', 'rejected'])
+export const startupSourcePath = pgEnum("startup_source_path", ['founder-submitted', 'founder-manual', 'investor-manual', 'scout-submitted', 'investor-inbox', 'clara', 'admin-manual', 'admin-csv'])
 export const teamRole = pgEnum("team_role", ['member', 'admin'])
 export const trl = pgEnum("trl", ['idea', 'mvp', 'scaling', 'mature'])
 export const userRole = pgEnum("user_role", ['founder', 'investor', 'admin', 'scout'])
@@ -920,6 +921,7 @@ export const startups = pgTable("startups", {
 	id: uuid().defaultRandom().primaryKey().notNull(),
 	userId: uuid("user_id").notNull(),
 	submittedByRole: userRole("submitted_by_role").default('founder'),
+	sourcePath: startupSourcePath("source_path"),
 	scoutId: uuid("scout_id"),
 	isPrivate: boolean("is_private").default(false),
 	name: text().notNull(),

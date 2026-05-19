@@ -36,7 +36,11 @@ import {
   pipelineRun,
   pipelineStateSnapshot,
 } from "../ai/entities";
-import { startup, StartupStatus } from "./entities/startup.schema";
+import {
+  startup,
+  StartupSourcePath,
+  StartupStatus,
+} from "./entities/startup.schema";
 import { agentConversation } from "../agent/entities/agent.schema";
 import { investorInboxSubmission } from "../integrations/agentmail/entities/investor-inbox-submission.schema";
 import {
@@ -290,12 +294,21 @@ export class StartupService {
       const slug = this.generateSlug(dto.name);
       const geography = deriveStartupGeography(dto.location);
       const isInvestorSubmission = submittedByRole === UserRole.INVESTOR;
+      const sourcePath =
+        submittedByRole === UserRole.INVESTOR
+          ? StartupSourcePath.INVESTOR_MANUAL
+          : submittedByRole === UserRole.SCOUT
+            ? StartupSourcePath.SCOUT_SUBMITTED
+            : submittedByRole === UserRole.ADMIN
+              ? StartupSourcePath.ADMIN_MANUAL
+              : StartupSourcePath.FOUNDER_MANUAL;
 
       const [created] = await db
         .insert(startup)
         .values({
           userId,
           submittedByRole,
+          sourcePath,
           scoutId: options?.scoutId ?? (submittedByRole === UserRole.SCOUT ? userId : undefined),
           isPrivate: options?.isPrivate ?? isInvestorSubmission,
           slug,

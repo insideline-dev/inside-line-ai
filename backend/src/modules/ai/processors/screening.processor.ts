@@ -34,7 +34,11 @@ import { MarketLens } from "../lenses/market.lens";
 import { TeamLens } from "../lenses/team.lens";
 import { TractionLens } from "../lenses/traction.lens";
 import type { BaseLensAgent, LensRunResult } from "../lenses/base-lens.agent";
-import type { LensInput, LensOutput } from "../schemas/lens";
+import {
+  normalizeLensEvidenceLink,
+  type LensInput,
+  type LensOutput,
+} from "../schemas/lens";
 
 const LENS_RUN_CONCURRENCY = 3;
 import { ScreeningOutputService } from "../contracts/screening-output";
@@ -280,6 +284,30 @@ export class ScreeningProcessor
         continue;
       }
 
+      let normalizedEvidence: Array<
+        LensOutput["evidence"][number] & {
+          sourceType: "deck_page" | "public_url" | "enrichment_call" | "research_source" | "internal_trace";
+          sourceLabel: string;
+          sourceRef: string;
+          url?: string;
+          pageNumber?: number;
+        }
+      >;
+      try {
+        normalizedEvidence = result.output.evidence.map((item) => ({
+          ...item,
+          source: item.source.trim(),
+          ...normalizeLensEvidenceLink(item.source),
+        }));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        this.logger.warn(
+          `[ScreeningProcessor] Rejecting lens '${result.key}' for ${startupId}: ${message}`,
+        );
+        failedKeys.push(lens.key);
+        continue;
+      }
+
       lenses.push({
         key: result.key,
         score: result.output.score,
@@ -304,10 +332,7 @@ export class ScreeningProcessor
           score: result.output.score,
           signal: result.output.signal,
           rationale: result.output.rationale,
-          evidence: result.output.evidence.map((item) => ({
-            ...item,
-            source: item.source ?? undefined,
-          })),
+          evidence: normalizedEvidence,
           modelId: result.modelId,
           promptKey: result.promptKey,
           // DS-E2-F1-S2 — persist the version pair that produced this row so

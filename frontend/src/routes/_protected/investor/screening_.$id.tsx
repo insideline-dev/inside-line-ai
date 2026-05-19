@@ -13,6 +13,7 @@ import type { ScreeningRow } from "@/components/investor/screening-types";
 import type { InvestmentThesis } from "@/types/investor";
 import { findPortfolioConflicts } from "@/lib/screening/portfolio-conflicts";
 import type { Startup } from "@/types/startup";
+import { useScreeningOutput } from "@/lib/screening/useScreeningOutput";
 
 function fetchScreeningQueue() {
   return customFetch<ScreeningRow[]>("/investor/screening");
@@ -44,6 +45,7 @@ function ScreeningDetailPage() {
   });
 
   const row = useMemo(() => rows?.find((r) => r.id === id) ?? null, [rows, id]);
+  const screeningOutput = useScreeningOutput(id);
 
   const portfolioConflicts = useMemo(() => {
     if (!row || !thesis?.portfolioCompanies?.length) return [];
@@ -142,7 +144,11 @@ function ScreeningDetailPage() {
         onAdvance={handleAdvance}
         busy={advanceMutation.isPending || passMutation.isPending}
       />
-      <ScreeningDetailBody row={row} portfolioConflicts={portfolioConflicts} />
+      <ScreeningDetailBody
+        row={row}
+        portfolioConflicts={portfolioConflicts}
+        screeningOutput={screeningOutput.data}
+      />
     </div>
   );
 }

@@ -5,6 +5,7 @@ import {
   PayloadTooLargeException,
 } from '@nestjs/common';
 import { StartupIntakeService } from '../startup/startup-intake.service';
+import { StartupSourcePath } from '../startup/entities/startup.schema';
 
 const MAX_BYTES = 1 * 1024 * 1024; // 1MB
 const MAX_ROWS = 100;
@@ -158,7 +159,7 @@ export class BulkStartupIntakeService {
         fromName: row.founder_name?.trim() || undefined,
         bodyText: this.buildBodyText(row),
         pitchDeckPath: undefined,
-        source: 'bulk-upload',
+        source: StartupSourcePath.ADMIN_CSV,
       });
 
       return {

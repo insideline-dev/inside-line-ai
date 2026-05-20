@@ -67,14 +67,14 @@ export class ThesisService {
     userId: string,
     input: { before: string[]; after: string[] },
   ): Promise<void> {
-    const [{ maxVersion }] = await db
+    const rows = await db
       .select({
         maxVersion: sql<number>`coalesce(max(${investorDealbreakerRuleVersion.versionNumber}), 0)`,
       })
       .from(investorDealbreakerRuleVersion)
       .where(eq(investorDealbreakerRuleVersion.investorUserId, userId));
 
-    const versionNumber = Number(maxVersion ?? 0) + 1;
+    const versionNumber = Number(rows[0]?.maxVersion ?? 0) + 1;
     const { added, removed } = diffDealbreakerSets(input.before, input.after);
 
     await db.insert(investorDealbreakerRuleVersion).values({

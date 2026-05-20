@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { InvestorController } from '../investor.controller';
 import { ThesisService } from '../thesis.service';
+import { DealbreakerParseService } from '../dealbreaker-parse.service';
 import { MatchService } from '../match.service';
 import { TeamService } from '../team.service';
 import { InvestorNoteService } from '../investor-note.service';
@@ -106,6 +107,10 @@ describe('InvestorController', () => {
             delete: jest.fn(),
             getGeographyTaxonomy: jest.fn(),
           },
+        },
+        {
+          provide: DealbreakerParseService,
+          useValue: { parse: jest.fn() },
         },
         {
           provide: MatchService,

@@ -42,6 +42,7 @@ interface OpenQuestionsLedgerProps {
   startupId: string;
 }
 
+/** DS (screening) work surface — follow-ups before advancing to DD. */
 export function OpenQuestionsLedger({ startupId }: OpenQuestionsLedgerProps) {
   const queryClient = useQueryClient();
   const queryKey = getStartupControllerGetOpenQuestionsQueryKey(startupId);
@@ -82,15 +83,20 @@ export function OpenQuestionsLedger({ startupId }: OpenQuestionsLedgerProps) {
   }
 
   return (
-    <div className="space-y-4" data-testid="open-questions-ledger">
+    <section
+      className="flex flex-col gap-4"
+      data-testid="open-questions-ledger"
+    >
       <div className="flex items-center gap-2">
         <CircleHelp className="h-5 w-5 text-muted-foreground" />
-        <h3 className="text-lg font-semibold">Open Questions</h3>
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Open questions
+        </h3>
         <Badge variant="secondary">{openCount} open</Badge>
       </div>
       <p className="text-sm text-muted-foreground">
         Seeded from screening when materials or lens signals need follow-up before
-        DD can rely on the deal.
+        you advance this deal to Due Diligence.
       </p>
 
       {questions.length === 0 ? (
@@ -145,6 +151,6 @@ export function OpenQuestionsLedger({ startupId }: OpenQuestionsLedgerProps) {
           ))}
         </div>
       )}
-    </div>
+    </section>
   );
 }

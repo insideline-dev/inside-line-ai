@@ -402,7 +402,7 @@ export class StartupController {
     @CurrentUser() user: User,
     @Param('id') startupId: string,
   ) {
-    return this.openQuestions.listForStartup(startupId, user.id);
+    return this.openQuestions.listForStartup(startupId, user.id, user.role);
   }
 
   @Patch(':id/open-questions/:questionId')
@@ -413,7 +413,13 @@ export class StartupController {
     @Param('questionId') questionId: string,
     @Body() dto: UpdateOpenQuestionDto,
   ) {
-    return this.openQuestions.update(startupId, questionId, user.id, dto);
+    return this.openQuestions.update(
+      startupId,
+      questionId,
+      user.id,
+      dto,
+      user.role,
+    );
   }
 
   // ============ INVESTOR ENDPOINTS ============

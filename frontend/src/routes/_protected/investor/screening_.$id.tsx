@@ -5,6 +5,8 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { customFetch } from "@/api/client";
 import { Button } from "@/components/ui/button";
+import { getStartupControllerGetOpenQuestionsQueryKey } from "@/api/generated/startups/startups";
+import { StageNav } from "@/components/investor/StageNav";
 import {
   ScreeningDetailBody,
   ScreeningDetailHeader,
@@ -65,6 +67,9 @@ function ScreeningDetailPage() {
     queryClient.invalidateQueries({ queryKey: ["investor", "pipeline"] });
     queryClient.invalidateQueries({ queryKey: ["admin", "screening"] });
     queryClient.invalidateQueries({ queryKey: ["startupController"] });
+    queryClient.invalidateQueries({
+      queryKey: getStartupControllerGetOpenQuestionsQueryKey(id),
+    });
     void navigate({ to: "/investor/screening" });
   };
 
@@ -137,6 +142,7 @@ function ScreeningDetailPage() {
 
   return (
     <div className="flex flex-col gap-5">
+      <StageNav />
       <ScreeningDetailHeader
         row={row}
         backTo="/investor/screening"

@@ -24,6 +24,7 @@ import { FitChips } from "@/components/investor/FitChips";
 import { StartupFavicon } from "@/components/investor/StartupFavicon";
 import { ScoreRing } from "@/components/analysis/ScoreRing";
 import { ScreeningPitchDeckViewer } from "@/components/investor/ScreeningPitchDeckViewer";
+import { OpenQuestionsLedger } from "@/components/screening/OpenQuestionsLedger";
 import { formatIndustry } from "@/lib/kpi-metrics";
 import { cn } from "@/lib/utils";
 import type {
@@ -490,6 +491,8 @@ export function ScreeningDetailBody({
             )}
           </div>
         </section>
+
+        <OpenQuestionsLedger startupId={row.id} />
 
         {row.triageRationale && (
           <section className="flex flex-col gap-2">

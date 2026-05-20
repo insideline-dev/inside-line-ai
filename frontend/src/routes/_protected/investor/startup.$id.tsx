@@ -41,8 +41,6 @@ import {
   FinancialsTabContent,
   DataRoomPanel,
 } from "@/components/startup-view";
-import { DealActivityTimeline } from "@/components/startup-view/DealActivityTimeline";
-import { OpenQuestionsLedger } from "@/components/dd/OpenQuestionsLedger";
 import { useToast } from "@/hooks/use-toast";
 import type { Startup } from "@/types/startup";
 import type { Evaluation } from "@/types/evaluation";
@@ -54,7 +52,6 @@ export const Route = createFileRoute("/_protected/investor/startup/$id")({
 
 type InvestorStartupTab =
   | "summary"
-  | "questions"
   | "memo"
   | "market"
   | "product"
@@ -265,9 +262,6 @@ function InvestorStartupDetailPage() {
         className="space-y-6"
       >
         <TabsList className="flex h-auto w-full flex-wrap rounded-xl bg-muted/60 p-2">
-          <TabsTrigger value="questions" className="w-full sm:w-auto">
-            Questions
-          </TabsTrigger>
           {evaluation && (
             <>
               <TabsTrigger value="summary" className="w-full sm:w-auto">Summary</TabsTrigger>
@@ -281,11 +275,6 @@ function InvestorStartupDetailPage() {
             </>
           )}
         </TabsList>
-
-        <TabsContent value="questions" className="mt-6 space-y-6">
-          <OpenQuestionsLedger startupId={id} />
-          <DealActivityTimeline startupId={id} />
-        </TabsContent>
 
         {evaluation && (
           <>

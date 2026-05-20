@@ -12,6 +12,7 @@ import {
   type DdOpenQuestionRow,
   type OpenQuestionStatus,
 } from "./entities/open-question.schema";
+import { UserRole } from "../../auth/entities/auth.schema";
 import { startupMatch } from "../investor/entities/investor.schema";
 
 @Injectable()
@@ -86,8 +87,11 @@ export class OpenQuestionService {
   async listForStartup(
     startupId: string,
     viewerUserId: string,
+    viewerRole?: UserRole,
   ): Promise<DdOpenQuestionRow[]> {
-    await this.assertInvestorAccess(startupId, viewerUserId);
+    if (viewerRole !== UserRole.ADMIN) {
+      await this.assertInvestorAccess(startupId, viewerUserId);
+    }
 
     return this.drizzle.db
       .select()
@@ -101,8 +105,11 @@ export class OpenQuestionService {
     questionId: string,
     viewerUserId: string,
     input: { status?: OpenQuestionStatus; ownerUserId?: string | null },
+    viewerRole?: UserRole,
   ): Promise<DdOpenQuestionRow> {
-    await this.assertInvestorAccess(startupId, viewerUserId);
+    if (viewerRole !== UserRole.ADMIN) {
+      await this.assertInvestorAccess(startupId, viewerUserId);
+    }
 
     const [row] = await this.drizzle.db
       .select()

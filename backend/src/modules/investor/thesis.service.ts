@@ -454,7 +454,7 @@ export class ThesisService {
   getGeographyTaxonomy() {
     return {
       version: GEOGRAPHY_TAXONOMY_VERSION,
-      levels: 3,
+      levels: 4,
       nodes: getInvestorGeographyTaxonomy(),
     };
   }

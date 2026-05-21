@@ -75,6 +75,8 @@ export const envSchema = z.object({
 
   // Feature Flags
   ENABLE_SWAGGER: z.coerce.boolean().default(true),
+  /** DS-E11 calibration API + UI — off until two-loop redesign ships */
+  ENABLE_CALIBRATION: z.coerce.boolean().default(false),
   DEV_EXPOSE_TOKENS: z.coerce.boolean().default(false),
   LOG_TO_FILE: z.coerce.boolean().default(true),
   LOG_FILE_PATH: z.string().default("logs/backend.jsonl"),

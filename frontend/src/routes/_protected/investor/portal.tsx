@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useCurrentUser } from "@/lib/auth/hooks";
 import { createFileRoute } from "@tanstack/react-router";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -62,6 +63,8 @@ function InvestorPortalPage() {
   const { data: response, isLoading } = usePortalControllerFindAll();
   const portals = (response?.data as PortalRecord[] | undefined) ?? [];
   const existingPortal = portals[0];
+  const { data: currentUser } = useCurrentUser();
+  const autoProvisionedRef = useRef(false);
 
   const [formData, setFormData] = useState<PortalFormData>({
     name: "",
@@ -95,7 +98,6 @@ function InvestorPortalPage() {
   const { mutate: createPortal, isPending: isCreating } = usePortalControllerCreate({
     mutation: {
       onSuccess: () => {
-        toast.success("Portal created successfully");
         queryClient.invalidateQueries({ queryKey: getPortalControllerFindAllQueryKey() });
       },
       onError: (error) => {
@@ -103,6 +105,29 @@ function InvestorPortalPage() {
       },
     },
   });
+
+  // Auto-provision a default active portal on first visit so the publicly-
+  // visible submission link works out of the box instead of 404'ing for
+  // founders. Investor can rename / deactivate via the form below.
+  useEffect(() => {
+    if (isLoading || existingPortal || autoProvisionedRef.current) return;
+    autoProvisionedRef.current = true;
+
+    const userName = currentUser?.name?.trim() || currentUser?.email?.split("@")[0] || "";
+    const fallbackSlug = `fund-${Math.random().toString(36).slice(2, 8)}`;
+    const candidateSlug = sanitizeSlug(userName);
+    const seededSlug = candidateSlug.length >= 3 ? candidateSlug : fallbackSlug;
+    const seededName = userName ? `${userName}'s portal` : "Submission portal";
+
+    createPortal({
+      data: {
+        name: seededName,
+        slug: seededSlug,
+        description: "Tell us about your company and why you're building it.",
+        brandColor: "#6366f1",
+      },
+    });
+  }, [isLoading, existingPortal, currentUser, createPortal]);
 
   const { mutate: updatePortal, isPending: isUpdating } = usePortalControllerUpdate({
     mutation: {

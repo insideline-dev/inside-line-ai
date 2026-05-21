@@ -461,6 +461,17 @@ describe('InvestorController', () => {
 
   // DS-E11-F3-S1 — investor's review/approve/reject calibration proposals
   describe('Calibration proposal endpoints', () => {
+    const prevCalibration = process.env.ENABLE_CALIBRATION;
+    beforeEach(() => {
+      process.env.ENABLE_CALIBRATION = 'true';
+    });
+    afterEach(() => {
+      if (prevCalibration === undefined) {
+        delete process.env.ENABLE_CALIBRATION;
+      } else {
+        process.env.ENABLE_CALIBRATION = prevCalibration;
+      }
+    });
     const proposalId = '123e4567-e89b-12d3-a456-426614174900';
     const proposalRow = {
       id: proposalId,

@@ -344,6 +344,18 @@ describe('AdminController', () => {
   });
 
   describe('Investor Calibration Endpoints', () => {
+    const prevCalibration = process.env.ENABLE_CALIBRATION;
+    beforeEach(() => {
+      process.env.ENABLE_CALIBRATION = 'true';
+    });
+    afterEach(() => {
+      if (prevCalibration === undefined) {
+        delete process.env.ENABLE_CALIBRATION;
+      } else {
+        process.env.ENABLE_CALIBRATION = prevCalibration;
+      }
+    });
+
     const mockSnapshotResponse = {
       investorId: 'user-1',
       status: 'completed' as const,

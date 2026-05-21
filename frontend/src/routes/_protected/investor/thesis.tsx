@@ -33,6 +33,7 @@ import { industryGroups } from "@/data/industries";
 import {
   buildThesisSavePayload,
   extractResponseData,
+  hasCompletedThesisGenerationCycle,
   mapLegacyLabelsToNodeIds,
   shouldShowThesisGeneratingBanner,
   toggleGeographyNodeSelection,
@@ -289,11 +290,11 @@ function InvestorThesisPage() {
       return;
     }
 
-    const queuedAtMs = new Date(queuedWebsiteState.queuedAt).getTime();
-    const scrapedAtMs = new Date(websiteScrapedAt).getTime();
-    const summaryAtMs = new Date(thesisSummaryGeneratedAt).getTime();
-
-    if (scrapedAtMs >= queuedAtMs && summaryAtMs >= scrapedAtMs) {
+    if (hasCompletedThesisGenerationCycle({
+      queuedWebsiteAt: queuedWebsiteState.queuedAt,
+      websiteScrapedAt,
+      thesisSummaryGeneratedAt,
+    })) {
       clearPendingOnboardingWebsiteState();
       setQueuedWebsiteState(null);
     }

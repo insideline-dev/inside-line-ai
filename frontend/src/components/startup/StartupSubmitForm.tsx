@@ -610,12 +610,12 @@ export function StartupSubmitForm({
         tagline: data.tagline?.trim() || "",
         description: data.description?.trim() || "",
         website,
-        location: data.location.trim(),
+        location: data.location?.trim() || undefined,
         industry:
           data.sectorIndustry?.trim() ||
           data.sectorIndustryGroup?.trim() ||
-          "general",
-        stage: data.stage as CreateStartupDto["stage"],
+          undefined,
+        stage: (data.stage || undefined) as CreateStartupDto["stage"],
         fundingTarget:
           fundingTarget !== undefined ? Math.round(fundingTarget) : undefined,
         teamSize: Math.max(validTeamMembers.length, 1),
@@ -653,7 +653,9 @@ export function StartupSubmitForm({
           hasPreviousFunding === false
             ? undefined
             : normalizeOptionalText(data.previousRoundType),
-        technologyReadinessLevel: data.technologyReadinessLevel,
+        technologyReadinessLevel:
+          (data.technologyReadinessLevel as CreateStartupDto["technologyReadinessLevel"]) ||
+          undefined,
         demoVideoUrl,
         productDescription: normalizeOptionalText(data.productDescription),
         productScreenshots: productScreenshotsToPersist.length

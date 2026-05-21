@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -41,21 +41,15 @@ const stageLabels: Record<string, string> = {
   series_d: "Series D",
   series_e: "Series E",
   series_f_plus: "Series F+",
+  growth: "Growth",
 };
 
-const weightLabels: Record<string, string> = {
-  team: "Team",
-  market: "Market",
-  product: "Product",
-  traction: "Traction",
-  businessModel: "Business Model",
-  gtm: "GTM Strategy",
-  financials: "Financials",
-  competitiveAdvantage: "Competitive Advantage",
-  legal: "Legal",
-  dealTerms: "Deal Terms",
-  exitPotential: "Exit Potential",
-};
+const GROWTH_STAGE_ALIAS = "growth";
+type DisplayStage = FundingStage | typeof GROWTH_STAGE_ALIAS;
+
+function resolveStageKey(stage: string): string {
+  return stage === GROWTH_STAGE_ALIAS ? "series_f_plus" : stage;
+}
 
 const WEIGHT_KEYS = [
   "team",
@@ -70,6 +64,77 @@ const WEIGHT_KEYS = [
   "dealTerms",
   "exitPotential",
 ] as const;
+
+const LENS_KEYS = ["teamLens", "marketLens", "tractionLens"] as const;
+type LensKey = (typeof LENS_KEYS)[number];
+type LensWeights = Record<LensKey, number>;
+
+const lensLabels: Record<LensKey, string> = {
+  teamLens: "Team",
+  marketLens: "Market",
+  tractionLens: "Traction",
+};
+
+const lensDescriptions: Record<LensKey, string> = {
+  teamLens: "Founders, talent, execution ability, and durable advantages.",
+  marketLens: "Market quality, product fit, business model, and GTM maturity.",
+  tractionLens: "Commercial momentum, validation signals, and financial proof points.",
+};
+
+const LENS_GROUPS: Record<LensKey, readonly (typeof WEIGHT_KEYS)[number][]> = {
+  teamLens: ["team", "competitiveAdvantage", "legal", "dealTerms", "exitPotential"],
+  marketLens: ["market", "product", "businessModel", "gtm"],
+  tractionLens: ["traction", "financials"],
+};
+
+function distributeIntegers(total: number, keys: readonly string[], ratios: number[]): Record<string, number> {
+  if (keys.length === 0) return {};
+  if (total <= 0) return Object.fromEntries(keys.map((key) => [key, 0]));
+
+  const ratioSum = ratios.reduce((sum, ratio) => sum + Math.max(0, ratio), 0);
+  const safeRatios = ratioSum > 0 ? ratios : keys.map(() => 1);
+  const safeRatioSum = safeRatios.reduce((sum, ratio) => sum + ratio, 0);
+  const allocations = keys.map((key, index) => {
+    const raw = (total * safeRatios[index]) / safeRatioSum;
+    return {
+      key,
+      floor: Math.floor(raw),
+      remainder: raw - Math.floor(raw),
+    };
+  });
+
+  let remaining = total - allocations.reduce((sum, item) => sum + item.floor, 0);
+  allocations.sort((a, b) => b.remainder - a.remainder);
+  for (let i = 0; i < allocations.length && remaining > 0; i += 1) {
+    allocations[i].floor += 1;
+    remaining -= 1;
+  }
+
+  return Object.fromEntries(allocations.map((item) => [item.key, item.floor]));
+}
+
+function toLensWeights(weights: Record<string, number> | null | undefined): LensWeights {
+  return {
+    teamLens: LENS_GROUPS.teamLens.reduce((sum, key) => sum + (weights?.[key] ?? 0), 0),
+    marketLens: LENS_GROUPS.marketLens.reduce((sum, key) => sum + (weights?.[key] ?? 0), 0),
+    tractionLens: LENS_GROUPS.tractionLens.reduce((sum, key) => sum + (weights?.[key] ?? 0), 0),
+  };
+}
+
+function toCriterionWeights(lensWeights: LensWeights, baseWeights: Record<string, number>): UpdateScoringPreferencesDtoCustomWeights {
+  const out: Record<string, number> = {};
+
+  for (const lensKey of LENS_KEYS) {
+    const keys = LENS_GROUPS[lensKey];
+    const ratios = keys.map((key) => baseWeights[key] ?? 0);
+    const distributed = distributeIntegers(lensWeights[lensKey], keys, ratios);
+    Object.assign(out, distributed);
+  }
+
+  return Object.fromEntries(
+    WEIGHT_KEYS.map((key) => [key, out[key] ?? 0]),
+  ) as UpdateScoringPreferencesDtoCustomWeights;
+}
 
 type StageWeightEntry = {
   stage: string;
@@ -108,7 +173,7 @@ function readSavedCustomCache(): Record<string, SavedCustomStageData> {
           ? value.customWeights
           : undefined;
       if (weights && typeof weights === "object") {
-        normalized[stage] = { customWeights: weights };
+        normalized[resolveStageKey(stage)] = { customWeights: weights };
       }
     }
     return normalized;
@@ -129,11 +194,11 @@ function writeSavedCustomCache(cache: Record<string, SavedCustomStageData>) {
 function InvestorScoringPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const [activeStage, setActiveStage] = useState<FundingStage>("seed");
+  const [activeStage, setActiveStage] = useState<DisplayStage>("seed");
   const [minThesisFitScore, setMinThesisFitScore] = useState(0);
   const [minStartupScore, setMinStartupScore] = useState(0);
   const [thresholdsSaved, setThresholdsSaved] = useState(false);
-  const [editingWeights, setEditingWeights] = useState<Record<string, Record<string, number>>>({});
+  const [editingLensWeights, setEditingLensWeights] = useState<Record<string, LensWeights>>({});
   const [savedCustomByStage, setSavedCustomByStage] = useState<
     Record<string, SavedCustomStageData>
   >(() => readSavedCustomCache());
@@ -159,24 +224,40 @@ function InvestorScoringPage() {
       ? prefsResponse
       : (prefsResponse as { data?: ScoringPref[] })?.data) ?? [];
 
+  const displayScoringWeights = useMemo(() => {
+    const growthDefault = scoringWeights.find((sw) => sw.stage === "series_f_plus");
+    if (!growthDefault || scoringWeights.some((sw) => sw.stage === GROWTH_STAGE_ALIAS)) {
+      return scoringWeights;
+    }
+
+    return [
+      ...scoringWeights,
+      {
+        ...growthDefault,
+        stage: GROWTH_STAGE_ALIAS,
+      },
+    ];
+  }, [scoringWeights]);
+
   const isLoading = loadingDefaults || loadingPrefs;
 
   const getEffectiveWeights = (stage: string): Record<string, number> | null => {
-    const pref = preferences.find((p) => p.stage === stage);
+    const resolvedStage = resolveStageKey(stage);
+    const pref = preferences.find((p) => p.stage === resolvedStage);
     if (pref?.useCustomWeights && pref.customWeights) {
       return pref.customWeights;
     }
-    const defaults = scoringWeights.find((sw) => sw.stage === stage);
+    const defaults = displayScoringWeights.find((sw) => sw.stage === stage);
     return defaults?.weights ?? null;
   };
 
   const isCustomized = (stage: string): boolean => {
-    const pref = preferences.find((p) => p.stage === stage);
+    const pref = preferences.find((p) => p.stage === resolveStageKey(stage));
     return pref?.useCustomWeights === true && pref?.customWeights != null;
   };
 
   const getUseCustomWeights = (stage: string): boolean => {
-    const pref = preferences.find((p) => p.stage === stage);
+    const pref = preferences.find((p) => p.stage === resolveStageKey(stage));
     return pref?.useCustomWeights === true;
   };
 
@@ -194,24 +275,27 @@ function InvestorScoringPage() {
           queryClient.invalidateQueries({ queryKey: getInvestorControllerGetMatchesQueryKey() });
           queryClient.invalidateQueries({ queryKey: getInvestorControllerGetPipelineQueryKey() });
           setThresholdsSaved(true);
+          toast.success("Thresholds saved");
           setTimeout(() => setThresholdsSaved(false), 2000);
         },
       },
     );
   };
 
-  const getEditingWeightsForStage = (stage: string): Record<string, number> => {
-    const effective = getEffectiveWeights(stage);
-    if (editingWeights[stage]) return editingWeights[stage];
-    return effective ?? {};
+  const getEditingLensWeightsForStage = (stage: string): LensWeights => {
+    const stageKey = resolveStageKey(stage);
+    const effective = toLensWeights(getEffectiveWeights(stage));
+    if (editingLensWeights[stageKey]) return editingLensWeights[stageKey];
+    return effective;
   };
 
-  const setWeightForStage = (stage: string, key: string, value: number) => {
-    setEditingWeights((prev) => {
-      const current = prev[stage] ?? getEffectiveWeights(stage) ?? {};
+  const setLensWeightForStage = (stage: string, key: LensKey, value: number) => {
+    const stageKey = resolveStageKey(stage);
+    setEditingLensWeights((prev) => {
+      const current = prev[stageKey] ?? getEditingLensWeightsForStage(stage);
       return {
         ...prev,
-        [stage]: { ...current, [key]: Math.max(0, Math.min(100, value)) },
+        [stageKey]: { ...current, [key]: Math.max(0, Math.min(100, value)) },
       };
     });
   };
@@ -238,15 +322,15 @@ function InvestorScoringPage() {
   }, [savedCustomByStage]);
 
   const handleSaveCustomWeights = (stage: string) => {
-    const weights = getEditingWeightsForStage(stage);
+    const resolvedStage = resolveStageKey(stage);
+    const weights = getEditingLensWeightsForStage(stage);
     const sum = getWeightsSum(weights);
     if (sum !== 100) return;
-    const fullWeights = Object.fromEntries(
-      WEIGHT_KEYS.map((k) => [k, weights[k] ?? 0]),
-    ) as UpdateScoringPreferencesDtoCustomWeights;
+    const baseWeights = getEffectiveWeights(stage) ?? {};
+    const fullWeights = toCriterionWeights(weights, baseWeights);
     updateScoringPreference.mutate(
       {
-        stage,
+        stage: resolvedStage,
         data: {
           useCustomWeights: true,
           customWeights: fullWeights,
@@ -257,7 +341,7 @@ function InvestorScoringPage() {
           const queryKey = getInvestorControllerGetScoringPreferencesQueryKey();
           setSavedCustomByStage((prev) => ({
             ...prev,
-            [stage]: {
+            [resolvedStage]: {
               customWeights: fullWeights as Record<string, number>,
             },
           }));
@@ -265,9 +349,9 @@ function InvestorScoringPage() {
           queryClient.setQueryData(queryKey, (old: unknown) => {
             const list = Array.isArray(old) ? old : (old as { data?: ScoringPref[] })?.data ?? [];
             const arr = [...(list as ScoringPref[])];
-            const idx = arr.findIndex((p) => p.stage === stage);
+            const idx = arr.findIndex((p) => p.stage === resolvedStage);
             const updated: ScoringPref = {
-              stage,
+              stage: resolvedStage,
               useCustomWeights: true,
               customWeights: fullWeights as Record<string, number>,
             };
@@ -275,10 +359,9 @@ function InvestorScoringPage() {
             else arr.push(updated);
             return Array.isArray(old) ? arr : { ...(old as object), data: arr };
           });
-          await queryClient.refetchQueries({ queryKey });
           queryClient.invalidateQueries({ queryKey: getInvestorControllerGetMatchesQueryKey() });
           queryClient.invalidateQueries({ queryKey: getInvestorControllerGetPipelineQueryKey() });
-          setEditingWeights((prev) => ({ ...prev, [stage]: fullWeights as Record<string, number> }));
+          setEditingLensWeights((prev) => ({ ...prev, [resolvedStage]: weights }));
           toast.info("Scores are being recalculated...", {
             description: "Your custom weights have been saved. Match scores will update shortly.",
           });
@@ -288,20 +371,20 @@ function InvestorScoringPage() {
   };
 
   const handleToggleCustomWeights = (stage: string, enabled: boolean) => {
-    const defaults = scoringWeights.find((sw) => sw.stage === stage);
-    const pref = preferences.find((p) => p.stage === stage);
+    const resolvedStage = resolveStageKey(stage);
+    const defaults = displayScoringWeights.find((sw) => sw.stage === stage);
+    const pref = preferences.find((p) => p.stage === resolvedStage);
 
     if (enabled) {
       // Use saved custom values if they exist, otherwise use defaults
-      const persisted = readSavedCustomCache();
-      const saved = savedCustomByStage[stage] ?? persisted[stage];
+      const saved = savedCustomByStage[resolvedStage];
       const weights =
         saved?.customWeights ?? pref?.customWeights ?? defaults?.weights;
       if (!weights) return;
 
       updateScoringPreference.mutate(
         {
-          stage,
+          stage: resolvedStage,
           data: {
             useCustomWeights: true,
             customWeights: weights as UpdateScoringPreferencesDtoCustomWeights,
@@ -322,26 +405,23 @@ function InvestorScoringPage() {
       );
     } else {
       // Preserve current custom data when toggled off so it restores when toggled back on.
-      const currentWeights = getEditingWeightsForStage(stage);
-      const persisted = readSavedCustomCache();
-      const saved = savedCustomByStage[stage] ?? persisted[stage];
+      const currentLensWeights = getEditingLensWeightsForStage(stage);
+      const saved = savedCustomByStage[resolvedStage];
       const weightsToSave =
-        Object.keys(currentWeights).length > 0 && getWeightsSum(currentWeights) === 100
-          ? (Object.fromEntries(
-              WEIGHT_KEYS.map((k) => [k, currentWeights[k] ?? 0]),
-            ) as UpdateScoringPreferencesDtoCustomWeights)
+        Object.keys(currentLensWeights).length > 0 && getWeightsSum(currentLensWeights) === 100
+          ? toCriterionWeights(currentLensWeights, getEffectiveWeights(stage) ?? {})
           : (saved?.customWeights ?? pref?.customWeights ?? null) as UpdateScoringPreferencesDtoCustomWeights | null;
       if (weightsToSave) {
         setSavedCustomByStage((prev) => ({
           ...prev,
-          [stage]: {
+          [resolvedStage]: {
             customWeights: weightsToSave as Record<string, number>,
           },
         }));
       }
       updateScoringPreference.mutate(
         {
-          stage,
+          stage: resolvedStage,
           data: {
             useCustomWeights: false,
             customWeights: weightsToSave,
@@ -481,9 +561,9 @@ function InvestorScoringPage() {
         </CardHeader>
       </Card>
 
-      <Tabs value={activeStage} onValueChange={(v) => setActiveStage(v as FundingStage)}>
+      <Tabs value={activeStage} onValueChange={(v) => setActiveStage(v as DisplayStage)}>
         <TabsList>
-          {scoringWeights.map((sw) => (
+          {displayScoringWeights.map((sw) => (
             <TabsTrigger key={sw.stage} value={sw.stage}>
               {stageLabels[sw.stage] || sw.stage}
               {isCustomized(sw.stage) && (
@@ -495,8 +575,12 @@ function InvestorScoringPage() {
           ))}
         </TabsList>
 
-        {scoringWeights.map((sw) => {
+        {displayScoringWeights.map((sw) => {
           const effective = getEffectiveWeights(sw.stage);
+          const effectiveLensWeights = effective ? toLensWeights(effective) : null;
+          const defaultLensWeights = toLensWeights(sw.weights);
+          const editingLensWeightsForStage = getEditingLensWeightsForStage(sw.stage);
+          const editingTotal = getWeightsSum(editingLensWeightsForStage);
           const customized = isCustomized(sw.stage);
           const useCustomWeights = getUseCustomWeights(sw.stage);
 
@@ -547,7 +631,7 @@ function InvestorScoringPage() {
                         onClick={() => handleSaveCustomWeights(sw.stage)}
                         disabled={
                           updateScoringPreference.isPending ||
-                          getWeightsSum(getEditingWeightsForStage(sw.stage)) !== 100
+                          getWeightsSum(getEditingLensWeightsForStage(sw.stage)) !== 100
                         }
                         className="gap-2 shrink-0"
                       >
@@ -565,7 +649,7 @@ function InvestorScoringPage() {
                   <CardHeader>
                     <CardTitle>Customize Weights</CardTitle>
                     <CardDescription>
-                      Adjust weights for each criterion. Total must equal 100%.
+                      Adjust the three screening lenses for this stage. Total must equal 100%.
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -574,7 +658,7 @@ function InvestorScoringPage() {
                         <thead>
                           <tr className="border-b bg-muted/50">
                             <th className="text-left py-3 px-4 font-medium align-top w-32">
-                              Criterion
+                              Lens
                             </th>
                             <th className="text-left py-3 px-4 font-medium align-top w-20">
                               Default
@@ -585,14 +669,16 @@ function InvestorScoringPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {WEIGHT_KEYS.map((key) => {
-                            const defaultVal = sw.weights[key] ?? 0;
-                            const editingVal =
-                              getEditingWeightsForStage(sw.stage)[key] ?? defaultVal;
+                          {LENS_KEYS.map((key) => {
+                            const defaultVal = defaultLensWeights[key] ?? 0;
+                            const editingVal = editingLensWeightsForStage[key] ?? defaultVal;
                             return (
                               <tr key={key} className="border-b last:border-0">
                                 <td className="py-3 px-4 text-sm font-medium align-top">
-                                  {weightLabels[key] || key}
+                                  <div>{lensLabels[key]}</div>
+                                  <div className="mt-1 text-xs font-normal text-muted-foreground">
+                                    {lensDescriptions[key]}
+                                  </div>
                                 </td>
                                 <td className="py-3 px-4 align-top">
                                   <Badge variant="secondary" className="font-normal">
@@ -600,23 +686,36 @@ function InvestorScoringPage() {
                                   </Badge>
                                 </td>
                                 <td className="py-3 px-4 align-top">
-                                  <div className="flex items-center gap-1 w-20">
-                                    <Input
-                                      type="number"
+                                  <div className="flex items-center gap-3">
+                                    <Slider
+                                      value={[editingVal]}
+                                      onValueChange={([v]) =>
+                                        setLensWeightForStage(sw.stage, key, v ?? 0)
+                                      }
                                       min={0}
                                       max={100}
-                                      value={editingVal}
-                                      onChange={(e) => {
-                                        const v = parseInt(e.target.value, 10);
-                                        setWeightForStage(
-                                          sw.stage,
-                                          key,
-                                          Number.isNaN(v) ? 0 : v,
-                                        );
-                                      }}
-                                      className="h-9 text-sm"
+                                      step={5}
+                                      className="w-32"
                                     />
-                                    <span className="text-sm text-muted-foreground">%</span>
+                                    <div className="flex items-center gap-1 w-20">
+                                      <Input
+                                        type="number"
+                                        min={0}
+                                        max={100}
+                                        step={5}
+                                        value={editingVal}
+                                        onChange={(e) => {
+                                          const v = parseInt(e.target.value, 10);
+                                          setLensWeightForStage(
+                                            sw.stage,
+                                            key,
+                                            Number.isNaN(v) ? 0 : v,
+                                          );
+                                        }}
+                                        className="h-9 text-sm"
+                                      />
+                                      <span className="text-sm text-muted-foreground">%</span>
+                                    </div>
                                   </div>
                                 </td>
                               </tr>
@@ -626,8 +725,8 @@ function InvestorScoringPage() {
                       </table>
                     </div>
                     <p className="mt-3 text-sm text-muted-foreground">
-                      Total: {getWeightsSum(getEditingWeightsForStage(sw.stage))}%
-                      {getWeightsSum(getEditingWeightsForStage(sw.stage)) !== 100 && (
+                      Total: {editingTotal}%
+                      {editingTotal !== 100 && (
                         <span className="text-destructive ml-1"> (must equal 100%)</span>
                       )}
                     </p>
@@ -649,13 +748,13 @@ function InvestorScoringPage() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    {effective &&
-                      WEIGHT_KEYS.map((key) => {
-                        const value = effective[key] ?? 0;
+                    {effectiveLensWeights &&
+                      LENS_KEYS.map((key) => {
+                        const value = effectiveLensWeights[key] ?? 0;
                         return (
                           <div key={key} className="space-y-1">
                             <div className="flex justify-between text-sm">
-                              <span>{weightLabels[key] || key}</span>
+                              <span>{lensLabels[key]}</span>
                               <span className="font-medium">{value}%</span>
                             </div>
                             <div className="h-2 rounded-full bg-muted overflow-hidden">
@@ -673,28 +772,21 @@ function InvestorScoringPage() {
                 <Card>
                   <CardHeader>
                     <div className="flex items-center gap-2">
-                      <CardTitle>
-                        {useCustomWeights && preferences.find((p) => p.stage === sw.stage)?.customRationale
-                          ? "Weight Rationale"
-                          : "Platform Rationale"}
-                      </CardTitle>
-                      <Badge variant={useCustomWeights && preferences.find((p) => p.stage === sw.stage)?.customRationale ? "default" : "secondary"}>
-                        {useCustomWeights && preferences.find((p) => p.stage === sw.stage)?.customRationale
-                          ? "Custom"
-                          : "Platform Default"}
-                      </Badge>
+                      <CardTitle>Lens Rationale</CardTitle>
+                      <Badge variant="secondary">Platform Default</Badge>
                     </div>
-                    <CardDescription>Why these weights matter at this stage</CardDescription>
+                    <CardDescription>Why these screening lenses matter at this stage</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    {WEIGHT_KEYS.map((key) => {
-                      const pref = preferences.find((p) => p.stage === sw.stage);
-                      const customRationale = useCustomWeights ? pref?.customRationale : null;
-                      const value = customRationale?.[key] ?? sw.rationale[key] ?? "";
+                    {LENS_KEYS.map((key) => {
+                      const value = LENS_GROUPS[key]
+                        .map((criterionKey) => sw.rationale[criterionKey] ?? "")
+                        .filter(Boolean)
+                        .join(" ");
                       return (
                         <div key={key} className="space-y-1">
-                          <h4 className="font-medium text-sm">{weightLabels[key] || key}</h4>
-                          <p className="text-sm text-muted-foreground">{value || "—"}</p>
+                          <h4 className="font-medium text-sm">{lensLabels[key]}</h4>
+                          <p className="text-sm text-muted-foreground">{value || lensDescriptions[key]}</p>
                         </div>
                       );
                     })}

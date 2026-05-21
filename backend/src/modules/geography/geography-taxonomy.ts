@@ -1,4 +1,4 @@
-export type GeographyNodeLevel = 1 | 2 | 3;
+export type GeographyNodeLevel = 1 | 2 | 3 | 4;
 
 export interface GeographyNode {
   id: string;
@@ -29,12 +29,21 @@ const GLOBAL_LEVEL_3 = "l3:unknown";
 
 export const GEOGRAPHY_TAXONOMY_VERSION = "2026-02-09";
 
-function countryNode(countryCode: string, label: string): GeographyNode {
+function countryNode(countryCode: string, label: string, children?: GeographyNode[]): GeographyNode {
   return {
     id: `l3:${countryCode.toLowerCase()}`,
     label,
     level: 3,
     countryCode: countryCode.toUpperCase(),
+    ...(children?.length ? { children } : {}),
+  };
+}
+
+function regionNode(id: string, label: string): GeographyNode {
+  return {
+    id,
+    label,
+    level: 4,
   };
 }
 
@@ -48,7 +57,10 @@ const INVESTOR_GEOGRAPHY_TAXONOMY: GeographyNode[] = [
         id: "l2:us_canada",
         label: "US & Canada",
         level: 2,
-        children: [countryNode("US", "United States"), countryNode("CA", "Canada")],
+        children: [
+          countryNode("US", "United States", [regionNode("l4:us_ca", "California")]),
+          countryNode("CA", "Canada"),
+        ],
       },
       {
         id: "l2:caribbean",
@@ -766,6 +778,14 @@ export function geographySelectionMatchesStartupPath(
 
     if (pathSet.has(nodeId)) {
       return true;
+    }
+
+    let currentParent = geographyNodeById.get(nodeId)?.parentId ?? null;
+    while (currentParent) {
+      if (pathSet.has(currentParent)) {
+        return true;
+      }
+      currentParent = geographyNodeById.get(currentParent)?.parentId ?? null;
     }
   }
 

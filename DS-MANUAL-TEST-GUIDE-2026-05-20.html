@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Inside Line — DS End-to-End Manual Testing Guide</title></head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1a1a1a;max-width:1100px;margin:0 auto;padding:24px;line-height:1.55;">
+
+<h1 style="margin:0 0 4px;font-size:26px;">Inside Line — Deal Screening (DS) end-to-end manual testing guide</h1>
+<p style="color:#666;margin:0 0 20px;font-size:13px;">Branch <code>dev</code> @ <code>1b90f1c</code>, 2026-05-20. Walk this top-to-bottom in one sitting (~90 min). Every numbered checkpoint cites the backlog ID it verifies. Items marked <span style="background:#eceff1;padding:1px 6px;border-radius:3px;">SKIP</span> are MVP-defer / Icebox and you can ignore them.</p>
+
+<h3>How to use this doc</h3>
+<ul style="font-size:14px;">
+  <li>Sections 1-3 are setup. Sections 4-12 are the actual journey, in order.</li>
+  <li>Every checkpoint has a <b>Story ID</b>, <b>Action</b>, and <b>Expected</b>. Tick the box mentally (or in a copy of this doc) as you go.</li>
+  <li>If a checkpoint fails, jot down the section + step number and the actual behavior. Don't try to "fix it on the fly" — finish the journey first to see whether failure cascades.</li>
+  <li>You'll need two accounts and one deck. See § 1.</li>
+</ul>
+
+<h3>Story coverage at a glance</h3>
+<table style="border-collapse:collapse;font-size:12px;width:100%;">
+  <thead><tr style="background:#f5f5f5;">
+    <th style="padding:5px 8px;border:1px solid #ddd;text-align:left;">Epic</th>
+    <th style="padding:5px 8px;border:1px solid #ddd;text-align:left;">Stories covered</th>
+    <th style="padding:5px 8px;border:1px solid #ddd;text-align:left;">Section</th>
+  </tr></thead>
+  <tbody>
+    <tr><td style="padding:5px 8px;border:1px solid #ddd;">DS-E3 Thesis config</td><td style="padding:5px 8px;border:1px solid #ddd;">F1-S1, F1-S2, F1-S3, F2-S2, F3-S1</td><td style="padding:5px 8px;border:1px solid #ddd;">§ 4</td></tr>
+    <tr><td style="padding:5px 8px;border:1px solid #ddd;">DS-E1 Intake (multi-path)</td><td style="padding:5px 8px;border:1px solid #ddd;">F1-S1, F2-S1, F3-S1, F4-S1, F4-S2, F6-S1, F7-S1, F8-S1</td><td style="padding:5px 8px;border:1px solid #ddd;">§ 5</td></tr>
+    <tr><td style="padding:5px 8px;border:1px solid #ddd;">DS-E12 Enrichment</td><td style="padding:5px 8px;border:1px solid #ddd;">F1-S1, F2-S1</td><td style="padding:5px 8px;border:1px solid #ddd;">§ 6</td></tr>
+    <tr><td style="padding:5px 8px;border:1px solid #ddd;">DS-E2 Scoring</td><td style="padding:5px 8px;border:1px solid #ddd;">F1-S1, F1-S2, F2-S1</td><td style="padding:5px 8px;border:1px solid #ddd;">§ 6</td></tr>
+    <tr><td style="padding:5px 8px;border:1px solid #ddd;">DS-E9 Evidence graph</td><td style="padding:5px 8px;border:1px solid #ddd;">F1-S1, F2-S1</td><td style="padding:5px 8px;border:1px solid #ddd;">§ 7</td></tr>
+    <tr><td style="padding:5px 8px;border:1px solid #ddd;">DS-E4 Dealbreakers</td><td style="padding:5px 8px;border:1px solid #ddd;">F1-S1, F2-S1, F3-S1, F4-S1</td><td style="padding:5px 8px;border:1px solid #ddd;">§ 7</td></tr>
+    <tr><td style="padding:5px 8px;border:1px solid #ddd;">DS-E7 Verdict engine</td><td style="padding:5px 8px;border:1px solid #ddd;">F1-S1, F2-S1, F3-S1, F4-S1</td><td style="padding:5px 8px;border:1px solid #ddd;">§ 8</td></tr>
+    <tr><td style="padding:5px 8px;border:1px solid #ddd;">DS-E6 Screening UI</td><td style="padding:5px 8px;border:1px solid #ddd;">F1-S1, F2-S1, F3-S1, F3-S2, F4-S1</td><td style="padding:5px 8px;border:1px solid #ddd;">§ 9</td></tr>
+    <tr><td style="padding:5px 8px;border:1px solid #ddd;">DS-E10 Handoff</td><td style="padding:5px 8px;border:1px solid #ddd;">F1-S1, F2-S1, F3-S1, F4-S1</td><td style="padding:5px 8px;border:1px solid #ddd;">§ 10</td></tr>
+    <tr><td style="padding:5px 8px;border:1px solid #ddd;">DS-E8 Deal Agent</td><td style="padding:5px 8px;border:1px solid #ddd;">F1-S1, F1-S2, F2-S1</td><td style="padding:5px 8px;border:1px solid #ddd;">§ 11</td></tr>
+    <tr><td style="padding:5px 8px;border:1px solid #ddd;">DS-E11 Calibration</td><td style="padding:5px 8px;border:1px solid #ddd;">F1-S1, F2-S1, F3-S1, F4-S1</td><td style="padding:5px 8px;border:1px solid #ddd;">§ 12</td></tr>
+    <tr style="background:#fafafa;"><td style="padding:5px 8px;border:1px solid #ddd;" colspan="3"><b>SKIP</b> — DS-E1-F2-S2 (distribution control), DS-E1-F9 (CRM sync), DS-E6-F5-S1/S2 (swipe + voice pitch). All Backlog-S or Icebox. Listed in § 13 for record.</td></tr>
+  </tbody>
+</table>
+
+<!-- =============================================== -->
+<h2 style="margin:32px 0 6px;background:#1a237e;color:white;padding:8px 12px;border-radius:4px;">§ 1. What you'll need before starting</h2>
+
+<table style="border-collapse:collapse;font-size:13px;width:100%;">
+  <tr><td style="padding:6px 10px;border:1px solid #ddd;width:30%;"><b>Two test accounts</b></td><td style="padding:6px 10px;border:1px solid #ddd;">One <b>investor</b> account (e.g. <code>yusuf@agentmail.to</code>) and one <b>admin</b> account (e.g. <code>yusufisawi@gmail.com</code>). Both must be logged-in-able in your browser.</td></tr>
+  <tr><td style="padding:6px 10px;border:1px solid #ddd;"><b>One pitch deck (PDF)</b></td><td style="padding:6px 10px;border:1px solid #ddd;">≥ 8 slides covering at least: team, problem/solution, market size, traction, ask. The Brew Bird deck in your existing test set works. Keep filename like <code>brewbird-deck.pdf</code> — Clara's classifier uses it as a signal.</td></tr>
+  <tr><td style="padding:6px 10px;border:1px solid #ddd;"><b>A CSV with ~3 startups</b></td><td style="padding:6px 10px;border:1px solid #ddd;">Columns: <code>company, website, founder_name, founder_email, deck_url</code> (deck_url optional). Used for DS-E1-F6. Save as <code>/tmp/test-batch.csv</code>.</td></tr>
+  <tr><td style="padding:6px 10px;border:1px solid #ddd;"><b>An email account that forwards to AgentMail</b></td><td style="padding:6px 10px;border:1px solid #ddd;">For DS-E1-F3. You should know your fund's AgentMail inbox address (looks like <code>fund-name@agentmail.to</code>).</td></tr>
+  <tr><td style="padding:6px 10px;border:1px solid #ddd;"><b>A WhatsApp number connected to Evolution</b></td><td style="padding:6px 10px;border:1px solid #ddd;">For DS-E1-F8. If not configured, skip § 5.7.</td></tr>
+  <tr><td style="padding:6px 10px;border:1px solid #ddd;"><b>Browser</b></td><td style="padding:6px 10px;border:1px solid #ddd;">Chrome or Firefox. Two browser windows/profiles to test the investor + admin views in parallel.</td></tr>
+  <tr><td style="padding:6px 10px;border:1px solid #ddd;"><b>~90 minutes</b></td><td style="padding:6px 10px;border:1px solid #ddd;">Walk top-to-bottom. The pipeline takes ~3-5 min per deal; do other sections while it runs.</td></tr>
+</table>
+
+<h2 style="margin:32px 0 6px;background:#1a237e;color:white;padding:8px 12px;border-radius:4px;">§ 2. Start the app</h2>
+
+<pre style="background:#f5f5f5;padding:12px;border-radius:4px;font-size:12px;overflow-x:auto;">
+cd /home/yusuf/.continuum/workspace/inside-line-ai
+bun dev                       # frontend on :3030, backend on :8080
+
+# In a new shell, verify both came up:
+curl -s -o /dev/null -w "FE %{http_code}\nBE %{http_code}\n" http://localhost:3030/ http://localhost:8080/docs
+# Expect: 200 / 200
+</pre>
+
+<p style="font-size:13px;color:#555;">If you see <b>"Rendered more hooks than during the previous render"</b> on <code>/investor</code>, reload — known intermittent React bug, not blocking. Documented in <code>HANDOFF-DS-E11-CALIBRATION-2026-05-20.md</code> § 4.2.</p>
+
+<h2 style="margin:32px 0 6px;background:#1a237e;color:white;padding:8px 12px;border-radius:4px;">§ 3. Log in</h2>
+
+<ol style="font-size:13px;">
+  <li>Window 1: open <code>http://localhost:3030/login</code> → sign in as <b>investor</b>. Land on <code>/investor</code>.</li>
+  <li>Window 2 (different profile or incognito): same URL → sign in as <b>admin</b>. Land on <code>/admin</code>.</li>
+  <li>Keep both windows open. Most checkpoints toggle between them.</li>
+</ol>
+
+<!-- =============================================== -->
+<h2 style="margin:36px 0 6px;background:#0d47a1;color:white;padding:10px 14px;border-radius:4px;">§ 4. Configure investor thesis (DS-E3)</h2>
+<p style="font-size:13px;color:#555;">All actions in the <b>investor</b> window at <code>/investor/thesis</code> and <code>/investor/scoring</code>.</p>
+
+<h3 style="margin:16px 0 4px;">4.1 — Stage, check size, industries, business models, geographies, narrative, exclusions</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E3-F1-S1</p>
+<ol style="font-size:13px;">
+  <li>Navigate to <code>/investor/thesis</code>.</li>
+  <li>Tick <b>Pre-Seed, Seed, Series A</b>. Set Check Size <code>$500,000</code>–<code>$3,000,000</code>. Leave Min ARR empty.</li>
+  <li>Industries: select <b>Artificial Intelligence</b>, <b>Financial Services</b>, <b>Software</b> (3 of the 28 available).</li>
+  <li>Business Models: select <b>B2B SaaS</b>, <b>API/Infrastructure</b>.</li>
+  <li>Fund Information: paste a real fund website (e.g. <code>https://a16z.com</code>). Fund Size <code>50000000</code>.</li>
+  <li>Geographies: expand <b>North America</b>, tick <b>United States → California</b>. Also tick <b>Europe → United Kingdom</b>.</li>
+  <li>Thesis Narrative: paste "Seed and Series A B2B SaaS / AI infrastructure plays in the US and UK. We back technical founders with a clear ICP. We pass on crypto, gambling, and defense. Check sizes 500k-3M."</li>
+  <li>"What would you NOT invest in?": paste "crypto, gambling, weapons, vertical AI for consumer healthcare".</li>
+  <li>Click <b>Save Thesis</b>.</li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b> "Thesis saved" toast. Page reloads with all values intact. Bottom of page should now show a "Dealbreakers" tag list with auto-suggested chips ("crypto", "gambling", "weapons", "vertical AI") populated from the exclusion narrative (this is DS-E4-F4 — verify in § 7.4).</p>
+
+<h3 style="margin:16px 0 4px;">4.2 — AI scans investor website</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E3-F1-S2 (Live in Dev P1)</p>
+<ol style="font-size:13px;">
+  <li>Still on <code>/investor/thesis</code>. Click <b>Re-scan my website</b> button (top-right area).</li>
+  <li>Wait ~30-60s. A spinner or progress indicator should appear.</li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b> "Portfolio companies" list populates below the website field with names extracted from the fund's portfolio page. Thesis narrative may also be auto-augmented. <code>websiteScrapedAt</code> timestamp updates (visible in the API response if you open devtools → Network → look for the thesis GET).</p>
+
+<h3 style="margin:16px 0 4px;">4.3 — AI-generated thesis summary (editable)</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E3-F1-S3 (Live in Dev P2)</p>
+<ol style="font-size:13px;">
+  <li>On <code>/investor/thesis</code>, find the <b>Thesis Summary</b> card. Click <b>Generate Summary</b>.</li>
+  <li>Wait ~10s for the LLM-generated paragraph to appear.</li>
+  <li>Edit one sentence inline. Click outside to save.</li>
+  <li>Click <b>Generate Summary</b> again.</li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b> The first generate produces a readable summary referencing your selected stages/industries/geos. After your edit, the "manually edited" flag is set (the regenerate button should warn before overwriting). After the second generate, your edit is replaced.</p>
+
+<h3 style="margin:16px 0 4px;">4.4 — Per-stage lens weights</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E3-F2-S2 (Shipped)</p>
+<ol style="font-size:13px;">
+  <li>Navigate to <code>/investor/scoring</code>.</li>
+  <li>Confirm 9 stage tabs visible: Pre-Seed, Seed, Series A, B, C, D, E, F+, Growth.</li>
+  <li>Switch to <b>Pre-Seed</b>. Drag the <b>Team</b> weight to 50%, <b>Market</b> to 30%, <b>Traction</b> to 20%.</li>
+  <li>Switch to <b>Series B</b>. Drag <b>Traction</b> to 50%, <b>Market</b> to 30%, <b>Team</b> to 20%.</li>
+  <li>Click <b>Save</b>.</li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b> Per-stage weights persist independently. Refresh — values are still there. Pre-Seed and Series B have different lens emphasis.</p>
+
+<h3 style="margin:16px 0 4px;">4.5 — Matching thresholds</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E3-F3-S1 (Shipped)</p>
+<ol style="font-size:13px;">
+  <li>Still on <code>/investor/scoring</code>, scroll to the <b>Matching thresholds</b> panel.</li>
+  <li>Set Min thesis-fit % to <b>50</b>. Set Min overall score % to <b>40</b>.</li>
+  <li>Click <b>Save</b>.</li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b> Saved confirmation. These thresholds will be checked in § 8 when verdict appears.</p>
+
+<!-- =============================================== -->
+<h2 style="margin:36px 0 6px;background:#0d47a1;color:white;padding:10px 14px;border-radius:4px;">§ 5. Submit deals through all intake paths (DS-E1)</h2>
+
+<h3 style="margin:16px 0 4px;">5.1 — Investor drag-drop deck (admin view)</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E1-F1-S1 (Shipped)</p>
+<ol style="font-size:13px;">
+  <li>Switch to <b>admin</b> window. Click <b>Analyze Startup</b> in the sidebar.</li>
+  <li>Drag <code>brewbird-deck.pdf</code> onto the upload zone.</li>
+  <li>Watch the upload progress bar; status should change to "Analyzing" within 5 seconds.</li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b> A new deal card with name auto-extracted from deck (likely "Brew Bird") appears in the in-flight list. <code>sourcePath = 'admin-manual'</code> (verify in network tab on GET deal response). Pipeline starts within 5s of drop — confirm by checking the pipeline progress panel.</p>
+
+<h3 style="margin:16px 0 4px;">5.2 — Founder public apply form</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E1-F2-S1 (Shipped)</p>
+<ol style="font-size:13px;">
+  <li>In a private/incognito window (not signed in), navigate to <code>/apply/&lt;portal-slug&gt;</code>. (Get the portal slug from <b>investor</b> window → <b>Submission Portal</b> sidebar item → copy public link.)</li>
+  <li>Fill the form: company name "Path Robotics", description "industrial robotics automation", stage "Series A", funding target "5000000", team size "30", website "https://pathrobotics.com", contact email "founder@test.com".</li>
+  <li>Upload the deck.</li>
+  <li>Submit.</li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b> "Thank you, your submission is being processed" confirmation. Within 60s the deal appears in the investor pipeline (window 1) as <b>New</b> with <code>source = 'founder-submitted'</code>. Thesis-fit score is computed per the investor's thesis configured in § 4.</p>
+
+<h3 style="margin:16px 0 4px;">5.3 — Email forward to fund inbox</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E1-F3-S1 (Shipped)</p>
+<ol style="font-size:13px;">
+  <li>From a real email account, send an email to your AgentMail fund inbox with subject "Intro: TestStartup raising Seed".</li>
+  <li>Body: "Hi, please consider TestStartup for your fund. We're a B2B AI infrastructure play building agent observability. Website: teststartup.com. Asking for $2M seed."</li>
+  <li>Attach <code>brewbird-deck.pdf</code> (rename to <code>teststartup-deck.pdf</code> first to avoid the dedup-by-deck-hash path).</li>
+  <li>Send.</li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b> Within ~60s the deal appears in the admin pipeline with <code>sourcePath = 'clara'</code>, company name extracted from email body ("TestStartup"), founder email captured as the From header. Verify on the deal detail page.</p>
+
+<h3 style="margin:16px 0 4px;">5.4 — Canonical ScreeningInput schema</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E1-F4-S1 (Live in Dev)</p>
+<ol style="font-size:13px;">
+  <li>For each deal from § 5.1, 5.2, 5.3: open the deal detail page in the admin window (<code>/admin/startup/&lt;id&gt;</code>).</li>
+  <li>Look for a "Source" badge or metadata: should show <code>admin-manual</code>, <code>founder-submitted</code>, <code>clara</code> respectively.</li>
+  <li>Open devtools → Network → reload page → find the GET startup response. Confirm <code>sourcePath</code> field present and matches.</li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b> All 3 deals carry distinct source-path tags. The enum is one of: <code>founder-submitted</code> / <code>founder-manual</code> / <code>investor-manual</code> / <code>scout-submitted</code> / <code>investor-inbox</code> / <code>clara</code> / <code>admin-manual</code> / <code>admin-csv</code>.</p>
+
+<h3 style="margin:16px 0 4px;">5.5 — Cross-path duplicate detection</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E1-F4-S2 (Live in Dev P3)</p>
+<ol style="font-size:13px;">
+  <li>In admin window, click <b>Analyze Startup</b> again.</li>
+  <li>Drag the SAME <code>brewbird-deck.pdf</code> in. Or paste the same website URL.</li>
+  <li>Watch for a duplicate warning.</li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b> Either a "Possible duplicate" prompt with a link to the existing deal, OR the upload is rejected with reason <code>duplicate_within_window</code>. The existing deal's <code>sourcePath</code> stays as it was (no overwrite).</p>
+
+<h3 style="margin:16px 0 4px;">5.6 — CSV bulk upload (40 startups)</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E1-F6-S1 (Live in Dev P3)</p>
+<ol style="font-size:13px;">
+  <li>Prepare <code>/tmp/test-batch.csv</code>:
+<pre style="background:#f5f5f5;padding:8px;font-size:11px;">company,website,founder_name,founder_email
+Acme Robotics,https://acme.com,Alice Founder,alice@acme.com
+Helios Labs,https://helios.example,Bob Founder,bob@helios.example
+Parasail AI,https://parasail.example,Carol Founder,carol@parasail.example
+,https://broken.com,Dave Founder,dave@broken.example</pre></li>
+  <li>In admin window, find the <b>Bulk upload</b> button (under Analyze Startup or in admin tools).</li>
+  <li>Upload the CSV.</li>
+  <li>Wait for the summary.</li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b> Summary shows total=4, created=3, failed=1 (the empty-company row). Per-row status downloadable as CSV. Three deals appear with <code>sourcePath = 'admin-csv'</code>. The fourth row is flagged with reason "company name required".</p>
+
+<h3 style="margin:16px 0 4px;">5.7 — WhatsApp forward with voice-note STT</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E1-F8-S1 (Backlog-S P1, IMPLEMENTED)</p>
+<ol style="font-size:13px;">
+  <li>Only if Evolution/Unipile WhatsApp is configured for your fund. Otherwise SKIP.</li>
+  <li>From WhatsApp, send a voice note (15-30s) to the fund's InsideLine WhatsApp number. Say "I'd like you to look at NebulaScale, an AI infrastructure company raising 3M seed. Website nebulascale.com."</li>
+  <li>Or: forward a deck PDF from a founder's WhatsApp message to the same number.</li>
+  <li>Wait ~60s for Clara's reply.</li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b> Clara replies on WhatsApp confirming ingestion within 60s. New deal in admin pipeline with <code>sourcePath = 'clara'</code> (channel='whatsapp' visible in deal metadata). For voice-note: <code>bodyText</code> field contains the transcript ("I'd like you to look at NebulaScale..."). Company name auto-extracted from transcript.</p>
+<p style="font-size:12px;color:#888;">Implementation: <code>backend/src/modules/integrations/evolution/evolution-media.service.ts:170-189</code> uses OpenAI <code>gpt-4o-mini-transcribe</code>.</p>
+
+<h3 style="margin:16px 0 4px;">5.8 — One-startup-per-link guard</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E1-F7-S1 (Live in Dev P3)</p>
+<ol style="font-size:13px;">
+  <li>From the same incognito browser used in § 5.2 (same browser session = same link).</li>
+  <li>Try to submit a SECOND startup with a different name but same founder email.</li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b> If fund's link integrity is set to <b>strict</b>, second submission is rejected with "duplicate within window". If set to <b>permissive</b> or <b>off</b>, it goes through. Either way, the event is audit-logged.</p>
+
+<!-- =============================================== -->
+<h2 style="margin:36px 0 6px;background:#0d47a1;color:white;padding:10px 14px;border-radius:4px;">§ 6. Watch enrichment + scoring run (DS-E12 + DS-E2)</h2>
+<p style="font-size:13px;color:#555;">Use the Brew Bird deal from § 5.1. Open <code>/admin/startup/&lt;id&gt;</code> and watch the pipeline progress panel.</p>
+
+<h3 style="margin:16px 0 4px;">6.1 — Deck extraction with page-level provenance</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E12-F1-S1 (Shipped)</p>
+<ol style="font-size:13px;">
+  <li>Wait for the <b>Extraction</b> phase to complete (~2 min).</li>
+  <li>Open the deal detail. Navigate to the "Extraction" or "Details" tab.</li>
+  <li>Check for fields populated by deck extraction: team members, problem statement, solution, market size, traction stats, ask, competitors.</li>
+  <li>Click on any claim chip / source link.</li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b> All 7 sections populated. Each carries a deck-page citation (e.g. "deck:p5"). Clicking jumps to that page in the pitch deck viewer.</p>
+
+<h3 style="margin:16px 0 4px;">6.2 — LinkedIn / public profile enrichment</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E12-F2-S1 (Shipped)</p>
+<ol style="font-size:13px;">
+  <li>Same deal. Navigate to the "Team" section of the deal card.</li>
+  <li>Verify founder cards show: name, title, prior companies, education, profile photo, LinkedIn link.</li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b> Enrichment completed within 2 min of intake. Founders auto-populated from deck + LinkedIn lookup via Unipile.</p>
+
+<h3 style="margin:16px 0 4px;">6.3 — 3 lens tools fire (Team, Traction, Market)</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E2-F1-S1 (Live in Dev P0)</p>
+<ol style="font-size:13px;">
+  <li>Wait for screening phase to complete (~3 min total).</li>
+  <li>Open the deal in the <b>investor</b> view: <code>/investor/screening/&lt;id&gt;</code>.</li>
+  <li>Verify three lens cards: Team, Traction, Market — each with a score 0-100.</li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b> All 3 lenses produced output. Each carries a <code>lens.team</code>, <code>lens.traction</code>, <code>lens.market</code> tag visible in the network response (GET screening).</p>
+
+<h3 style="margin:16px 0 4px;">6.4 — Versioned / hot-swappable lens workers</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E2-F1-S2 (Live in Dev P0)</p>
+<ol style="font-size:13px;">
+  <li>In the same network response, look for <code>lensVersion</code> and <code>promptVersion</code> fields on each lens result.</li>
+  <li>Both should be present and stringified (e.g. <code>"1"</code>).</li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b> Versions persisted per-row. If you change <code>LENS_ACTIVE_VERSION_LENS_TEAM</code> env and rerun, the new lens version is captured.</p>
+
+<h3 style="margin:16px 0 4px;">6.5 — Aggregate 3-lens score + confidence</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E2-F2-S1 (Shipped)</p>
+<ol style="font-size:13px;">
+  <li>On the screening detail page, look for the overall score circle and the confidence label (Low/Med/High).</li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b> Overall score is the per-stage weighted aggregate of the 3 lens scores (per § 4.4 weights). Confidence reflects evidence coverage across lenses.</p>
+
+<!-- =============================================== -->
+<h2 style="margin:36px 0 6px;background:#0d47a1;color:white;padding:10px 14px;border-radius:4px;">§ 7. Verify evidence graph + dealbreakers (DS-E9 + DS-E4)</h2>
+
+<h3 style="margin:16px 0 4px;">7.1 — Click any claim → jump to source</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E9-F1-S1 (Backlog P1)</p>
+<ol style="font-size:13px;">
+  <li>On screening detail page, click any lens chip to open its evidence popover.</li>
+  <li>For each evidence item, click the citation link.</li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b><br>
+  • Deck-page citations: pitch deck viewer scrolls to that page.<br>
+  • Public URL citations: open in new tab.<br>
+  • Enrichment/research citations: show source label in popover.<br>
+  Every claim has a citation — none are bare assertions.</p>
+
+<h3 style="margin:16px 0 4px;">7.2 — Unlinked-claim firewall</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E9-F2-S1 (Backlog P2)</p>
+<ol style="font-size:13px;">
+  <li>This is a backend invariant; verify via the API or test run.</li>
+  <li>Run: <code>cd backend && bun test src/modules/ai/lenses/tests/market.lens.spec.ts</code></li>
+  <li>Look for the test "drops evidence items missing a source (DS-E9-F2-S1)".</li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b> Schema validation rejects evidence rows without a non-empty source string. In the screening processor, such lens outputs are pushed to <code>failedKeys</code> and not persisted. <i>Note: 1 known red test on this — the schema is stricter now than the test asserts; behavior is correct.</i></p>
+
+<h3 style="margin:16px 0 4px;">7.3 — Thesis-driven dealbreakers (out-of-scope / stage / geo)</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E4-F1-S1 (Backlog P0)</p>
+<ol style="font-size:13px;">
+  <li>In admin window, submit a NEW deal: company "BadFit Corp", stage "Series F+", industry "Defense", location "Saudi Arabia".</li>
+  <li>Wait for screening to complete.</li>
+  <li>Open the deal's screening detail page.</li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b> Verdict = REJECT. Visible reason codes include one or more of <code>out_of_stage</code>, <code>out_of_scope</code>, <code>out_of_geo</code> (your thesis from § 4 is US/UK Pre-Seed-to-Series-A SaaS/AI/Finance). Banner explains which boundary was violated.</p>
+
+<h3 style="margin:16px 0 4px;">7.4 — Portfolio conflict detection</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E4-F2-S1 (Backlog P2)</p>
+<ol style="font-size:13px;">
+  <li>Requires § 4.2 to have populated portfolio companies. If empty, manually add one in the thesis editor (e.g. "OpenAI" in AI category).</li>
+  <li>Submit a deal whose name or description includes "OpenAI" or competes with it (e.g. "OpenAI competitor for code generation").</li>
+  <li>Open screening detail.</li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b> Amber "Portfolio conflict" banner appears with the matched company name and reasons (domain match / name overlap / description keyword overlap). Banner has <code>data-testid="portfolio-conflict-banner"</code>.</p>
+
+<h3 style="margin:16px 0 4px;">7.5 — Structured dealbreaker rule authoring (with version history)</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E4-F3-S1 (Backlog P1)</p>
+<ol style="font-size:13px;">
+  <li>Go to <code>/investor/thesis</code> → Dealbreakers section.</li>
+  <li>Type "deeptech hardware" + press Enter. New chip appears.</li>
+  <li>Remove "weapons" chip via X.</li>
+  <li>Click Save Thesis.</li>
+  <li>Expand the <b>Change history</b> disclosure below the chips.</li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b> History list shows the most recent change with timestamp, version number, and the new set of rules. Every change is versioned and audit-logged. Backend writes to <code>investor_dealbreaker_rule_version</code> and emits an <code>investorEvent</code> with type <code>dealbreakers.updated</code> containing before/after/added/removed.</p>
+
+<h3 style="margin:16px 0 4px;">7.6 — Narrative-exclusion parser (LLM)</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E4-F4-S1 (Backlog P2)</p>
+<ol style="font-size:13px;">
+  <li>On <code>/investor/thesis</code>, in "What would you NOT invest in?" textarea, paste a fresh sentence: "We pass on consumer SaaS, on hardware that requires regulatory approval, and on anything in the casino industry."</li>
+  <li>Wait ~1 second (400ms debounce).</li>
+  <li>Scroll to the Dealbreakers section.</li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b> A "Suggestions" banner appears with chips: "consumer SaaS", "hardware", "casino industry" (or similar). Click any chip to add. The LLM call hits <code>POST /investor/thesis/parse-dealbreakers</code>; if the LLM fails, deterministic regex fallback kicks in.</p>
+
+<!-- =============================================== -->
+<h2 style="margin:36px 0 6px;background:#0d47a1;color:white;padding:10px 14px;border-radius:4px;">§ 8. Verdict engine (DS-E7)</h2>
+
+<h3 style="margin:16px 0 4px;">8.1 — Rule-based ADVANCE / REVIEW / REJECT</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E7-F1-S1 (Backlog P0)</p>
+<ol style="font-size:13px;">
+  <li>For each deal submitted (Brew Bird, Path Robotics, TestStartup, BadFit Corp): open screening detail.</li>
+  <li>Look for the verdict label: ADVANCE / REVIEW / REJECT (or "advance"/"review"/"reject").</li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b><br>
+  • Brew Bird (US, Seed, fintech-ish or SaaS): ADVANCE (if thesis-fit + scores meet thresholds).<br>
+  • BadFit Corp (Saudi, Series F+, Defense): REJECT with thesis-boundary reasons.<br>
+  • A borderline deal: REVIEW with reason codes shown.<br>
+  Each verdict carries reason codes visible in the detail page or the GET API response.</p>
+
+<h3 style="margin:16px 0 4px;">8.2 — Evidence-confidence gate (high-score-but-thin → REVIEW)</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E7-F2-S1 (Backlog P1)</p>
+<ol style="font-size:13px;">
+  <li>Submit a deal with only a 1-page deck or minimal traction info, but in your thesis sweet spot (US, Seed, B2B SaaS).</li>
+  <li>Wait for screening, open detail.</li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b> Even if score is high, verdict is REVIEW (not ADVANCE). Reason code includes <code>lens.&lt;key&gt;.low_evidence</code> or <code>lens.&lt;key&gt;.low_confidence_evidence</code>. Configurable via <code>SCREENING_ADVANCE_CONFIDENCE_FLOOR</code> env (default 0.6).</p>
+
+<h3 style="margin:16px 0 4px;">8.3 — Partner override + audit log</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E7-F3-S1 (Backlog P1)</p>
+<ol style="font-size:13px;">
+  <li>Switch to investor window. Find a REVIEW-verdict deal in <code>/investor/screening</code>.</li>
+  <li>Open it. Click <b>Advance</b>.</li>
+  <li>Confirm in dialog (you should be prompted for a reason).</li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b> Verdict overrides to "advance"; deal moves out of Screening into DD pipeline. Backend writes an <code>investorDealDecision</code> row with reason code <code>screening_review_overridden</code> and snapshots the triage classification at decision time. A <code>decision.recorded</code> event appears on the activity timeline.</p>
+
+<h3 style="margin:16px 0 4px;">8.4 — Data gate (minimum materials)</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E7-F4-S1 (Backlog P0)</p>
+<ol style="font-size:13px;">
+  <li>Submit a deal with deck only, no website, no team info (just "TestCo" + the deck).</li>
+  <li>Wait for screening. Open detail.</li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b> Verdict REVIEW with <code>nextAction = 'request_materials'</code>. Banner lists missing items: website, product description, team, deal terms. Clara may follow up via email asking for these.</p>
+
+<!-- =============================================== -->
+<h2 style="margin:36px 0 6px;background:#0d47a1;color:white;padding:10px 14px;border-radius:4px;">§ 9. Screening surface UI (DS-E6)</h2>
+
+<h3 style="margin:16px 0 4px;">9.1 — Deal card (one-screen view)</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E6-F1-S1 (Backlog P0)</p>
+<ol style="font-size:13px;">
+  <li>In investor window, navigate to <code>/investor</code> (Pipeline / DD).</li>
+  <li>Click any deal card.</li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b> Above-the-fold:<br>
+  • Overall-score ring<br>
+  • Thesis-fit ring<br>
+  • Top 3 / bottom 3 lens chips<br>
+  • Founder one-liner<br>
+  • Dealbreaker flags (if any)<br>
+  • Sector + stage + date<br>
+  • Next-step CTA ("Share PDF", "Close out", "Advance/Pass" if in Screening)</p>
+
+<h3 style="margin:16px 0 4px;">9.2 — Ranked feed + filters + search</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E6-F2-S1 (Backlog P1)</p>
+<ol style="font-size:13px;">
+  <li>On <code>/investor</code> pipeline. Type "fintech" in the search box.</li>
+  <li>Click <b>Filters</b> button. Filter by stage = Series A, region = US.</li>
+  <li>Try the thesis-axis filter (pill bar above the deals).</li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b> Results re-render to show only matches. Sort defaults to thesis-fit % descending. Filter chips persist in URL (try reloading — filters intact).</p>
+
+<h3 style="margin:16px 0 4px;">9.3 — 6-state kanban with drag-drop</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E6-F3-S1 (Shipped) + F3-S2 (Shipped)</p>
+<ol style="font-size:13px;">
+  <li>On <code>/investor</code>. Click the <b>Kanban</b> view toggle (looks like a 3-column icon).</li>
+  <li>Verify 6 columns: <b>New / Reviewing / Engaged / Closed / Passed / Bookmarked</b>.</li>
+  <li>Drag a deal card from <b>New</b> to <b>Reviewing</b>.</li>
+  <li>Drop a card on <b>Bookmarked</b>.</li>
+  <li>Refresh. Reload should remember the kanban view preference.</li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b> Card moves to new column. State transition persists. Status-change timestamp visible in card meta. Bookmarked column accepts drag-into. View toggle preference persists across sessions. Backend: <code>match_status</code> enum has 6 values (verified manually).</p>
+
+<h3 style="margin:16px 0 4px;">9.4 — Dashboard-style PDF export</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E6-F4-S1 (Shipped)</p>
+<ol style="font-size:13px;">
+  <li>Open any deal card. Click <b>Share PDF</b> (or "Export PDF").</li>
+  <li>Wait ≤10s for download.</li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b> PDF downloads. Filename pattern <code>{company}-Screening-Report.pdf</code> or <code>{company}_{date}_dashboard.pdf</code>. Open it — score circles, lens chips, dealbreaker flags, founder one-liner all rendered at 1:1 fidelity to the on-screen card. Fund logo + footer applied.</p>
+
+<!-- =============================================== -->
+<h2 style="margin:36px 0 6px;background:#0d47a1;color:white;padding:10px 14px;border-radius:4px;">§ 10. Screening → DD handoff (DS-E10)</h2>
+
+<h3 style="margin:16px 0 4px;">10.1 — ScreeningOutput v2 schema</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E10-F1-S1 (Deferred P0)</p>
+<ol style="font-size:13px;">
+  <li>For any ADVANCE-verdict deal: open devtools → Network.</li>
+  <li>Reload its screening detail page.</li>
+  <li>Find the request to <code>/investor/screening/&lt;id&gt;/output</code> or similar.</li>
+  <li>Inspect the JSON response.</li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b> Response carries <code>version: 2</code>, <code>thesisFit</code>, <code>lensScores</code>, <code>overall.{score,signal,nextAction}</code>, <code>handoff.{evidenceSeeds, openIssues}</code>, <code>lenses[]</code>. This is the typed contract DD reads from.</p>
+
+<h3 style="margin:16px 0 4px;">10.2 — Evidence-seed transfer into DD</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E10-F2-S1 (Live in Dev P0)</p>
+<ol style="font-size:13px;">
+  <li>Same response: inspect <code>handoff.evidenceSeeds[]</code>.</li>
+  <li>Confirm each seed has: claim, source, confidence, sourceType, sourceRef, url/pageNumber, lensKey, lensScore.</li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b> All source-linked claims from screening lenses are present as deduped seed nodes. DD picks these up as its starting evidence (no re-scraping).</p>
+
+<h3 style="margin:16px 0 4px;">10.3 — Open questions seeded into DD ledger</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E10-F3-S1 (Live in Dev P1)</p>
+<ol style="font-size:13px;">
+  <li>On any deal screening detail page, scroll down past the lens write-ups.</li>
+  <li>Find the <b>Open Questions</b> ledger section.</li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b> Top-N unresolved screening questions appear (e.g. "Missing pitch deck", "Missing product description", or weak-lens-signal items). Each has source=<code>screening_seed</code>, status=<code>open</code>, owner unassigned. You can assign/resolve them. Backend table: <code>dd_open_question</code>.</p>
+
+<h3 style="margin:16px 0 4px;">10.4 — Thin screening report (1-page PDF)</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E10-F4-S1 (Live in Dev P2)</p>
+<ol style="font-size:13px;">
+  <li>On the screening detail page, find <b>Export screening report</b> (or "Share PDF" — same endpoint).</li>
+  <li>Download.</li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b> 1-page PDF. Includes: company header, overall-score circle, thesis-fit circle, top-3/bottom-3 lenses, dealbreaker flags, verdict + reasoning. Does NOT include DD memo content (this is the thin version). Fund-branded.</p>
+
+<!-- =============================================== -->
+<h2 style="margin:36px 0 6px;background:#0d47a1;color:white;padding:10px 14px;border-radius:4px;">§ 11. Deal Agent (DS-E8)</h2>
+
+<h3 style="margin:16px 0 4px;">11.1 — Append-only event log</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E8-F1-S1 (Backlog P2)</p>
+<ol style="font-size:13px;">
+  <li>From a terminal, query the DB for any deal's events:
+<pre style="background:#f5f5f5;padding:8px;font-size:11px;">cd /home/yusuf/.continuum/workspace/inside-line-ai/backend
+bun -e '
+import postgres from "postgres";
+const sql = postgres(process.env.DATABASE_URL, { ssl: "require" });
+const r = await sql`SELECT type, actor_user_id, created_at, payload FROM deal_event WHERE startup_id = '"'"'&lt;your-startup-id&gt;'"'"' ORDER BY created_at LIMIT 20`;
+console.log(r);
+await sql.end();
+'</pre></li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b> Every state transition / decision / score / comment recorded as an event with (startup_id, type, actor_user_id, payload, created_at). At minimum you should see: <code>startup.created</code>, <code>screening.completed</code>, <code>decision.recorded</code>, <code>agent.refresh</code> (if doc was re-uploaded).</p>
+
+<h3 style="margin:16px 0 4px;">11.2 — Activity timeline UI</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E8-F1-S2 (Backlog P2)</p>
+<ol style="font-size:13px;">
+  <li>Open any deal in <code>/admin/startup/&lt;id&gt;</code>.</li>
+  <li>Find the <b>Activity</b> tab.</li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b> Chronological feed of every event with icon + label + actor. Items include: deck uploaded, extraction completed, lens completed, verdict assigned, partner override (if any), bookmark toggled, etc. Should match the DB query result from 11.1.</p>
+
+<h3 style="margin:16px 0 4px;">11.3 — Event-bus deal triggers</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E8-F2-S1 (Backlog-S P2)</p>
+<ol style="font-size:13px;">
+  <li>Open a previously-analyzed deal. Upload a new document to its data room (e.g. financials.pdf).</li>
+  <li>Wait ≤2 min.</li>
+  <li>Reload the deal page.</li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b> An <code>agent.refresh</code> event appears on the timeline. Re-extraction or re-scoring is queued (visible in the pipeline progress). A "what changed" indication surfaces somewhere. The relevant pipeline phase re-runs.</p>
+
+<!-- =============================================== -->
+<h2 style="margin:36px 0 6px;background:#0d47a1;color:white;padding:10px 14px;border-radius:4px;">§ 12. Calibration loop (DS-E11)</h2>
+<p style="font-size:13px;color:#555;">UI is currently hidden pending refactor (see <code>PLAN-DS-E11-CALIBRATION-2026-05-20.md</code>). Backend services + endpoints are wired and verifiable.</p>
+
+<h3 style="margin:16px 0 4px;">12.1 — 30-second close/pass capture form</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E11-F1-S1 (Live in Dev P2)</p>
+<ol style="font-size:13px;">
+  <li>In investor window, on /investor pipeline, find an Advanced deal you can close out.</li>
+  <li>Drag the card to <b>Closed</b> column (or right-click → "Close out").</li>
+  <li>Dialog appears.</li>
+  <li>Pick a verdict (Advance / Pass / Hold), a reason chip (Valuation / Market Fit / Team / Timing / Competition / Other), and add a 1-line note.</li>
+  <li>Submit.</li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b> Form submits within 30s. Backend writes an <code>investorDealDecision</code> row with verdict, reasonTags, notes, and the snapshot of triage classification at decision. Visible in the activity timeline as <code>decision.recorded</code>.</p>
+
+<h3 style="margin:16px 0 4px;">12.2 — DD → Screening delta extractor</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E11-F2-S1 (Live in Dev P3)</p>
+<ol style="font-size:13px;">
+  <li>Take an ADVANCE-verdict deal through full DD (let evaluation + synthesis complete).</li>
+  <li>Compare the 3 screening-lens scores (Team, Traction, Market) with DD's equivalent lens scores.</li>
+  <li>From terminal:
+<pre style="background:#f5f5f5;padding:8px;font-size:11px;">bun -e '
+import postgres from "postgres";
+const sql = postgres(process.env.DATABASE_URL, { ssl: "require" });
+const r = await sql`SELECT * FROM screening_dd_lens_delta WHERE startup_id = '"'"'&lt;id&gt;'"'"'`;
+console.log(r);
+await sql.end();
+'</pre></li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b> For any lens with |delta| ≥ 15, a row exists in <code>screening_dd_lens_delta</code> tagged with the lens and direction (positive = DD scored higher, negative = lower). This becomes calibration signal.</p>
+
+<h3 style="margin:16px 0 4px;">12.3 — Bayesian updater (proposal lifecycle)</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E11-F3-S1 (Live in Dev P3) — backend only, UI hidden</p>
+<ol style="font-size:13px;">
+  <li>Trigger a recompute (see 12.4) for an investor with ≥10 outcome events.</li>
+  <li>Query the proposals:
+<pre style="background:#f5f5f5;padding:8px;font-size:11px;">bun -e '
+import postgres from "postgres";
+const sql = postgres(process.env.DATABASE_URL, { ssl: "require" });
+const r = await sql`SELECT * FROM investor_event WHERE investor_user_id = '"'"'&lt;userId&gt;'"'"' AND type LIKE '"'"'calibration%'"'"' ORDER BY created_at DESC LIMIT 5`;
+console.log(r);
+await sql.end();
+'</pre></li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b> When sufficient signals exist, a calibration proposal is generated. Status=pending. Payload contains <code>lensAdjustments</code> and <code>overrideTagFocus</code>. UI to approve/reject is currently hidden — visible via API only.</p>
+
+<h3 style="margin:16px 0 4px;">12.4 — Manual recompute trigger</h3>
+<p style="margin:0 0 4px;color:#666;font-size:12px;"><b>Story:</b> DS-E11-F4-S1 (Live in Dev P3) — backend only, UI hidden</p>
+<ol style="font-size:13px;">
+  <li>From admin window (or curl with admin cookie):
+<pre style="background:#f5f5f5;padding:8px;font-size:11px;">curl -X POST -H "Cookie: &lt;your admin cookie&gt;" \
+  http://localhost:8080/admin/investors/&lt;userId&gt;/calibration/recompute</pre></li>
+  <li>Watch WS notifications or query the <code>investor_calibration_snapshots</code> table.</li>
+</ol>
+<p style="font-size:13px;background:#e8f5e9;padding:8px;border-radius:3px;"><b>Expected:</b> Job enqueued (dedupe window 10s — second call within window returns the same jobId). <code>status</code> moves queued → running → completed. <code>summary</code> field populated. <code>computedAt</code> updates.</p>
+
+<!-- =============================================== -->
+<h2 style="margin:36px 0 6px;background:#37474f;color:white;padding:10px 14px;border-radius:4px;">§ 13. SKIP — MVP-defer / Icebox stories</h2>
+
+<table style="border-collapse:collapse;width:100%;font-size:13px;">
+  <thead><tr style="background:#f5f5f5;">
+    <th style="padding:8px;border:1px solid #ddd;text-align:left;">Story</th>
+    <th style="padding:8px;border:1px solid #ddd;text-align:left;">Status</th>
+    <th style="padding:8px;border:1px solid #ddd;text-align:left;">Why skip</th>
+  </tr></thead>
+  <tbody>
+    <tr><td style="padding:6px 10px;border:1px solid #ddd;"><b>DS-E1-F2-S2</b><br>Founder distribution control</td><td style="padding:6px 10px;border:1px solid #ddd;background:#eceff1;">Backlog-S P3</td><td style="padding:6px 10px;border:1px solid #ddd;">Auto-match works today; explicit founder preview-and-confirm not yet UI'd. Not blocking MVP.</td></tr>
+    <tr><td style="padding:6px 10px;border:1px solid #ddd;"><b>DS-E1-F9-S1</b><br>CRM bi-directional sync</td><td style="padding:6px 10px;border:1px solid #ddd;background:#eceff1;">Icebox</td><td style="padding:6px 10px;border:1px solid #ddd;">No code on dev. Manual export workaround exists for early funds.</td></tr>
+    <tr><td style="padding:6px 10px;border:1px solid #ddd;"><b>DS-E6-F5-S1</b><br>Swipe triage (Tinder-style)</td><td style="padding:6px 10px;border:1px solid #ddd;background:#eceff1;">Backlog-S P3</td><td style="padding:6px 10px;border:1px solid #ddd;">Filters + kanban already enable high-volume triage. Revisit after first cohort.</td></tr>
+    <tr><td style="padding:6px 10px;border:1px solid #ddd;"><b>DS-E6-F5-S2</b><br>Voice-pitch overlay</td><td style="padding:6px 10px;border:1px solid #ddd;background:#eceff1;">Backlog-S P4</td><td style="padding:6px 10px;border:1px solid #ddd;">No TTS implementation. Defer.</td></tr>
+  </tbody>
+</table>
+
+<!-- =============================================== -->
+<h2 style="margin:36px 0 6px;background:#37474f;color:white;padding:10px 14px;border-radius:4px;">§ 14. Full story ID checklist (copy this and tick as you go)</h2>
+
+<pre style="background:#f5f5f5;padding:14px;border-radius:4px;font-size:12px;line-height:1.6;">
+DS-E3 — Thesis + scoring config
+  [ ] DS-E3-F1-S1   Edit thesis params (stage/check/industries/etc)
+  [ ] DS-E3-F1-S2   Re-scan my website
+  [ ] DS-E3-F1-S3   AI thesis summary (generate + edit + regenerate)
+  [ ] DS-E3-F2-S2   Per-stage lens weights
+  [ ] DS-E3-F3-S1   Min thesis-fit % + min overall %
+
+DS-E1 — Multi-path intake
+  [ ] DS-E1-F1-S1   Investor drag-drop deck (admin Analyze Startup)
+  [ ] DS-E1-F2-S1   Founder public apply form
+  [ ]    DS-E1-F2-S2   SKIP (founder distribution control)
+  [ ] DS-E1-F3-S1   Email forward to AgentMail fund inbox
+  [ ] DS-E1-F4-S1   Canonical ScreeningInput schema (source-path tag)
+  [ ] DS-E1-F4-S2   Cross-path dedup
+  [ ] DS-E1-F6-S1   CSV bulk upload
+  [ ] DS-E1-F7-S1   One-startup-per-link guard
+  [ ] DS-E1-F8-S1   WhatsApp forward + voice-note STT
+  [ ]    DS-E1-F9-S1   SKIP (CRM sync — Icebox)
+
+DS-E12 — Enrichment
+  [ ] DS-E12-F1-S1  Deck extraction with page-level provenance
+  [ ] DS-E12-F2-S1  LinkedIn profile enrichment
+
+DS-E2 — Scoring (3 lenses)
+  [ ] DS-E2-F1-S1   Named lens tools (lens.team/traction/market)
+  [ ] DS-E2-F1-S2   Versioned + hot-swappable lens workers
+  [ ] DS-E2-F2-S1   Aggregate 3-lens score + confidence (Low/Med/High)
+
+DS-E9 — Evidence graph
+  [ ] DS-E9-F1-S1   Click claim → jump to source (deck page / URL)
+  [ ] DS-E9-F2-S1   Unlinked-claim firewall (schema rejects no-source)
+
+DS-E4 — Dealbreakers
+  [ ] DS-E4-F1-S1   Thesis-driven (out-of-scope / stage / geo)
+  [ ] DS-E4-F2-S1   Portfolio conflict detection
+  [ ] DS-E4-F3-S1   Structured rule authoring + change history
+  [ ] DS-E4-F4-S1   Narrative parser (LLM-backed)
+
+DS-E7 — Verdict engine
+  [ ] DS-E7-F1-S1   ADVANCE / REVIEW / REJECT combinator
+  [ ] DS-E7-F2-S1   Evidence-confidence gate
+  [ ] DS-E7-F3-S1   Partner override + audit log
+  [ ] DS-E7-F4-S1   Data gate (min materials)
+
+DS-E6 — Screening UI
+  [ ] DS-E6-F1-S1   Deal card one-screen view
+  [ ] DS-E6-F2-S1   Ranked feed + filters + search
+  [ ] DS-E6-F3-S1   6-state kanban drag-drop
+  [ ] DS-E6-F3-S2   List ↔ kanban toggle (persisted)
+  [ ] DS-E6-F4-S1   Dashboard PDF export
+  [ ]    DS-E6-F5-S1   SKIP (swipe triage)
+  [ ]    DS-E6-F5-S2   SKIP (voice pitch)
+
+DS-E10 — Handoff
+  [ ] DS-E10-F1-S1  ScreeningOutput v2 schema
+  [ ] DS-E10-F2-S1  Evidence-seed transfer to DD
+  [ ] DS-E10-F3-S1  Open questions seed → DD ledger
+  [ ] DS-E10-F4-S1  Thin screening report (1-page PDF)
+
+DS-E8 — Deal Agent
+  [ ] DS-E8-F1-S1   Append-only event log
+  [ ] DS-E8-F1-S2   Activity timeline UI
+  [ ] DS-E8-F2-S1   Event-bus deal triggers (doc upload → agent refresh)
+
+DS-E11 — Calibration
+  [ ] DS-E11-F1-S1  30s close/pass capture form
+  [ ] DS-E11-F2-S1  DD → Screening delta extractor
+  [ ] DS-E11-F3-S1  Bayesian updater (backend only, UI hidden)
+  [ ] DS-E11-F4-S1  Manual recompute trigger (backend only, UI hidden)
+</pre>
+
+<p style="margin-top:24px;font-size:13px;color:#666;">
+<b>Walked through and everything passes?</b> You've verified ~40 stories — the full DS MVP. The 4 SKIP items are deferred; the 4 P3-level calibration UI items will land after the refactor in <code>PLAN-DS-E11-CALIBRATION-2026-05-20.md</code>.
+</p>
+
+<p style="margin-top:14px;font-size:13px;color:#666;">
+<b>Found a regression?</b> Note the story ID + actual behavior. Most failures are likely from a known issue documented in <code>HANDOFF-DS-E11-CALIBRATION-2026-05-20.md</code> § 4 — the intermittent React error on <code>/investor</code>, bun-test DI pollution, or the manual-applied migrations 0024/0025.
+</p>
+
+<p style="margin-top:14px;color:#888;font-size:12px;">Generated 2026-05-20 against dev @ <code>1b90f1c</code>. Reflects the 4 worktree merges + 2 follow-up feat commits (<code>6cb8b27</code> closing E4/E6/E7/E8/E10 backlog gaps; <code>4760ea6</code> moving Open Questions onto the screening view).</p>
+
+</body></html>

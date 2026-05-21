@@ -69,6 +69,20 @@ const STOP_WORDS = new Set([
 const MIN_TOKEN_LENGTH = 2;
 const MAX_SUGGESTIONS = 12;
 
+function normalizeSuggestion(part: string): string {
+  const cleaned = part
+    .replace(/^[-–—*]+\s*/, "")
+    .replace(/^(no|not|avoid|exclude)\s+/i, "")
+    .trim();
+
+  const verticalAiMatch = cleaned.match(/^(vertical\s+ai)\s+for\s+.+$/i);
+  if (verticalAiMatch) {
+    return "vertical AI";
+  }
+
+  return cleaned;
+}
+
 export function parseDealbreakerSuggestions(narrative: string): string[] {
   const trimmed = narrative.trim();
   if (!trimmed) return [];
@@ -82,10 +96,7 @@ export function parseDealbreakerSuggestions(narrative: string): string[] {
   const out: string[] = [];
 
   for (const part of parts) {
-    const cleaned = part
-      .replace(/^[-–—*]+\s*/, "")
-      .replace(/^(no|not|avoid|exclude)\s+/i, "")
-      .trim();
+    const cleaned = normalizeSuggestion(part);
 
     if (cleaned.length < MIN_TOKEN_LENGTH) continue;
     if (STOP_WORDS.has(cleaned.toLowerCase())) continue;

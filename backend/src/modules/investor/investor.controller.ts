@@ -44,6 +44,7 @@ import { DrizzleService } from '../../database';
 import { randomBytes } from 'node:crypto';
 import { ForbiddenException } from '@nestjs/common';
 import { CalibrationProposalService } from './calibration-proposal.service';
+import { assertCalibrationEnabled } from './calibration-feature';
 import {
   ListCalibrationProposalsQueryDto,
   RejectCalibrationProposalDto,
@@ -171,6 +172,7 @@ export class InvestorController {
   // visibly closes on each verdict the investor records.
   @Get('calibration')
   async getCalibration(@CurrentUser() user: User) {
+    assertCalibrationEnabled();
     return this.calibrationService.getStatsForInvestor(user.id);
   }
 
@@ -184,6 +186,7 @@ export class InvestorController {
     @CurrentUser() user: User,
     @Query() query: ListCalibrationProposalsQueryDto,
   ) {
+    assertCalibrationEnabled();
     return this.calibrationProposalService.listForInvestor(user.id, query.status);
   }
 
@@ -192,6 +195,7 @@ export class InvestorController {
     @CurrentUser() user: User,
     @Param('id', new ParseUUIDPipe()) id: string,
   ) {
+    assertCalibrationEnabled();
     return this.calibrationProposalService.approve(user.id, id);
   }
 
@@ -201,6 +205,7 @@ export class InvestorController {
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() body: RejectCalibrationProposalDto,
   ) {
+    assertCalibrationEnabled();
     return this.calibrationProposalService.reject(user.id, id, body.reason);
   }
 
@@ -481,6 +486,7 @@ export class InvestorController {
    */
   @Get('screening/calibration')
   async getScreeningCalibration(@CurrentUser() user: User) {
+    assertCalibrationEnabled();
     return this.screeningCalibrationService.listForInvestor(user.id);
   }
 

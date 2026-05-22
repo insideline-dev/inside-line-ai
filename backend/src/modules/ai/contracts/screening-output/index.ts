@@ -27,6 +27,20 @@ export {
 export type { ScreeningLensScoreV2, ScreeningOutputV2 } from "./v2.schema";
 
 export {
+  ScreeningDealbreakerKindSchema,
+  ScreeningDealbreakerObservationSchema,
+  ScreeningOutputV3Schema,
+  ScreeningOverallConfidenceSchema,
+} from "./v3.schema";
+
+export type {
+  ScreeningDealbreakerKind,
+  ScreeningDealbreakerObservation,
+  ScreeningOutputV3,
+  ScreeningOverallConfidence,
+} from "./v3.schema";
+
+export {
   ScreeningNextActionSchema,
   ScreeningSignalSchema,
   resolveCanonicalScreeningOutcome,

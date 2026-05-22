@@ -15,6 +15,7 @@ import {
 import { resolveCanonicalScreeningOutcome } from "./screening-outcome";
 import type {
   ScreeningEvidence,
+  ScreeningEvidenceConfidence,
   ScreeningHandoff,
   ScreeningHandoffEvidence,
   ScreeningHandoffIssue,
@@ -27,6 +28,11 @@ import type {
   ScreeningLensScoreV2,
   ScreeningOutputV2,
 } from "./v2.schema";
+import type {
+  ScreeningDealbreakerObservation,
+  ScreeningOutputV3,
+  ScreeningOverallConfidence,
+} from "./v3.schema";
 import type { ThesisFitOutput } from "../../schemas/thesis-fit.schema";
 import { normalizeLensEvidenceLink } from "../../schemas/lens";
 import { PipelineStateService } from "../../services/pipeline-state.service";
@@ -75,6 +81,35 @@ export class ScreeningOutputService {
       latestPerLens,
       materials,
       decision,
+    );
+  }
+
+  /**
+   * DS-E10-F1 — v3 contract with hydrated DB inputs. Same hydration path as
+   * `buildForStartup` but routes through `buildV3` so callers get the
+   * dealbreakersObserved / reasoning / confidence additions.
+   *
+   * `thesisFit` defaults to null because the live persisted decision row
+   * carries thesis-fit on a sibling column; supply it explicitly when you
+   * need it — the rest of the contract is correct without it.
+   */
+  async buildForStartupV3(
+    startupId: string,
+    pipelineRunId?: string | null,
+    thesisFit: ThesisFitOutput | null = null,
+  ): Promise<ScreeningOutputV3> {
+    const runId = pipelineRunId ?? null;
+    const rows = await this.fetchRows(startupId, runId);
+    const latestPerLens = this.pickLatestPerLens(rows);
+    const materials = await this.fetchMaterialsInput(startupId);
+    const decision = await this.fetchDecisionSnapshot(startupId, runId);
+    return this.buildV3(
+      startupId,
+      runId,
+      latestPerLens,
+      materials,
+      decision,
+      thesisFit,
     );
   }
 
@@ -318,6 +353,80 @@ export class ScreeningOutputService {
       thesisFit,
       lensScores,
     };
+  }
+
+  /**
+   * DS-E10-F1 — v3 closes the typed-contract gaps: dealbreakersObserved[],
+   * reasoning, and overall confidence. v2 stays the default `latest` for now
+   * so existing callers don't break; opt in by calling buildV3 explicitly.
+   */
+  buildV3(
+    startupId: string,
+    pipelineRunId: string | null,
+    rows: StartupLensResult[],
+    materials: MaterialsInput | null,
+    decision: { signal: ScreeningSignal; score: number; reasonCodes: string[] } | null,
+    thesisFit: ThesisFitOutput | null,
+  ): ScreeningOutputV3 {
+    const v2 = this.buildV2(
+      startupId,
+      pipelineRunId,
+      rows,
+      materials,
+      decision,
+      thesisFit,
+    );
+    const reasonCodes = decision?.reasonCodes ?? [];
+    return {
+      ...v2,
+      version: 3,
+      dealbreakersObserved: buildDealbreakersObserved(reasonCodes),
+      reasoning: this.buildOverallReasoning(v2, reasonCodes),
+      confidence: this.deriveOverallConfidence(v2.lenses),
+    };
+  }
+
+  /**
+   * One-paragraph narrative summarising the verdict. Pulls the strongest
+   * per-lens rationale + the leading reason codes so the consumer doesn't
+   * have to scan the lens array to know what the verdict means.
+   */
+  private buildOverallReasoning(
+    v2: ScreeningOutputV2,
+    reasonCodes: string[],
+  ): string {
+    const verdictLabel = v2.overall.signal.toUpperCase();
+    const pickedLens =
+      v2.lenses.find((l) => l.signal === "reject") ??
+      v2.lenses.find((l) => l.signal === "review") ??
+      v2.lenses.find((l) => l.signal === "advance");
+    const lensSnippet = pickedLens
+      ? `${pickedLens.key}: ${truncate(pickedLens.rationale, 200)}`
+      : "no per-lens rationale available";
+    const topCodes = reasonCodes.slice(0, 4).join(", ");
+    const codeSuffix = topCodes ? ` Reason codes: ${topCodes}.` : "";
+    const score = v2.overall.score;
+    const overall = `Overall score ${score}/100, verdict ${verdictLabel}.`;
+    return truncate(`${overall} ${lensSnippet}.${codeSuffix}`, 1200);
+  }
+
+  /**
+   * Roll up per-lens evidence into a single Low/Med/High band. Uses the
+   * same EVIDENCE_CONFIDENCE_WEIGHTS shape the triage policy uses so the
+   * contract's confidence agrees with the F7-F2 gate decision.
+   */
+  private deriveOverallConfidence(
+    lenses: readonly ScreeningLensV1[],
+  ): ScreeningOverallConfidence {
+    const items = lenses.flatMap((l) => l.evidence);
+    if (items.length === 0) return "low";
+    const weight = (c: ScreeningEvidenceConfidence): number =>
+      c === "high" ? 1 : c === "medium" ? 0.5 : 0.2;
+    const avg =
+      items.reduce((sum, e) => sum + weight(e.confidence), 0) / items.length;
+    if (avg >= 0.8) return "high";
+    if (avg >= 0.5) return "medium";
+    return "low";
   }
 
   private toContractLens(row: StartupLensResult): ScreeningLensV1 {
@@ -696,4 +805,99 @@ export class ScreeningOutputService {
 
     return { signal, score, reasonCodes };
   }
+}
+
+// DS-E10-F1 helpers — pulled out of the class so the v3 builder + tests
+// can call them without instantiating the service.
+
+const BOUNDARY_CODE_LABELS: Record<string, string> = {
+  out_of_stage: "Stage outside thesis boundary",
+  out_of_scope: "Industry outside thesis boundary",
+  out_of_geo: "Geography outside thesis boundary",
+};
+
+/**
+ * Parse the triage decision's `reason_codes[]` into a typed array of
+ * dealbreaker observations. The four kinds correspond to the four
+ * sources that emit reject signals today:
+ *
+ *  - boundary  → DS-E4-F1 out_of_stage / out_of_scope / out_of_geo
+ *  - portfolio → DS-E4-F2 portfolio_conflict:<name>
+ *  - tag       → DS-E4-F4 dealbreaker:<term> (excluding structured)
+ *  - structured → DS-E4-F3 dealbreaker:structured:<rule-id>:<action>
+ *
+ * Anything outside this taxonomy (lens.* codes, score gate codes,
+ * missing materials) is intentionally not surfaced — those are
+ * advisory, not dealbreakers.
+ */
+export function buildDealbreakersObserved(
+  reasonCodes: readonly string[],
+): ScreeningDealbreakerObservation[] {
+  const observations: ScreeningDealbreakerObservation[] = [];
+  for (const raw of reasonCodes) {
+    const code = raw.trim();
+    if (!code) continue;
+
+    // 1. Structured rules. Format: dealbreaker:structured:<rule-id>:<action>
+    if (code.startsWith("dealbreaker:structured:")) {
+      const tail = code.slice("dealbreaker:structured:".length);
+      const lastColon = tail.lastIndexOf(":");
+      const ruleId = lastColon >= 0 ? tail.slice(0, lastColon) : tail;
+      const action = lastColon >= 0 ? tail.slice(lastColon + 1) : "reject";
+      observations.push({
+        code,
+        kind: "structured",
+        label: `Structured rule "${ruleId}" matched`,
+        ref: ruleId,
+        action: action === "require_override" ? "require_override" : "reject",
+      });
+      continue;
+    }
+
+    // 2. Generic dealbreaker tags. Format: dealbreaker:<term>
+    if (code.startsWith("dealbreaker:")) {
+      const term = code.slice("dealbreaker:".length).trim();
+      observations.push({
+        code,
+        kind: "tag",
+        label: `Matches dealbreaker term "${term}"`,
+        ref: term || null,
+        action: "reject",
+      });
+      continue;
+    }
+
+    // 3. Portfolio conflicts. Format: portfolio_conflict:<name>
+    if (code.startsWith("portfolio_conflict:")) {
+      const name = code.slice("portfolio_conflict:".length).trim();
+      observations.push({
+        code,
+        kind: "portfolio",
+        label: name
+          ? `Conflicts with portfolio company "${name}"`
+          : "Conflicts with an existing portfolio company",
+        ref: name || null,
+        action: "reject",
+      });
+      continue;
+    }
+
+    // 4. Thesis-boundary codes (DS-E4-F1).
+    if (code in BOUNDARY_CODE_LABELS) {
+      observations.push({
+        code,
+        kind: "boundary",
+        label: BOUNDARY_CODE_LABELS[code]!,
+        ref: code.replace(/^out_of_/, ""),
+        action: "reject",
+      });
+      continue;
+    }
+  }
+  return observations;
+}
+
+function truncate(value: string, max: number): string {
+  if (value.length <= max) return value;
+  return `${value.slice(0, Math.max(0, max - 1))}…`;
 }

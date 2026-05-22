@@ -11,6 +11,7 @@ import {
 } from "../../entities/screening-decision.schema";
 import { startup } from "../../../startup/entities/startup.schema";
 import { investorThesis } from "../../../investor/entities/investor.schema";
+import { investorPortfolio } from "../../../investor/entities/investor-portfolio.schema";
 import {
   ScreeningNextActionSchema,
   ScreeningSignalSchema,
@@ -224,6 +225,21 @@ interface OwnerThesisBoundarySnapshot {
 }
 
 const DEALBREAKER_REASON_PREFIX = "dealbreaker:";
+const PORTFOLIO_CONFLICT_REASON_PREFIX = "portfolio_conflict:";
+
+/**
+ * DS-E4-F2 — portfolio-conflict snapshot. One row per existing portfolio
+ * company for the owner investor, projected to the fields needed for the
+ * conflict check.
+ */
+interface OwnerPortfolioCompany {
+  name: string;
+  industry: string | null;
+  sectorIndustry: string | null;
+  sectorIndustryGroup: string | null;
+  location: string | null;
+  stage: string | null;
+}
 
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -282,6 +298,70 @@ function fuzzyMatchesAny(haystack: readonly string[], needle: string): boolean {
     if (!hh) return false;
     return hh === n || hh.includes(n) || n.includes(hh);
   });
+}
+
+/**
+ * DS-E4-F2 — portfolio-conflict detection. A candidate conflicts with an
+ * existing portfolio company when they share a category AND at least one of
+ * geography or stage. Two-dimensional match keeps the rule tight enough to
+ * avoid false positives on broad investors (e.g. "all AI") while still
+ * catching deals that genuinely compete with portfolio bets.
+ *
+ * Returns one `portfolio_conflict:<existing-name>` reason code per match.
+ */
+export function collectPortfolioConflictReasonCodes(
+  startupSnapshot: ScreeningStartupSnapshot | null,
+  portfolio: OwnerPortfolioCompany[],
+): string[] {
+  if (!startupSnapshot || portfolio.length === 0) return [];
+
+  const candidateIndustries = [
+    startupSnapshot.industry,
+    startupSnapshot.sectorIndustry,
+    startupSnapshot.sectorIndustryGroup,
+  ].filter((v): v is string => typeof v === "string" && v.trim().length > 0);
+  if (candidateIndustries.length === 0) return [];
+
+  const candidateLocation = startupSnapshot.location?.trim() ?? "";
+  const candidateStage = startupSnapshot.stage?.trim().toLowerCase() ?? "";
+
+  const matches: string[] = [];
+  for (const company of portfolio) {
+    const companyIndustries = [
+      company.industry,
+      company.sectorIndustry,
+      company.sectorIndustryGroup,
+    ].filter((v): v is string => typeof v === "string" && v.trim().length > 0);
+    if (companyIndustries.length === 0) continue;
+
+    const sameCategory = candidateIndustries.some((c) =>
+      companyIndustries.some((p) => {
+        const a = c.trim().toLowerCase();
+        const b = p.trim().toLowerCase();
+        return a === b || a.includes(b) || b.includes(a);
+      }),
+    );
+    if (!sameCategory) continue;
+
+    const sameGeo =
+      candidateLocation.length > 0 &&
+      typeof company.location === "string" &&
+      company.location.trim().length > 0 &&
+      fuzzyMatchesAny([company.location], candidateLocation);
+
+    const sameStage =
+      candidateStage.length > 0 &&
+      typeof company.stage === "string" &&
+      company.stage.trim().toLowerCase() === candidateStage;
+
+    if (!sameGeo && !sameStage) continue;
+
+    const trimmedName = company.name.trim();
+    if (!trimmedName) continue;
+    matches.push(`${PORTFOLIO_CONFLICT_REASON_PREFIX}${trimmedName}`);
+  }
+
+  return dedupeStrings(matches);
 }
 
 /**
@@ -697,6 +777,31 @@ export class ScreeningTriageService {
   }
 
   /**
+   * DS-E4-F2 — fetch the owner investor's portfolio companies, projected to
+   * the fields the conflict check needs. Joined against the startups table
+   * so industry/location/stage come from the canonical source.
+   */
+  private async fetchOwnerPortfolioCompanies(
+    ownerUserId: string | null,
+  ): Promise<OwnerPortfolioCompany[]> {
+    if (!ownerUserId) return [];
+    const rows = await this.drizzle.db
+      .select({
+        name: startup.name,
+        industry: startup.industry,
+        sectorIndustry: startup.sectorIndustry,
+        sectorIndustryGroup: startup.sectorIndustryGroup,
+        location: startup.location,
+        stage: startup.stage,
+      })
+      .from(investorPortfolio)
+      .innerJoin(startup, eq(investorPortfolio.startupId, startup.id))
+      .where(eq(investorPortfolio.investorId, ownerUserId))
+      .limit(500);
+    return rows;
+  }
+
+  /**
    * Fetch the owner investor's thesis boundaries for structural checks.
    * Returns null when the startup has no owner or owner has no thesis.
    */
@@ -735,7 +840,11 @@ export class ScreeningTriageService {
     const ownerThesis = await this.fetchOwnerThesisBoundary(startupSnapshot.userId);
     const boundaryCodes = collectThesisBoundaryViolations(startupSnapshot, ownerThesis);
 
-    return dedupeStrings([...tagCodes, ...boundaryCodes]);
+    // DS-E4-F2 — portfolio-conflict detection against the owner's portfolio.
+    const portfolio = await this.fetchOwnerPortfolioCompanies(startupSnapshot.userId);
+    const portfolioCodes = collectPortfolioConflictReasonCodes(startupSnapshot, portfolio);
+
+    return dedupeStrings([...tagCodes, ...boundaryCodes, ...portfolioCodes]);
   }
 
   private toDecision(

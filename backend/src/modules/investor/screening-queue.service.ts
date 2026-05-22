@@ -107,10 +107,18 @@ export function dealbreakerNoteFromReasonCodes(codes: string[]): string | null {
   // outcomes (lens.*.reject). Lens results are surfaced in the lens write-up
   // cards, not as a banner note.
   //
-  // Priority: structural boundary violations first (DS-E4-F1), then explicit
-  // dealbreaker tags (DS-E4-F3).
+  // Priority: structural boundary violations first (DS-E4-F1), then
+  // portfolio conflicts (DS-E4-F2), then explicit dealbreaker tags (DS-E4-F3).
   const boundaryCode = codes.find((c) => c in BOUNDARY_CODE_LABELS);
   if (boundaryCode) return BOUNDARY_CODE_LABELS[boundaryCode]!;
+
+  const portfolioCode = codes.find((c) => c.startsWith("portfolio_conflict:"));
+  if (portfolioCode) {
+    const name = portfolioCode.slice("portfolio_conflict:".length).trim();
+    return name
+      ? `Conflicts with portfolio company "${name}"`
+      : "Conflicts with an existing portfolio company";
+  }
 
   const breaker = codes.find(
     (c) =>

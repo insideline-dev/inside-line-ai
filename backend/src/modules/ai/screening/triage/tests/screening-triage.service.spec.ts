@@ -8,6 +8,8 @@ import {
   POLICY_VERSION,
   ScreeningTriageService,
   applyTriagePolicy,
+  collectPortfolioConflictReasonCodes,
+  collectThesisBoundaryViolations,
   computeEvidenceConfidenceScore,
   type TriageLensInput,
 } from "../screening-triage.service";
@@ -915,5 +917,156 @@ describe("ScreeningTriageService", () => {
     expect(decision?.id).toBe("decision-1");
     expect(decision?.classification).toBe("review");
     expect(decision?.createdAt).toBe("2026-04-28T10:00:00.000Z");
+  });
+});
+
+// DS-E4-F2 — portfolio-conflict detection. Pure-function unit tests so the
+// matching rule stays inspectable without dragging in the full triage harness.
+describe("collectPortfolioConflictReasonCodes (DS-E4-F2)", () => {
+  const candidate = {
+    userId: "investor-1",
+    industry: "AI",
+    sectorIndustry: null,
+    sectorIndustryGroup: null,
+    stage: "seed",
+    location: "Dubai, UAE",
+    pitchDeckUrl: null,
+    pitchDeckPath: null,
+    productDescription: null,
+    description: null,
+    teamMembers: null,
+    fundingTarget: null,
+    valuation: null,
+    raiseType: null,
+    website: null,
+  };
+
+  it("flags same-category + same-geo as a conflict", () => {
+    const codes = collectPortfolioConflictReasonCodes(candidate, [
+      {
+        name: "Existing AI Co",
+        industry: "AI",
+        sectorIndustry: null,
+        sectorIndustryGroup: null,
+        location: "Dubai, UAE",
+        stage: "series_a",
+      },
+    ]);
+    expect(codes).toEqual(["portfolio_conflict:Existing AI Co"]);
+  });
+
+  it("flags same-category + same-stage even when geos differ", () => {
+    const codes = collectPortfolioConflictReasonCodes(candidate, [
+      {
+        name: "Other AI Co",
+        industry: "AI",
+        sectorIndustry: null,
+        sectorIndustryGroup: null,
+        location: "London, UK",
+        stage: "seed",
+      },
+    ]);
+    expect(codes).toEqual(["portfolio_conflict:Other AI Co"]);
+  });
+
+  it("does NOT flag same-category alone (neither geo nor stage matches)", () => {
+    const codes = collectPortfolioConflictReasonCodes(candidate, [
+      {
+        name: "Unrelated AI Co",
+        industry: "AI",
+        sectorIndustry: null,
+        sectorIndustryGroup: null,
+        location: "Tokyo, Japan",
+        stage: "series_c",
+      },
+    ]);
+    expect(codes).toEqual([]);
+  });
+
+  it("does NOT flag different categories even when geo + stage match", () => {
+    const codes = collectPortfolioConflictReasonCodes(candidate, [
+      {
+        name: "Logistics Co",
+        industry: "Logistics",
+        sectorIndustry: null,
+        sectorIndustryGroup: null,
+        location: "Dubai, UAE",
+        stage: "seed",
+      },
+    ]);
+    expect(codes).toEqual([]);
+  });
+
+  it("dedupes multiple matches against the same portfolio name", () => {
+    const codes = collectPortfolioConflictReasonCodes(candidate, [
+      {
+        name: "Existing AI Co",
+        industry: "AI",
+        sectorIndustry: null,
+        sectorIndustryGroup: null,
+        location: "Dubai, UAE",
+        stage: "series_a",
+      },
+      {
+        name: "Existing AI Co",
+        industry: "Artificial Intelligence",
+        sectorIndustry: null,
+        sectorIndustryGroup: null,
+        location: "Abu Dhabi, UAE",
+        stage: "seed",
+      },
+    ]);
+    expect(codes).toEqual(["portfolio_conflict:Existing AI Co"]);
+  });
+
+  it("returns nothing on null inputs (no crashes for orphan startups)", () => {
+    expect(collectPortfolioConflictReasonCodes(null, [])).toEqual([]);
+    expect(
+      collectPortfolioConflictReasonCodes(candidate, []),
+    ).toEqual([]);
+  });
+});
+
+// DS-E4-F1 — thesis-boundary checks (smoke-level, in case the wiring drifts).
+describe("collectThesisBoundaryViolations (DS-E4-F1)", () => {
+  const candidate = {
+    userId: "investor-1",
+    industry: "Logistics",
+    sectorIndustry: null,
+    sectorIndustryGroup: null,
+    stage: "series_b",
+    location: "Tokyo, Japan",
+    pitchDeckUrl: null,
+    pitchDeckPath: null,
+    productDescription: null,
+    description: null,
+    teamMembers: null,
+    fundingTarget: null,
+    valuation: null,
+    raiseType: null,
+    website: null,
+  };
+
+  it("returns out_of_scope, out_of_stage, out_of_geo when nothing matches", () => {
+    const codes = collectThesisBoundaryViolations(candidate, {
+      stages: ["pre_seed", "seed"],
+      industries: ["AI", "SaaS"],
+      geographicFocus: ["GCC"],
+    });
+    expect(codes).toContain("out_of_stage");
+    expect(codes).toContain("out_of_scope");
+    expect(codes).toContain("out_of_geo");
+  });
+
+  it("returns no codes when thesis is in scope", () => {
+    const codes = collectThesisBoundaryViolations(
+      { ...candidate, industry: "AI", stage: "seed", location: "Dubai, UAE" },
+      {
+        stages: ["seed"],
+        industries: ["AI"],
+        geographicFocus: ["GCC", "Dubai"],
+      },
+    );
+    expect(codes).toEqual([]);
   });
 });

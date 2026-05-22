@@ -3,6 +3,12 @@ import { z } from "zod";
 const nullableString = z.string().nullable().default(null);
 const nullableNumber = z.number().nullable().default(null);
 
+// DS-E12-F1: per-section deck-page provenance. Each section carries the
+// 1-based page numbers from the source deck where it was extracted, so DD
+// and lens evidence can deep-link back to the page without re-reading the
+// file. Empty array means "the LLM saw nothing for this section".
+const sourcePages = z.array(z.number().int().min(1)).default([]);
+
 const DeckArrKpiSchema = z.preprocess(
   (v) => v ?? null,
   z
@@ -54,6 +60,7 @@ const DeckFinancialsSchema = z.preprocess(
     arrKpi: DeckArrKpiSchema.default(null),
     growthRateKpi: DeckGrowthRateKpiSchema.default(null),
     grossMarginKpi: DeckGrossMarginKpiSchema.default(null),
+    sourcePages,
   }),
 );
 
@@ -64,6 +71,7 @@ const DeckTractionSchema = z.preprocess(
     users: nullableString,
     churnRate: nullableString,
     notableClaims: z.array(z.string()).default([]),
+    sourcePages,
   }),
 );
 
@@ -86,6 +94,7 @@ const DeckMarketSchema = z.preprocess(
     som: nullableString,
     marketGrowthRate: nullableString,
     tamKpi: DeckTamKpiSchema.default(null),
+    sourcePages,
   }),
 );
 
@@ -97,6 +106,7 @@ const DeckFundraisingSchema = z.preprocess(
     roundType: nullableString,
     useOfFunds: z.array(z.string()).default([]),
     previousFunding: nullableString,
+    sourcePages,
   }),
 );
 
@@ -106,6 +116,7 @@ const DeckProductSchema = z.preprocess(
     stage: nullableString,
     description: nullableString,
     keyFeatures: z.array(z.string()).default([]),
+    sourcePages,
   }),
 );
 
@@ -120,6 +131,42 @@ const DeckTeamSchema = z.preprocess(
     founderCount: nullableNumber,
     teamSize: nullableString,
     keyMembers: z.array(DeckTeamMemberSchema).default([]),
+    sourcePages,
+  }),
+);
+
+// DS-E12-F1 — narrative sections required by the screening lenses + memo
+// scaffold. Each section is a short statement plus 1-N supporting bullets,
+// plus the page numbers it came from. Empty defaults stay safe for old rows.
+const DeckProblemSchema = z.preprocess(
+  (val) => val ?? {},
+  z.object({
+    statement: nullableString,
+    painPoints: z.array(z.string()).default([]),
+    sourcePages,
+  }),
+);
+
+const DeckSolutionSchema = z.preprocess(
+  (val) => val ?? {},
+  z.object({
+    statement: nullableString,
+    keyDifferentiators: z.array(z.string()).default([]),
+    sourcePages,
+  }),
+);
+
+const DeckCompetitorSchema = z.object({
+  name: z.string(),
+  positioning: z.string().nullable().default(null),
+});
+
+const DeckCompetitorsSchema = z.preprocess(
+  (val) => val ?? {},
+  z.object({
+    namedCompetitors: z.array(DeckCompetitorSchema).default([]),
+    moat: nullableString,
+    sourcePages,
   }),
 );
 
@@ -131,6 +178,12 @@ export const DeckStructuredDataAiSchema = z.object({
   fundraising: DeckFundraisingSchema,
   product: DeckProductSchema,
   team: DeckTeamSchema,
+  // DS-E12-F1 — section-keyed narrative fields with page-level provenance.
+  // These feed both screening lens prompts and the DD memo scaffold so the
+  // extraction step runs once per deal.
+  problem: DeckProblemSchema,
+  solution: DeckSolutionSchema,
+  competitors: DeckCompetitorsSchema,
 });
 
 /** Full schema including metadata — used for persistence & downstream. */

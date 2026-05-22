@@ -1,7 +1,17 @@
 import { Injectable } from "@nestjs/common";
 
+export interface PdfPageText {
+  num: number;
+  text: string;
+}
+
 export interface PdfTextResult {
   text: string;
+  // DS-E12-F1 — per-page text preserved so downstream extraction can build a
+  // prompt with explicit `--- Page N ---` markers and the LLM can fill
+  // sourcePages accurately. May be empty if the underlying parser didn't
+  // expose per-page output (e.g. OCR fallback).
+  pages: PdfPageText[];
   pageCount: number;
   hasContent: boolean;
   hasSparsePages: boolean;
@@ -27,8 +37,16 @@ export class PdfTextExtractorService {
         pageCount,
       );
 
+      const pages: PdfPageText[] = (result.pages ?? [])
+        .map((page) => ({
+          num: page.num,
+          text: this.normalizeText(page.text ?? ""),
+        }))
+        .filter((page) => Number.isInteger(page.num) && page.num >= 1);
+
       return {
         text,
+        pages,
         pageCount,
         hasContent: this.hasActualContent(text, pageCount),
         hasSparsePages,

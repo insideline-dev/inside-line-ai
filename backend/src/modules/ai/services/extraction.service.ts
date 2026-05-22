@@ -300,6 +300,9 @@ export class ExtractionService {
     let source: ExtractionResult["source"] = "startup-context";
     let extractedText = "";
     let pageCount = 0;
+    // DS-E12-F1 — per-page text plumbed through to deck-structured extraction
+    // so the LLM can fill `sourcePages` against `--- Page N ---` markers.
+    let pageTexts: Array<{ num: number; text: string }> = [];
     let ocrAttempted = false;
     let ocrFailureMessage: string | undefined;
     const isPptx = this.isDeckPptx(record);
@@ -384,6 +387,7 @@ export class ExtractionService {
 
         if (pdfResult.hasContent && !pdfResult.hasSparsePages) {
           extractedText = pdfResult.text;
+          pageTexts = pdfResult.pages;
           source = "pdf-parse";
           this.logger.log(
             `[Extraction] pdf-parse succeeded | pages=${pdfResult.pageCount} | chars=${pdfResult.text.length}`,
@@ -577,7 +581,7 @@ export class ExtractionService {
       progress?.onStepStart("deck_structured_extraction");
       try {
         const deckStructuredData =
-          await this.fieldExtractor.extractDeckStructuredData(extractedText);
+          await this.fieldExtractor.extractDeckStructuredData(extractedText, { pages: pageTexts });
         if (deckStructuredData) {
           result.deckStructuredData = deckStructuredData;
           this.logger.log(

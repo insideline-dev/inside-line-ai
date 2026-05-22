@@ -138,6 +138,41 @@ describe("InvestorController.advanceFromScreening", () => {
     );
   });
 
+  // DS-E7-F3-S1 — partner-supplied reason tags and notes flow into the
+  // deal-decision record alongside the default override tag, so the
+  // calibration loop sees WHY the partner overrode.
+  it("forwards partner reason codes + notes to the audit record (DS-E7-F3)", async () => {
+    await controller.advanceFromScreening(STARTUP_ID, investor, {
+      reasonTags: ["team_quality", "market_size_too_small_to_kill"],
+      notes: "Partner override after meeting the founder.",
+    });
+    expect(dealDecisionService.record).toHaveBeenCalledWith(
+      investor.id,
+      STARTUP_ID,
+      expect.objectContaining({
+        verdict: "advance",
+        reasonTags: [
+          "screening_review_overridden",
+          "team_quality",
+          "market_size_too_small_to_kill",
+        ],
+        notes: "Partner override after meeting the founder.",
+      }),
+    );
+  });
+
+  it("falls back to the default tag when no body is sent (back-compat)", async () => {
+    await controller.advanceFromScreening(STARTUP_ID, investor);
+    expect(dealDecisionService.record).toHaveBeenCalledWith(
+      investor.id,
+      STARTUP_ID,
+      expect.objectContaining({
+        verdict: "advance",
+        reasonTags: ["screening_review_overridden"],
+      }),
+    );
+  });
+
   it("falls back to fresh_full_pipeline when upstream phase results are missing", async () => {
     // Build a fresh module where PipelineStateService.getPhaseResult
     // returns null for all phases — the upstream-ready precheck must

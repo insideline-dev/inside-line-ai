@@ -386,6 +386,8 @@ export class PipelineService {
         return "company website URL";
       case "evidence_claims":
         return "at least 3 source-linked evidence claims";
+      case "traction_data":
+        return "early traction data (customers, users, churn, or notable wins)";
     }
   }
 

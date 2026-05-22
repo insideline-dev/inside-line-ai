@@ -13,7 +13,12 @@ export type MissingMaterialCode =
   | "team"
   | "deal_terms"
   | "website"
-  | "evidence_claims";
+  | "evidence_claims"
+  // DS-E7-F4 part (c): "traction data stated". Flagged when the deck
+  // structured-extraction step produced no traction signals (no customers,
+  // users, churn rate, or notable traction claims) AND the startup record
+  // doesn't carry traction-like text in productDescription.
+  | "traction_data";
 
 /**
  * Lightweight projection of the startup row used to compute the
@@ -30,6 +35,14 @@ export interface MaterialsInput {
   valuation?: number | null;
   raiseType?: string | null;
   website?: string | null;
+  // DS-E7-F4 — optional traction snapshot from the deck extraction step.
+  // Any populated field counts as "traction stated"; all-null → missing.
+  tractionSnapshot?: {
+    customers?: string | null;
+    users?: string | null;
+    churnRate?: string | null;
+    notableClaims?: ReadonlyArray<string> | null;
+  } | null;
 }
 
 const MIN_DESCRIPTION_CHARS = 60;
@@ -85,5 +98,25 @@ export function detectMissingMaterials(
     missing.push("website");
   }
 
+  // 6. DS-E7-F4 part (c) — traction data stated. Only flag when we have
+  //    deck-extraction coverage AND every traction field is empty.
+  //    `tractionSnapshot === undefined` means we didn't get to inspect the
+  //    deck (e.g. historical run with no cached extraction); we say nothing
+  //    rather than false-flagging the deal as missing traction.
+  if (input.tractionSnapshot !== undefined && !hasTractionSignal(input.tractionSnapshot)) {
+    missing.push("traction_data");
+  }
+
   return missing;
+}
+
+function hasTractionSignal(
+  snapshot: MaterialsInput["tractionSnapshot"],
+): boolean {
+  if (!snapshot) return false;
+  if (!isEmptyString(snapshot.customers)) return true;
+  if (!isEmptyString(snapshot.users)) return true;
+  if (!isEmptyString(snapshot.churnRate)) return true;
+  const claims = snapshot.notableClaims ?? [];
+  return claims.some((c) => !isEmptyString(c));
 }

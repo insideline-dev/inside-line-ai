@@ -342,6 +342,10 @@ export class InvestorController {
   async advanceFromScreening(
     @Param('startupId', ParseUUIDPipe) startupId: string,
     @CurrentUser() user: User,
+    // DS-E7-F3-S1 — accept partner-supplied override reason codes + notes
+    // so the calibration loop sees WHY the partner overrode the verdict,
+    // not just THAT they overrode it. Optional + defaulted for back-compat.
+    @Body() body?: { reasonTags?: string[]; notes?: string | null },
   ) {
     // 1. Override latest screening verdict.
     const [latest] = await this.drizzle.db
@@ -360,11 +364,20 @@ export class InvestorController {
       .set({ classification: 'advance' })
       .where(eq(screeningDecision.id, latest.id));
 
-    // 2. Audit the partner's call.
+    // 2. Audit the partner's call — keep `screening_review_overridden` as
+    //    the default reason tag so legacy callers still get a usable
+    //    calibration signal, but layer any partner-supplied tags on top.
+    const reasonTags = (body?.reasonTags ?? []).filter(
+      (tag) => typeof tag === 'string' && tag.trim().length > 0,
+    );
+    const auditTags =
+      reasonTags.length > 0
+        ? ['screening_review_overridden', ...reasonTags]
+        : ['screening_review_overridden'];
     await this.dealDecisionService.record(user.id, startupId, {
       verdict: 'advance',
-      reasonTags: ['screening_review_overridden'],
-      notes: undefined,
+      reasonTags: auditTags,
+      notes: body?.notes ?? undefined,
     });
 
     // 3. Re-run from EVALUATION when possible (cheapest path — reuses

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
 import { and, desc, eq } from "drizzle-orm";
 import { DrizzleService } from "../../../../database";
 import { LENS_FALLBACK_RATIONALE_PREFIX } from "../../lenses/base-lens.agent";
@@ -29,6 +29,8 @@ import type {
 } from "./v2.schema";
 import type { ThesisFitOutput } from "../../schemas/thesis-fit.schema";
 import { normalizeLensEvidenceLink } from "../../schemas/lens";
+import { PipelineStateService } from "../../services/pipeline-state.service";
+import { PipelinePhase } from "../../interfaces/pipeline.interface";
 
 /**
  * Builds the public {@link ScreeningOutputV1} contract from persisted
@@ -44,7 +46,10 @@ import { normalizeLensEvidenceLink } from "../../schemas/lens";
 export class ScreeningOutputService {
   private readonly logger = new Logger(ScreeningOutputService.name);
 
-  constructor(private readonly drizzle: DrizzleService) {}
+  constructor(
+    private readonly drizzle: DrizzleService,
+    @Optional() private readonly pipelineState?: PipelineStateService,
+  ) {}
 
   /**
    * Build a v1 ScreeningOutput for a startup. If `pipelineRunId` is supplied,
@@ -137,7 +142,49 @@ export class ScreeningOutputService {
       .from(startup)
       .where(eq(startup.id, startupId))
       .limit(1);
-    return row ?? null;
+    if (!row) return null;
+
+    // DS-E7-F4 part (c) — pull the deck's traction snapshot from the live
+    // extraction phase result when available. `tractionSnapshot` stays
+    // `undefined` when we couldn't inspect the deck (no PipelineStateService
+    // injected OR no cached extraction); the materials checker treats that
+    // as "no signal in either direction" and skips the `traction_data` flag.
+    // We only emit a concrete object (possibly with all-null fields) when
+    // we DID inspect the extraction and it had a traction block.
+    const materials: MaterialsInput = { ...row };
+    if (this.pipelineState) {
+      try {
+        const extraction = await this.pipelineState.getPhaseResult(
+          startupId,
+          PipelinePhase.EXTRACTION,
+        );
+        const deck = (extraction as { deckStructuredData?: unknown } | null | undefined)
+          ?.deckStructuredData as
+          | {
+              traction?: {
+                customers?: string | null;
+                users?: string | null;
+                churnRate?: string | null;
+                notableClaims?: string[];
+              };
+            }
+          | undefined;
+        if (deck) {
+          materials.tractionSnapshot = deck.traction
+            ? {
+                customers: deck.traction.customers ?? null,
+                users: deck.traction.users ?? null,
+                churnRate: deck.traction.churnRate ?? null,
+                notableClaims: deck.traction.notableClaims ?? [],
+              }
+            : null;
+        }
+      } catch {
+        // Pipeline state cache miss is non-fatal — silent miss path above.
+      }
+    }
+
+    return materials;
   }
 
   private async fetchDecisionSnapshot(
@@ -538,6 +585,7 @@ export class ScreeningOutputService {
       deal_terms: "Deal terms",
       website: "Website",
       evidence_claims: "Source-linked evidence (≥3 claims)",
+      traction_data: "Early traction data",
     };
 
     return labels[value] ?? this.formatLensLabel(value);

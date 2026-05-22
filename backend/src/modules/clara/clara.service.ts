@@ -1621,6 +1621,7 @@ export class ClaraService {
       deal_terms: "deal terms (funding target, valuation, or raise type)",
       website: "company website URL",
       evidence_claims: "at least 3 source-linked evidence claims",
+      traction_data: "early traction data (customers, users, churn, or notable wins)",
     };
     return fields
       .map((field) => labels[field])

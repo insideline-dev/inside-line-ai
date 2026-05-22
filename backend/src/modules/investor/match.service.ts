@@ -3,12 +3,14 @@ import {
   Logger,
   NotFoundException,
   ForbiddenException,
+  Optional,
 } from '@nestjs/common';
 import { eq, and, gte, desc, sql } from 'drizzle-orm';
 import { DrizzleService } from '../../database';
 import { startup, StartupStatus } from '../startup/entities/startup.schema';
 import { StartupMatchingPipelineService } from '../ai/services/startup-matching-pipeline.service';
 import { startupMatch, type MatchStatus } from './entities/investor.schema';
+import { DealEventService } from '../startup/deal-event.service';
 import { GetMatchesQuery, UpdateMatchStatus } from './dto';
 
 const DEFAULT_SCORING_WEIGHTS = {
@@ -26,6 +28,7 @@ export class MatchService {
   constructor(
     private drizzle: DrizzleService,
     private startupMatchingPipeline: StartupMatchingPipelineService,
+    @Optional() private dealEvents?: DealEventService,
   ) {}
 
   async findAll(investorId: string, query: GetMatchesQuery) {
@@ -219,6 +222,26 @@ export class MatchService {
       this.logger.log(
         `Updated match ${matchId} status to ${dto.status}`,
       );
+
+      // DS-E8-F1-S2 — emit a partner-visible timeline event when the
+      // kanban stage actually changes. We skip identical-status saves
+      // so a no-op PATCH doesn't pollute the timeline.
+      if (this.dealEvents && match.status !== dto.status) {
+        void this.dealEvents.record({
+          startupId: match.startupId,
+          actorUserId: investorId,
+          type: "stage.changed",
+          payload: {
+            matchId,
+            from: match.status,
+            to: dto.status,
+            ...(dto.status === "passed" && dto.passReason
+              ? { passReason: dto.passReason }
+              : {}),
+          },
+        });
+      }
+
       return updated;
     });
   }

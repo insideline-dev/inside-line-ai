@@ -137,4 +137,15 @@ describe("DealEventService", () => {
     await svc.forStartup(STARTUP_ID, { limit: 0 });
     expect(db.limit).toHaveBeenLastCalledWith(1);
   });
+
+  // DS-E8-F1-S2 / F2 — the discriminator enum is part of the public timeline
+  // contract. Bumping or renaming a value breaks historical replay, so this
+  // spec acts as a tripwire when someone edits the list.
+  it("accepts the DS-E8 lifecycle event types in the discriminator", async () => {
+    const { DEAL_EVENT_TYPES } = await import(
+      "../entities/deal-event.schema"
+    );
+    expect(DEAL_EVENT_TYPES).toContain("stage.changed");
+    expect(DEAL_EVENT_TYPES).toContain("founder.replied");
+  });
 });

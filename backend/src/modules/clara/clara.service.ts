@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { eq } from "drizzle-orm";
 import { marked } from "marked";
@@ -11,6 +11,7 @@ import type { AgentMail } from "agentmail";
 import { DrizzleService } from "../../database";
 import { user } from "../../auth/entities/auth.schema";
 import { startup } from "../startup/entities/startup.schema";
+import { DealEventService } from "../startup/deal-event.service";
 import {
   isMissingWebsiteValue,
   isLikelyPlaceholderStage,
@@ -69,6 +70,7 @@ export class ClaraService {
     private toolsService: ClaraToolsService,
     private copilotService: CopilotService,
     private pdfRenderService: PdfRenderService,
+    @Optional() private dealEvents?: DealEventService,
   ) {
     this.claraInboxId = this.config.get<string>("CLARA_INBOX_ID") ?? null;
     this.adminUserId =
@@ -829,6 +831,28 @@ export class ClaraService {
       );
 
       this.logger.log(`Processed message ${messageId}: intent=${intent}`);
+
+      // DS-E8-F2-S1 — surface the founder's inbound message on the deal
+      // timeline when the conversation is linked to a startup. Skips
+      // unlinked threads (Clara hasn't decided which deal yet) and
+      // self-originated messages (filtered earlier in this method).
+      const linkedStartupId = finalStartupId ?? conversation.startupId ?? null;
+      if (this.dealEvents && linkedStartupId) {
+        void this.dealEvents.record({
+          startupId: linkedStartupId,
+          actorUserId: null,
+          type: "founder.replied",
+          payload: {
+            channel: "email",
+            threadId,
+            messageId,
+            fromEmail,
+            subject: message.subject ?? null,
+            intent,
+            hasAttachments: (message.attachments ?? []).length > 0,
+          },
+        });
+      }
     } catch (error) {
       this.logger.error(
         `Failed to handle message ${messageId}: ${error}`,

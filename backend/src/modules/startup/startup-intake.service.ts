@@ -15,6 +15,7 @@ import {
   StartupStage,
 } from './entities/startup.schema';
 import { deriveStartupGeography } from '../geography';
+import { buildScreeningInputV1 } from './screening-intake-normalization';
 
 export interface QuickCreateParams {
   adminUserId: string;
@@ -149,41 +150,62 @@ export class StartupIntakeService {
       };
     }
 
-    const startupLocation = location ?? 'Unknown';
-    const geography = deriveStartupGeography(startupLocation);
-    const slug = this.generateSlug(companyName);
     const resolvedOwnerUserId = ownerUserId ?? adminUserId;
     const sourceLabel = this.describeSource(source);
+
+    // DS-E1-F4-S1: route Clara / email-forward intake through the canonical
+    // V1 shape so it lands in the same contract as every other path.
+    const canonical = buildScreeningInputV1({
+      raw: {
+        name: companyName,
+        website: website ?? null,
+        tagline: `Submitted via ${sourceLabel} by ${fromEmail}`,
+        description:
+          bodyText?.slice(0, 5000) ||
+          `Submitted via ${sourceLabel}. Details will be extracted from the pitch deck.`,
+        location: location ?? null,
+        industry: null,
+      },
+      sourcePath: source,
+      status: StartupStatus.SUBMITTED,
+      isPrivate: isPrivate ?? false,
+      stage: stage ?? StartupStage.SEED,
+      fundingTarget: 0,
+      teamSize: 1,
+      submittedByRole: submittedByRole ?? UserRole.ADMIN,
+      submitterUserId: resolvedOwnerUserId,
+      founderEmail: fromEmail,
+      founderName: fromName ?? undefined,
+    });
+    const slug = this.generateSlug(canonical.company.name);
 
     const [created] = await this.drizzle.db
       .insert(startup)
       .values({
         userId: resolvedOwnerUserId,
-        sourcePath: source,
-        submittedByRole: submittedByRole ?? UserRole.ADMIN,
-        isPrivate: isPrivate ?? false,
-        name: companyName,
+        sourcePath: canonical.sourcePath,
+        submittedByRole: canonical.owners.submittedByRole,
+        isPrivate: canonical.stageGate.isPrivate,
+        name: canonical.company.name,
         slug,
-        tagline: `Submitted via ${sourceLabel} by ${fromEmail}`,
-        description:
-          bodyText?.slice(0, 5000) ||
-          `Submitted via ${sourceLabel}. Details will be extracted from the pitch deck.`,
-        website: website?.trim() ?? '',
-        location: startupLocation,
-        normalizedRegion: geography.normalizedRegion,
-        geoCountryCode: geography.countryCode,
-        geoLevel1: geography.level1,
-        geoLevel2: geography.level2,
-        geoLevel3: geography.level3,
-        geoPath: geography.path,
-        industry: 'Unknown',
-        stage: stage ?? StartupStage.SEED,
-        fundingTarget: 0,
-        teamSize: 1,
-        contactEmail: fromEmail,
-        contactName: fromName ?? undefined,
+        tagline: canonical.company.tagline,
+        description: canonical.company.description,
+        website: canonical.company.website,
+        location: canonical.geography.raw,
+        normalizedRegion: canonical.geography.normalizedRegion,
+        geoCountryCode: canonical.geography.countryCode,
+        geoLevel1: canonical.geography.level1,
+        geoLevel2: canonical.geography.level2,
+        geoLevel3: canonical.geography.level3,
+        geoPath: canonical.geography.path,
+        industry: canonical.company.industry,
+        stage: canonical.round.stage as StartupStage,
+        fundingTarget: canonical.round.fundingTarget!,
+        teamSize: canonical.round.teamSize!,
+        contactEmail: canonical.owners.founderEmail ?? undefined,
+        contactName: canonical.owners.founderName ?? undefined,
         pitchDeckPath: pitchDeckPath ?? undefined,
-        status: StartupStatus.SUBMITTED,
+        status: canonical.stageGate.status,
         submittedAt: new Date(),
       })
       .returning();
@@ -211,8 +233,24 @@ export class StartupIntakeService {
       };
     }
 
-    const geography = deriveStartupGeography(params.location);
-    const slug = this.generateSlug(params.name);
+    // DS-E1-F4-S1: admin quick-create also rides the canonical V1 contract.
+    const canonical = buildScreeningInputV1({
+      raw: {
+        name: params.name,
+        website: params.website,
+        tagline: params.tagline,
+        description: params.description,
+        location: params.location,
+        industry: params.industry,
+      },
+      sourcePath: StartupSourcePath.ADMIN_MANUAL,
+      status: StartupStatus.SUBMITTED,
+      stage: params.stage,
+      fundingTarget: params.fundingTarget,
+      teamSize: params.teamSize,
+      submitterUserId: params.adminUserId,
+    });
+    const slug = this.generateSlug(canonical.company.name);
     const normalizedTeamMembers = (params.teamMembers ?? []).map((m) => ({
       name: m.name,
       role: m.role,
@@ -240,22 +278,22 @@ export class StartupIntakeService {
       .insert(startup)
       .values({
         userId: params.adminUserId,
-        sourcePath: StartupSourcePath.ADMIN_MANUAL,
-        name: params.name,
+        sourcePath: canonical.sourcePath,
+        name: canonical.company.name,
         slug,
-        tagline: params.tagline,
-        description: params.description,
-        website: params.website,
-        location: params.location,
-        normalizedRegion: geography.normalizedRegion,
-        geoCountryCode: geography.countryCode,
-        geoLevel1: geography.level1,
-        geoLevel2: geography.level2,
-        geoLevel3: geography.level3,
-        geoPath: geography.path,
-        industry: params.industry,
-        stage: params.stage,
-        fundingTarget: params.fundingTarget,
+        tagline: canonical.company.tagline,
+        description: canonical.company.description,
+        website: canonical.company.website,
+        location: canonical.geography.raw,
+        normalizedRegion: canonical.geography.normalizedRegion,
+        geoCountryCode: canonical.geography.countryCode,
+        geoLevel1: canonical.geography.level1,
+        geoLevel2: canonical.geography.level2,
+        geoLevel3: canonical.geography.level3,
+        geoPath: canonical.geography.path,
+        industry: canonical.company.industry,
+        stage: canonical.round.stage as StartupStage,
+        fundingTarget: canonical.round.fundingTarget!,
         teamSize: params.teamSize,
         teamMembers: normalizedTeamMembers,
         pitchDeckUrl: params.pitchDeckUrl ?? undefined,

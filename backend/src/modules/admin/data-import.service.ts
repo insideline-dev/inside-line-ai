@@ -13,6 +13,7 @@ import {
   StartupStage,
 } from '../startup/entities/startup.schema';
 import { deriveStartupGeography } from '../geography';
+import { buildScreeningInputV1 } from '../startup/screening-intake-normalization';
 import { ExportUsersQuery, ExportStartupsQuery } from './dto';
 
 interface CsvRow {
@@ -182,29 +183,45 @@ export class DataImportService {
           continue;
         }
 
-        const slug = this.generateSlug(row.name);
-        const geography = deriveStartupGeography(row.location.trim());
-
-        await this.drizzle.db.insert(startup).values({
-          userId: foundUser.id,
+        // DS-E1-F4-S1: route the CSV insert through the canonical V1 shape.
+        const canonical = buildScreeningInputV1({
+          raw: {
+            name: row.name,
+            tagline: row.tagline,
+            description: row.description,
+            website: row.website,
+            location: row.location,
+            industry: row.industry,
+          },
           sourcePath: StartupSourcePath.ADMIN_CSV,
-          name: row.name.trim(),
-          slug,
-          tagline: row.tagline.trim(),
-          description: row.description.trim(),
-          website: row.website.trim(),
-          location: row.location.trim(),
-          normalizedRegion: geography.normalizedRegion,
-          geoCountryCode: geography.countryCode,
-          geoLevel1: geography.level1,
-          geoLevel2: geography.level2,
-          geoLevel3: geography.level3,
-          geoPath: geography.path,
-          industry: row.industry.trim(),
+          status: StartupStatus.DRAFT,
           stage: stage as StartupStage,
           fundingTarget,
           teamSize,
-          status: StartupStatus.DRAFT,
+          submitterUserId: foundUser.id,
+        });
+        const slug = this.generateSlug(canonical.company.name);
+
+        await this.drizzle.db.insert(startup).values({
+          userId: foundUser.id,
+          sourcePath: canonical.sourcePath,
+          name: canonical.company.name,
+          slug,
+          tagline: canonical.company.tagline,
+          description: canonical.company.description,
+          website: canonical.company.website,
+          location: canonical.geography.raw,
+          normalizedRegion: canonical.geography.normalizedRegion,
+          geoCountryCode: canonical.geography.countryCode,
+          geoLevel1: canonical.geography.level1,
+          geoLevel2: canonical.geography.level2,
+          geoLevel3: canonical.geography.level3,
+          geoPath: canonical.geography.path,
+          industry: canonical.company.industry,
+          stage: canonical.round.stage as StartupStage,
+          fundingTarget: canonical.round.fundingTarget!,
+          teamSize: canonical.round.teamSize!,
+          status: canonical.stageGate.status,
         });
 
         result.imported++;

@@ -1,7 +1,15 @@
 import { and, eq, sql } from 'drizzle-orm';
+import { z } from 'zod';
 import type { DrizzleService } from '../../database';
-import { startup } from './entities/startup.schema';
+import {
+  startup,
+  StartupSourcePath,
+  StartupStage,
+  StartupStatus,
+} from './entities/startup.schema';
+import { UserRole } from '../../auth/entities/auth.schema';
 import { normalizeWebsiteCandidate } from '../ai/utils/startup-field-utils';
+import { deriveStartupGeography } from '../geography';
 
 export interface ScreeningIntakeCandidate {
   name: string;
@@ -223,6 +231,139 @@ export function normalizeScreeningIntakeCandidate(
     location: normalizeTextValue(input.location) ?? 'Unknown',
     industry: normalizeTextValue(input.industry) ?? 'Unknown',
   };
+}
+
+// ============================================================================
+// DS-E1-F4-S1 — Canonical ScreeningInputV1
+//
+// One authoritative shape every intake path (investor-manual, founder portal,
+// scout, Clara/email, admin-CSV) must produce before writing to the startups
+// table. Downstream consumers (scoring, DD, handoff) read this contract; new
+// fields go into a future V2 with a discriminated union to keep V1 valid.
+//
+// Today the canonical object IS the load-bearing input to the DB insert —
+// `assertScreeningInputV1` runs on every intake path so a divergence between
+// services blows up at insert time rather than silently corrupting later.
+// ============================================================================
+
+export const SCREENING_INPUT_VERSION = 1 as const;
+
+export const ScreeningInputV1Schema = z.object({
+  schemaVersion: z.literal(SCREENING_INPUT_VERSION),
+  sourcePath: z.nativeEnum(StartupSourcePath),
+  company: z.object({
+    name: z.string().min(1),
+    canonicalName: z.string().nullable(),
+    tagline: z.string(),
+    description: z.string(),
+    website: z.string(),
+    websiteHost: z.string().nullable(),
+    industry: z.string(),
+  }),
+  round: z.object({
+    stage: z.nativeEnum(StartupStage).optional(),
+    fundingTarget: z.number().int().nonnegative().optional(),
+    teamSize: z.number().int().positive().optional(),
+  }),
+  geography: z.object({
+    raw: z.string(),
+    normalizedRegion: z.string().nullable(),
+    countryCode: z.string().nullable(),
+    level1: z.string().nullable(),
+    level2: z.string().nullable(),
+    level3: z.string().nullable(),
+    path: z.array(z.string()),
+  }),
+  owners: z.object({
+    submittedByRole: z.nativeEnum(UserRole).optional(),
+    // IDs are validated at FK constraint time — schema only enforces presence
+    // and string shape so the canonical type stays stable across paths.
+    submitterUserId: z.string().min(1).optional(),
+    scoutId: z.string().min(1).optional(),
+    portalId: z.string().min(1).nullable(),
+    founderEmail: z.string().email().nullable(),
+    founderName: z.string().nullable(),
+  }),
+  stageGate: z.object({
+    status: z.nativeEnum(StartupStatus),
+    isPrivate: z.boolean(),
+  }),
+});
+
+export type ScreeningInputV1 = z.infer<typeof ScreeningInputV1Schema>;
+
+export interface BuildScreeningInputV1Args {
+  raw: ScreeningIntakeCandidate;
+  sourcePath: StartupSourcePath;
+  status?: StartupStatus;
+  isPrivate?: boolean;
+  stage?: StartupStage;
+  fundingTarget?: number;
+  teamSize?: number;
+  submittedByRole?: UserRole;
+  submitterUserId?: string;
+  scoutId?: string;
+  portalId?: string;
+  founderEmail?: string;
+  founderName?: string;
+}
+
+/**
+ * Build a `ScreeningInputV1` from any intake DTO. Defers to
+ * `normalizeScreeningIntakeCandidate` for the textual fields so the canonical
+ * type stays in lockstep with the legacy helper.
+ *
+ * Returns a parsed object — callers can either destructure or pass it to the
+ * DB insert. The parse step is the contract check.
+ */
+export function buildScreeningInputV1(
+  args: BuildScreeningInputV1Args,
+): ScreeningInputV1 {
+  const base = normalizeScreeningIntakeCandidate(args.raw);
+  const geography = deriveStartupGeography(base.location);
+
+  const candidate: ScreeningInputV1 = {
+    schemaVersion: SCREENING_INPUT_VERSION,
+    sourcePath: args.sourcePath,
+    company: {
+      name: base.name,
+      canonicalName: base.canonicalName,
+      tagline: base.tagline,
+      description: base.description,
+      website: base.website,
+      websiteHost: base.websiteHost,
+      industry: base.industry,
+    },
+    round: {
+      stage: args.stage,
+      fundingTarget: args.fundingTarget,
+      teamSize: args.teamSize,
+    },
+    geography: {
+      raw: base.location,
+      normalizedRegion: geography.normalizedRegion ?? null,
+      countryCode: geography.countryCode,
+      level1: geography.level1 ?? null,
+      level2: geography.level2 ?? null,
+      level3: geography.level3 ?? null,
+      path: geography.path,
+    },
+    owners: {
+      submittedByRole: args.submittedByRole,
+      submitterUserId: args.submitterUserId,
+      scoutId: args.scoutId,
+      portalId: args.portalId ?? null,
+      founderEmail: args.founderEmail ?? null,
+      founderName: args.founderName ?? null,
+    },
+    stageGate: {
+      status: args.status ?? StartupStatus.DRAFT,
+      isPrivate: args.isPrivate ?? false,
+    },
+  };
+
+  // Real assertion — divergence between callers blows up here, not in the DB.
+  return ScreeningInputV1Schema.parse(candidate);
 }
 
 function buildStartupNameNormalizationExpression() {

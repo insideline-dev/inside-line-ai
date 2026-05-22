@@ -5791,6 +5791,42 @@
         ]
       }
     },
+    "/investor/thesis/structured-dealbreakers": {
+      "get": {
+        "operationId": "InvestorController_getStructuredDealbreakers",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      },
+      "post": {
+        "operationId": "InvestorController_updateStructuredDealbreakers",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateStructuredDealbreakersDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      }
+    },
     "/investor/deals/{startupId}/decision": {
       "post": {
         "operationId": "InvestorController_recordDealDecision",
@@ -14065,6 +14101,71 @@
         },
         "required": [
           "narrative"
+        ]
+      },
+      "UpdateStructuredDealbreakersDto": {
+        "type": "object",
+        "properties": {
+          "rules": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                "field": {
+                  "type": "string",
+                  "enum": [
+                    "industry",
+                    "stage",
+                    "geography",
+                    "raiseType"
+                  ]
+                },
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "in",
+                    "not_in"
+                  ]
+                },
+                "values": {
+                  "minItems": 1,
+                  "maxItems": 50,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  }
+                },
+                "action": {
+                  "default": "reject",
+                  "type": "string",
+                  "enum": [
+                    "reject",
+                    "require_override"
+                  ]
+                },
+                "label": {
+                  "type": "string",
+                  "maxLength": 200
+                }
+              },
+              "required": [
+                "field",
+                "operator",
+                "values"
+              ]
+            }
+          }
+        },
+        "required": [
+          "rules"
         ]
       },
       "RecordDealDecisionDto": {

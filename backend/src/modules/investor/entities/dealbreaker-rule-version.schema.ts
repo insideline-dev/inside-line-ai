@@ -7,10 +7,12 @@ import {
   timestamp,
   integer,
   index,
+  jsonb,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { user } from "../../../auth/entities/auth.schema";
+import type { StructuredDealbreakerRule } from "../structured-dealbreaker";
 
 export const investorDealbreakerRuleVersion = pgTable(
   "investor_dealbreaker_rule_version",
@@ -21,6 +23,15 @@ export const investorDealbreakerRuleVersion = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     versionNumber: integer("version_number").notNull(),
     rules: text("rules").array().notNull(),
+    /**
+     * DS-E4-F3-S1 — structured `(field, operator, value[s], action)` rules.
+     * Stored alongside the legacy text `rules` so old code keeps reading the
+     * narrative term-list. Shape is validated by `StructuredDealbreakerRuleSchema`.
+     */
+    structuredRules: jsonb("structured_rules")
+      .$type<StructuredDealbreakerRule[]>()
+      .notNull()
+      .default([]),
     reason: text("reason"),
     createdBy: uuid("created_by").references(() => user.id, {
       onDelete: "set null",

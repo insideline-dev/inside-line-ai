@@ -1027,6 +1027,38 @@ describe("collectPortfolioConflictReasonCodes (DS-E4-F2)", () => {
   });
 });
 
+// DS-E4-F3 — applyTriagePolicy honors the require_override action tier.
+describe("applyTriagePolicy require_override (DS-E4-F3)", () => {
+  it("downgrades to review (not reject) when every dealbreaker code is require_override", () => {
+    const decision = applyTriagePolicy(
+      [lens("market", 80, "advance"), lens("team", 70, "advance"), lens("traction", 65, "advance")],
+      {
+        dealbreakerReasonCodes: [
+          "dealbreaker:structured:small-rounds:require_override",
+        ],
+      },
+    );
+    expect(decision.classification).toBe("review");
+    expect(decision.reasonCodes).toContain(
+      "dealbreaker:structured:small-rounds:require_override",
+    );
+  });
+
+  it("still rejects when at least one hard code is present alongside override codes", () => {
+    const decision = applyTriagePolicy(
+      [lens("market", 80, "advance"), lens("team", 70, "advance"), lens("traction", 65, "advance")],
+      {
+        dealbreakerReasonCodes: [
+          "out_of_geo",
+          "dealbreaker:structured:small-rounds:require_override",
+        ],
+      },
+    );
+    expect(decision.classification).toBe("reject");
+    expect(decision.reasonCodes).toContain("out_of_geo");
+  });
+});
+
 // DS-E4-F1 — thesis-boundary checks (smoke-level, in case the wiring drifts).
 describe("collectThesisBoundaryViolations (DS-E4-F1)", () => {
   const candidate = {

@@ -34,6 +34,10 @@ import { ModelPurpose } from '../ai/interfaces/pipeline.interface';
 import { generateText } from 'ai';
 import { buildThesisSummary } from './thesis-summary.util';
 import { InvestorOnboardingService } from './onboarding/investor-onboarding.service';
+import {
+  StructuredDealbreakerRuleListSchema,
+  type StructuredDealbreakerRule,
+} from './structured-dealbreaker';
 
 const THESIS_SUMMARY_BATCH_SIZE = 10;
 
@@ -59,6 +63,69 @@ export class ThesisService {
         .where(eq(investorDealbreakerRuleVersion.investorUserId, userId))
         .orderBy(desc(investorDealbreakerRuleVersion.versionNumber))
         .limit(Math.min(Math.max(limit, 1), 20));
+    });
+  }
+
+  /**
+   * DS-E4-F3 — load the latest structured rule set for the investor.
+   * Returns `[]` when no version has been authored yet.
+   */
+  async getStructuredDealbreakers(
+    userId: string,
+  ): Promise<StructuredDealbreakerRule[]> {
+    return this.drizzle.withRLS(userId, async (db) => {
+      const [row] = await db
+        .select({ structuredRules: investorDealbreakerRuleVersion.structuredRules })
+        .from(investorDealbreakerRuleVersion)
+        .where(eq(investorDealbreakerRuleVersion.investorUserId, userId))
+        .orderBy(desc(investorDealbreakerRuleVersion.versionNumber))
+        .limit(1);
+      return row?.structuredRules ?? [];
+    });
+  }
+
+  /**
+   * DS-E4-F3 — append a new dealbreaker rule version containing structured
+   * rules. Carries the existing legacy text `rules` forward unchanged so the
+   * narrative-term path (F4-F4) and structured path coexist on the same row.
+   */
+  async upsertStructuredDealbreakers(
+    userId: string,
+    rules: StructuredDealbreakerRule[],
+  ): Promise<{ versionNumber: number; rules: StructuredDealbreakerRule[] }> {
+    const validated = StructuredDealbreakerRuleListSchema.parse(rules);
+    return this.drizzle.withRLS(userId, async (db) => {
+      const [latest] = await db
+        .select({
+          versionNumber: investorDealbreakerRuleVersion.versionNumber,
+          rules: investorDealbreakerRuleVersion.rules,
+        })
+        .from(investorDealbreakerRuleVersion)
+        .where(eq(investorDealbreakerRuleVersion.investorUserId, userId))
+        .orderBy(desc(investorDealbreakerRuleVersion.versionNumber))
+        .limit(1);
+
+      const nextVersion = Number(latest?.versionNumber ?? 0) + 1;
+      const carriedRules = latest?.rules ?? [];
+
+      await db.insert(investorDealbreakerRuleVersion).values({
+        investorUserId: userId,
+        versionNumber: nextVersion,
+        rules: carriedRules,
+        structuredRules: validated,
+        createdBy: userId,
+      });
+
+      await db.insert(investorEvent).values({
+        investorUserId: userId,
+        type: 'dealbreakers.structured.updated',
+        payload: {
+          versionNumber: nextVersion,
+          ruleCount: validated.length,
+        },
+      });
+
+      return { versionNumber: nextVersion, rules: validated };
     });
   }
 

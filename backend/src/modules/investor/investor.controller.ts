@@ -61,6 +61,7 @@ import {
   AddPortfolioDto,
   UpdateMatchStatusDto,
   UpdateScoringPreferencesDto,
+  UpdateStructuredDealbreakersDto,
 } from './dto';
 
 type User = {
@@ -145,6 +146,21 @@ export class InvestorController {
   ) {
     const suggestions = await this.dealbreakerParse.parseNarrative(dto.narrative);
     return { suggestions };
+  }
+
+  // DS-E4-F3-S1 — structured dealbreaker rules.
+  @Get('thesis/structured-dealbreakers')
+  async getStructuredDealbreakers(@CurrentUser() user: User) {
+    const rules = await this.thesisService.getStructuredDealbreakers(user.id);
+    return { rules };
+  }
+
+  @Post('thesis/structured-dealbreakers')
+  async updateStructuredDealbreakers(
+    @CurrentUser() user: User,
+    @Body() dto: UpdateStructuredDealbreakersDto,
+  ) {
+    return this.thesisService.upsertStructuredDealbreakers(user.id, dto.rules);
   }
 
   // ============ DEAL DECISIONS (DS-E11-F1-S1) ============

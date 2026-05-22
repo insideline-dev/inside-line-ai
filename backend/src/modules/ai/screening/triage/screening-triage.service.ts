@@ -12,6 +12,12 @@ import {
 import { startup } from "../../../startup/entities/startup.schema";
 import { investorThesis } from "../../../investor/entities/investor.schema";
 import { investorPortfolio } from "../../../investor/entities/investor-portfolio.schema";
+import { investorDealbreakerRuleVersion } from "../../../investor/entities/dealbreaker-rule-version.schema";
+import {
+  evaluateStructuredDealbreakers,
+  isRequireOverrideReasonCode,
+  type StructuredDealbreakerRule,
+} from "../../../investor/structured-dealbreaker";
 import {
   ScreeningNextActionSchema,
   ScreeningSignalSchema,
@@ -534,8 +540,24 @@ export function applyTriagePolicy(
       .filter((code) => code.length > 0),
   );
   if (dealbreakerReasonCodes.length > 0) {
+    // DS-E4-F3 — split structured-rule outcomes into hard reject vs soft
+    // require_override. Hard codes (including all F4-F1 boundary codes,
+    // F4-F2 portfolio conflicts, and structured rules with action=reject)
+    // short-circuit to REJECT. Only when ALL matched codes are
+    // require_override do we downgrade to REVIEW with the override codes
+    // surfaced — that's the partner-friendly "flag but don't kill" path.
+    const hardCodes = dealbreakerReasonCodes.filter(
+      (code) => !isRequireOverrideReasonCode(code),
+    );
+    if (hardCodes.length > 0) {
+      return {
+        classification: "reject",
+        overallScore,
+        reasonCodes: dealbreakerReasonCodes,
+      };
+    }
     return {
-      classification: "reject",
+      classification: "review",
       overallScore,
       reasonCodes: dealbreakerReasonCodes,
     };
@@ -844,7 +866,51 @@ export class ScreeningTriageService {
     const portfolio = await this.fetchOwnerPortfolioCompanies(startupSnapshot.userId);
     const portfolioCodes = collectPortfolioConflictReasonCodes(startupSnapshot, portfolio);
 
-    return dedupeStrings([...tagCodes, ...boundaryCodes, ...portfolioCodes]);
+    // DS-E4-F3 — structured (field, operator, value[s], action) rules.
+    const structuredRules = await this.fetchOwnerStructuredDealbreakers(
+      startupSnapshot.userId,
+    );
+    const structuredMatches = evaluateStructuredDealbreakers(
+      {
+        industry: startupSnapshot.industry,
+        sectorIndustry: startupSnapshot.sectorIndustry,
+        sectorIndustryGroup: startupSnapshot.sectorIndustryGroup,
+        stage: startupSnapshot.stage,
+        location: startupSnapshot.location,
+        fundingTarget: startupSnapshot.fundingTarget,
+        valuation: startupSnapshot.valuation,
+        raiseType: startupSnapshot.raiseType,
+        teamSize: null,
+      },
+      structuredRules,
+    );
+    const structuredCodes = structuredMatches.map((m) => m.reasonCode);
+
+    return dedupeStrings([
+      ...tagCodes,
+      ...boundaryCodes,
+      ...portfolioCodes,
+      ...structuredCodes,
+    ]);
+  }
+
+  /**
+   * DS-E4-F3 — load the latest (highest version_number) structured rule set
+   * for the owner investor. Returns [] when no rules are configured.
+   */
+  private async fetchOwnerStructuredDealbreakers(
+    ownerUserId: string | null,
+  ): Promise<StructuredDealbreakerRule[]> {
+    if (!ownerUserId) return [];
+    const [row] = await this.drizzle.db
+      .select({
+        structuredRules: investorDealbreakerRuleVersion.structuredRules,
+      })
+      .from(investorDealbreakerRuleVersion)
+      .where(eq(investorDealbreakerRuleVersion.investorUserId, ownerUserId))
+      .orderBy(desc(investorDealbreakerRuleVersion.versionNumber))
+      .limit(1);
+    return row?.structuredRules ?? [];
   }
 
   private toDecision(

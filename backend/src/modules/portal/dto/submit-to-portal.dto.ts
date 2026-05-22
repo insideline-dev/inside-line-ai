@@ -19,6 +19,14 @@ export const SubmitToPortalSchema = z.object({
   // Optional founder email (for user creation/lookup)
   founderEmail: z.string().email().optional(),
   founderName: z.string().min(1).max(200).optional(),
+
+  /**
+   * DS-E1-F2-S2: founder distribution control. When 'this_fund_only' the
+   * resulting startup is marked private so the cross-matching engine won't
+   * fan it out to other investors. When 'all_aligned' (default) the deal is
+   * eligible for cross-matching to any investor whose thesis fits.
+   */
+  distributionMode: z.enum(['all_aligned', 'this_fund_only']).optional(),
 });
 
 export type SubmitToPortal = z.infer<typeof SubmitToPortalSchema>;

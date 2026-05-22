@@ -23,15 +23,9 @@ export type ScoutSubmitStartupDtoStartupData = {
   /** @maxLength 5000 */
   description?: string;
   website: string;
-  /**
-   * @minLength 1
-   * @maxLength 200
-   */
+  /** @maxLength 200 */
   location?: string;
-  /**
-   * @minLength 1
-   * @maxLength 200
-   */
+  /** @maxLength 200 */
   industry?: string;
   stage?: ScoutSubmitStartupDtoStartupDataStage;
   /**

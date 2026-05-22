@@ -17,7 +17,15 @@ import {
   Link2,
   Copy,
   ExternalLink,
+  ShieldCheck,
 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -31,12 +39,15 @@ export const Route = createFileRoute("/_protected/investor/portal")({
   component: InvestorPortalPage,
 });
 
+type LinkIntegrity = "strict" | "standard" | "lenient";
+
 interface PortalFormData {
   name: string;
   slug: string;
   description: string;
   brandColor: string;
   isActive: boolean;
+  linkIntegrity: LinkIntegrity;
 }
 
 type PortalRecord = {
@@ -46,6 +57,7 @@ type PortalRecord = {
   description?: string;
   brandColor?: string;
   isActive?: boolean;
+  linkIntegrity?: LinkIntegrity;
 };
 
 function sanitizeSlug(value: string): string {
@@ -72,6 +84,7 @@ function InvestorPortalPage() {
     description: "",
     brandColor: "#6366f1",
     isActive: true,
+    linkIntegrity: "standard",
   });
 
   useEffect(() => {
@@ -82,6 +95,7 @@ function InvestorPortalPage() {
         description: existingPortal.description ?? "",
         brandColor: existingPortal.brandColor ?? "#6366f1",
         isActive: existingPortal.isActive ?? true,
+        linkIntegrity: existingPortal.linkIntegrity ?? "standard",
       });
       return;
     }
@@ -92,6 +106,7 @@ function InvestorPortalPage() {
       description: "",
       brandColor: "#6366f1",
       isActive: false,
+      linkIntegrity: "standard",
     });
   }, [existingPortal]);
 
@@ -279,6 +294,35 @@ function InvestorPortalPage() {
             </div>
             <p className="text-muted-foreground">
               This is the unique URL for your submission portal. Use lowercase letters, numbers, and hyphens only.
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            <Label htmlFor="portal-link-integrity" className="flex items-center gap-2 text-base font-medium">
+              <ShieldCheck className="h-4 w-4" />
+              Link Integrity
+            </Label>
+            <Select
+              value={formData.linkIntegrity}
+              onValueChange={(value) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  linkIntegrity: value as LinkIntegrity,
+                }))
+              }
+            >
+              <SelectTrigger id="portal-link-integrity" data-testid="select-link-integrity" className="md:max-w-md">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="strict">Strict — one company per founder, dedup over 30 days</SelectItem>
+                <SelectItem value="standard">Standard — IP burst limits only (recommended)</SelectItem>
+                <SelectItem value="lenient">Lenient — minimal abuse prevention</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-muted-foreground">
+              Controls how aggressively the public apply link blocks duplicate or abusive submissions.
+              Strict prevents the same founder or company from submitting more than once in the same window.
             </p>
           </div>
         </CardContent>

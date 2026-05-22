@@ -8358,15 +8358,11 @@
             "format": "uri"
           },
           "location": {
-            "default": "",
             "type": "string",
-            "minLength": 1,
             "maxLength": 200
           },
           "industry": {
-            "default": "other",
             "type": "string",
-            "minLength": 1,
             "maxLength": 200
           },
           "stage": {
@@ -8599,15 +8595,11 @@
             "format": "uri"
           },
           "location": {
-            "default": "",
             "type": "string",
-            "minLength": 1,
             "maxLength": 200
           },
           "industry": {
-            "default": "other",
             "type": "string",
-            "minLength": 1,
             "maxLength": 200
           },
           "stage": {
@@ -9941,6 +9933,13 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 200
+          },
+          "distributionMode": {
+            "type": "string",
+            "enum": [
+              "all_aligned",
+              "this_fund_only"
+            ]
           }
         },
         "required": [
@@ -10221,15 +10220,11 @@
                 "format": "uri"
               },
               "location": {
-                "default": "",
                 "type": "string",
-                "minLength": 1,
                 "maxLength": 200
               },
               "industry": {
-                "default": "other",
                 "type": "string",
-                "minLength": 1,
                 "maxLength": 200
               },
               "stage": {

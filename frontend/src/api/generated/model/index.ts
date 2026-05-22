@@ -414,6 +414,7 @@ export * from './storageControllerDeleteFile200';
 export * from './storageControllerListAssetsParams';
 export * from './submitStartupDto';
 export * from './submitToPortalDto';
+export * from './submitToPortalDtoDistributionMode';
 export * from './submitToPortalDtoStage';
 export * from './submitWebsiteDto';
 export * from './twilioConfigDto';

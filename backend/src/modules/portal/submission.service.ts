@@ -206,6 +206,11 @@ export class SubmissionService {
           .values({
             userId: foundUser.id,
             sourcePath: StartupSourcePath.FOUNDER_SUBMITTED,
+            // DS-E1-F2-S2: founder picks distribution. 'this_fund_only'
+            // marks the deal private so cross-matching keeps it scoped to
+            // the portal owner; 'all_aligned' (default) leaves it
+            // cross-matchable.
+            isPrivate: dto.distributionMode === 'this_fund_only',
             slug,
             name: normalizedStartup.name,
             tagline: normalizedStartup.tagline,

@@ -328,6 +328,10 @@ export function StartupSubmitForm({
 
   // Backend draft tracking
   const [startupId, setStartupId] = useState<string | null>(draftIdProp ?? null);
+  // DS-E1-F2-S2 — founder picks how widely their submission travels.
+  const [distributionMode, setDistributionMode] = useState<
+    "all_aligned" | "this_fund_only"
+  >("all_aligned");
   const registeredFilePathsRef = useRef<Set<string>>(new Set());
   const hasRestoredDraftRef = useRef(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
@@ -591,6 +595,7 @@ export function StartupSubmitForm({
           demoUrl: demoVideoUrl,
           founderEmail,
           founderName: normalizeOptionalText(data.contactName),
+          distributionMode,
         };
 
         await portalSubmitMutation.mutateAsync({
@@ -2067,6 +2072,51 @@ export function StartupSubmitForm({
             )}
           </CardContent>
         </Card>
+
+        {isPortalSubmission && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Distribution</CardTitle>
+              <CardDescription>
+                Choose how widely your submission travels.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {[
+                  {
+                    value: "all_aligned" as const,
+                    title: "Open to all aligned funds",
+                    body: "Inside Line will match your company to any investor whose thesis fits. Higher chance of meetings.",
+                  },
+                  {
+                    value: "this_fund_only" as const,
+                    title: "Only share with this fund",
+                    body: "Keep this submission private to the fund whose link you used. No cross-matching.",
+                  },
+                ].map((option) => {
+                  const selected = distributionMode === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setDistributionMode(option.value)}
+                      data-testid={`distribution-${option.value}`}
+                      className={`text-left rounded-xl border p-4 transition-colors ${
+                        selected
+                          ? "border-primary ring-2 ring-primary/30 bg-primary/5"
+                          : "hover:bg-muted/40"
+                      }`}
+                    >
+                      <p className="font-semibold">{option.title}</p>
+                      <p className="text-sm text-muted-foreground mt-1">{option.body}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <div className="flex flex-col sm:flex-row gap-3">
           {shouldSaveDraft && (

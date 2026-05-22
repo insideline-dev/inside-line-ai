@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, jest } from "bun:test";
 import { ConfigService } from "@nestjs/config";
-import { ScreeningProcessor } from "../../processors/screening.processor";
+import { ScreeningProcessor, isUnlinkedLensOutput } from "../../processors/screening.processor";
 import type { BaseLensAgent, LensRunResult } from "../../lenses/base-lens.agent";
 import type { LensOutput } from "../../schemas/lens";
 import type { MarketLens } from "../../lenses/market.lens";
@@ -345,5 +345,23 @@ describe("ScreeningProcessor", () => {
         type: "screening.completed",
       }),
     );
+  });
+
+});
+
+// DS-E9-F2 — unlinked-claim firewall, isolated unit so the predicate stays
+// load-bearing and easy to reason about without the full processor harness.
+describe("isUnlinkedLensOutput (DS-E9-F2 firewall)", () => {
+  it("rejects a non-fallback lens output with empty evidence", () => {
+    expect(isUnlinkedLensOutput(false, 0)).toBe(true);
+  });
+
+  it("admits a non-fallback lens output with at least one evidence item", () => {
+    expect(isUnlinkedLensOutput(false, 1)).toBe(false);
+    expect(isUnlinkedLensOutput(false, 5)).toBe(false);
+  });
+
+  it("admits fallback rows even when evidence is empty (they carry the LENS_FALLBACK marker)", () => {
+    expect(isUnlinkedLensOutput(true, 0)).toBe(false);
   });
 });

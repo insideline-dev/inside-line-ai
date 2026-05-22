@@ -60,6 +60,22 @@ function projectEvidence(
   return evidence.map((e) => ({ confidence: e.confidence }));
 }
 
+/**
+ * DS-E9-F2 — unlinked-claim firewall.
+ *
+ * A non-fallback lens output with zero evidence items would persist a
+ * rationale-as-claim with nothing backing it; that poisons the evidence
+ * graph. Fallback rows are allowed through because their rationale carries
+ * the LENS_FALLBACK marker and downstream consumers treat them as synthetic
+ * placeholders, not as load-bearing claims.
+ */
+export function isUnlinkedLensOutput(
+  usedFallback: boolean,
+  evidenceCount: number,
+): boolean {
+  return !usedFallback && evidenceCount === 0;
+}
+
 @Injectable()
 export class ScreeningProcessor
   extends BaseProcessor<AiScreeningJobData, AiScreeningJobResult>
@@ -323,6 +339,15 @@ export class ScreeningProcessor
         const message = err instanceof Error ? err.message : String(err);
         this.logger.warn(
           `[ScreeningProcessor] Rejecting lens '${result.key}' for ${startupId}: ${message}`,
+        );
+        failedKeys.push(lens.key);
+        continue;
+      }
+
+      // DS-E9-F2 — unlinked-claim firewall. See `isUnlinkedLensOutput`.
+      if (isUnlinkedLensOutput(result.usedFallback, normalizedEvidence.length)) {
+        this.logger.warn(
+          `[ScreeningProcessor] DS-E9-F2 firewall: rejecting unlinked lens '${result.key}' for ${startupId} (no evidence)`,
         );
         failedKeys.push(lens.key);
         continue;

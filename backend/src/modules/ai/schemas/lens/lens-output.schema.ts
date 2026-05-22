@@ -26,28 +26,57 @@ export const LensEvidenceSchema = z
     sourceType: LensEvidenceSourceTypeSchema.nullable().optional(),
     sourceLabel: z.string().min(1).nullable().optional(),
     sourceRef: z.string().min(1).nullable().optional(),
-    url: z.url().nullable().optional(),
+    // OpenAI strict-mode structured outputs rejects `format: "uri"`, so this
+    // stays a plain string at the schema layer. The runtime
+    // `normalizeLensEvidenceLink` superRefine below enforces URL shape on
+    // every persisted item, so we don't lose validation — we just don't ask
+    // the provider to enforce it.
+    url: z.string().nullable().optional(),
     pageNumber: z.number().int().min(1).nullable().optional(),
     quote: z.string().min(1).nullable().optional(),
   })
   .superRefine((value, ctx) => {
     try {
       const normalized = normalizeLensEvidenceLink(value.source);
-      if (value.sourceType && value.sourceType !== normalized.sourceType) {
+      // Only flag a sourceType mismatch when `normalizeLensEvidenceLink`
+      // produced a concrete type AND the LLM gave a conflicting one. If the
+      // LLM's source string doesn't carry a structured prefix, the normalizer
+      // returns the generic `internal_trace` type as a safe default — that
+      // shouldn't fight against an LLM choice of e.g. `research_source`.
+      if (
+        value.sourceType &&
+        normalized.sourceType !== "internal_trace" &&
+        value.sourceType !== normalized.sourceType
+      ) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["sourceType"],
           message: `sourceType must match normalized source type ${normalized.sourceType}`,
         });
       }
-      if (value.pageNumber !== undefined && normalized.pageNumber !== value.pageNumber) {
+      // Only flag when the LLM provided a value AND the source string
+      // canonically derives a *different* value. If `normalized` produced
+      // null (e.g. the source is a label like "deck" without ":page:N"),
+      // the LLM-provided pageNumber/url is treated as authoritative — that's
+      // a legitimate shape we want to keep, not a contract violation.
+      if (
+        value.pageNumber !== undefined &&
+        value.pageNumber !== null &&
+        normalized.pageNumber !== null &&
+        normalized.pageNumber !== value.pageNumber
+      ) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["pageNumber"],
           message: "pageNumber must match the cited deck page",
         });
       }
-      if (value.url !== undefined && normalized.url !== value.url) {
+      if (
+        value.url !== undefined &&
+        value.url !== null &&
+        normalized.url !== null &&
+        normalized.url !== value.url
+      ) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["url"],

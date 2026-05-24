@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useCurrentUser } from "@/lib/auth/hooks";
 import { createFileRoute } from "@tanstack/react-router";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,7 +17,15 @@ import {
   Link2,
   Copy,
   ExternalLink,
+  ShieldCheck,
 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -30,12 +39,15 @@ export const Route = createFileRoute("/_protected/investor/portal")({
   component: InvestorPortalPage,
 });
 
+type LinkIntegrity = "strict" | "standard" | "lenient";
+
 interface PortalFormData {
   name: string;
   slug: string;
   description: string;
   brandColor: string;
   isActive: boolean;
+  linkIntegrity: LinkIntegrity;
 }
 
 type PortalRecord = {
@@ -45,6 +57,7 @@ type PortalRecord = {
   description?: string;
   brandColor?: string;
   isActive?: boolean;
+  linkIntegrity?: LinkIntegrity;
 };
 
 function sanitizeSlug(value: string): string {
@@ -62,6 +75,8 @@ function InvestorPortalPage() {
   const { data: response, isLoading } = usePortalControllerFindAll();
   const portals = (response?.data as PortalRecord[] | undefined) ?? [];
   const existingPortal = portals[0];
+  const { data: currentUser } = useCurrentUser();
+  const autoProvisionedRef = useRef(false);
 
   const [formData, setFormData] = useState<PortalFormData>({
     name: "",
@@ -69,6 +84,7 @@ function InvestorPortalPage() {
     description: "",
     brandColor: "#6366f1",
     isActive: true,
+    linkIntegrity: "standard",
   });
 
   useEffect(() => {
@@ -79,6 +95,7 @@ function InvestorPortalPage() {
         description: existingPortal.description ?? "",
         brandColor: existingPortal.brandColor ?? "#6366f1",
         isActive: existingPortal.isActive ?? true,
+        linkIntegrity: existingPortal.linkIntegrity ?? "standard",
       });
       return;
     }
@@ -89,13 +106,13 @@ function InvestorPortalPage() {
       description: "",
       brandColor: "#6366f1",
       isActive: false,
+      linkIntegrity: "standard",
     });
   }, [existingPortal]);
 
   const { mutate: createPortal, isPending: isCreating } = usePortalControllerCreate({
     mutation: {
       onSuccess: () => {
-        toast.success("Portal created successfully");
         queryClient.invalidateQueries({ queryKey: getPortalControllerFindAllQueryKey() });
       },
       onError: (error) => {
@@ -103,6 +120,29 @@ function InvestorPortalPage() {
       },
     },
   });
+
+  // Auto-provision a default active portal on first visit so the publicly-
+  // visible submission link works out of the box instead of 404'ing for
+  // founders. Investor can rename / deactivate via the form below.
+  useEffect(() => {
+    if (isLoading || existingPortal || autoProvisionedRef.current) return;
+    autoProvisionedRef.current = true;
+
+    const userName = currentUser?.name?.trim() || currentUser?.email?.split("@")[0] || "";
+    const fallbackSlug = `fund-${Math.random().toString(36).slice(2, 8)}`;
+    const candidateSlug = sanitizeSlug(userName);
+    const seededSlug = candidateSlug.length >= 3 ? candidateSlug : fallbackSlug;
+    const seededName = userName ? `${userName}'s portal` : "Submission portal";
+
+    createPortal({
+      data: {
+        name: seededName,
+        slug: seededSlug,
+        description: "Tell us about your company and why you're building it.",
+        brandColor: "#6366f1",
+      },
+    });
+  }, [isLoading, existingPortal, currentUser, createPortal]);
 
   const { mutate: updatePortal, isPending: isUpdating } = usePortalControllerUpdate({
     mutation: {
@@ -254,6 +294,35 @@ function InvestorPortalPage() {
             </div>
             <p className="text-muted-foreground">
               This is the unique URL for your submission portal. Use lowercase letters, numbers, and hyphens only.
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            <Label htmlFor="portal-link-integrity" className="flex items-center gap-2 text-base font-medium">
+              <ShieldCheck className="h-4 w-4" />
+              Link Integrity
+            </Label>
+            <Select
+              value={formData.linkIntegrity}
+              onValueChange={(value) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  linkIntegrity: value as LinkIntegrity,
+                }))
+              }
+            >
+              <SelectTrigger id="portal-link-integrity" data-testid="select-link-integrity" className="md:max-w-md">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="strict">Strict — one company per founder, dedup over 30 days</SelectItem>
+                <SelectItem value="standard">Standard — IP burst limits only (recommended)</SelectItem>
+                <SelectItem value="lenient">Lenient — minimal abuse prevention</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-muted-foreground">
+              Controls how aggressively the public apply link blocks duplicate or abusive submissions.
+              Strict prevents the same founder or company from submitting more than once in the same window.
             </p>
           </div>
         </CardContent>

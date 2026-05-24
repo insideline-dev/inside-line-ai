@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 export const UpdateMatchStatusSchema = z
   .object({
-    status: z.enum(['new', 'reviewing', 'engaged', 'closed', 'passed']),
+    status: z.enum(['new', 'reviewing', 'engaged', 'closed', 'passed', 'bookmarked']),
     passReason: z.string().max(500).optional(),
     passNotes: z.string().max(5000).optional(),
     investmentAmount: z.number().positive().optional(),

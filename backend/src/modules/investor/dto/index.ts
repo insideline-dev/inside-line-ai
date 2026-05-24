@@ -1,4 +1,5 @@
 export * from './create-thesis.dto';
+export * from './parse-dealbreakers.dto';
 export * from './update-thesis.dto';
 export * from './get-matches-query.dto';
 export * from './team.dto';
@@ -8,3 +9,4 @@ export * from './add-portfolio.dto';
 export * from './update-match-status.dto';
 export * from './update-scoring-preferences.dto';
 export * from './calibration-proposal.dto';
+export * from './structured-dealbreakers.dto';

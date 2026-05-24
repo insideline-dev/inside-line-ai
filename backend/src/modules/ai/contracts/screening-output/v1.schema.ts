@@ -27,10 +27,27 @@ export type ScreeningEvidenceConfidence = z.infer<
   typeof ScreeningEvidenceConfidenceSchema
 >;
 
+export const ScreeningEvidenceSourceTypeSchema = z.enum([
+  "deck_page",
+  "public_url",
+  "enrichment_call",
+  "research_source",
+  "internal_trace",
+]);
+export type ScreeningEvidenceSourceType = z.infer<
+  typeof ScreeningEvidenceSourceTypeSchema
+>;
+
 export const ScreeningEvidenceSchema = z.object({
   claim: z.string().min(1),
   source: z.string().optional(),
   confidence: ScreeningEvidenceConfidenceSchema,
+  sourceType: ScreeningEvidenceSourceTypeSchema.optional(),
+  sourceLabel: z.string().min(1).optional(),
+  sourceRef: z.string().min(1).optional(),
+  url: z.url().optional(),
+  pageNumber: z.number().int().min(1).optional(),
+  quote: z.string().min(1).optional(),
 });
 export type ScreeningEvidence = z.infer<typeof ScreeningEvidenceSchema>;
 
@@ -40,6 +57,12 @@ export const ScreeningHandoffEvidenceSchema = z.object({
   claim: z.string().min(1),
   source: z.string().optional(),
   confidence: ScreeningEvidenceConfidenceSchema,
+  sourceType: ScreeningEvidenceSourceTypeSchema.optional(),
+  sourceLabel: z.string().min(1).optional(),
+  sourceRef: z.string().min(1).optional(),
+  url: z.url().optional(),
+  pageNumber: z.number().int().min(1).optional(),
+  quote: z.string().min(1).optional(),
   lensScore: z.number().int().min(0).max(100),
   signal: ScreeningSignalSchema,
 });

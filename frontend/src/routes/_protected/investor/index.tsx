@@ -15,7 +15,7 @@ import {
   ThesisAxisFilter,
   matchesThesisAxis,
 } from "@/components/investor/ThesisAxisFilter";
-import { CalibrationCard } from "@/components/investor/CalibrationCard";
+import { StageNav } from "@/components/investor/StageNav";
 import { useFilterStore } from "@/stores";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SearchAndFilters, defaultFilters, type FilterState, STAGES, REGIONS, SOURCE_OPTIONS } from "@/components/SearchAndFilters";
@@ -94,7 +94,7 @@ type PipelineMatch = {
   startupId: string;
   overallScore: number;
   isSaved?: boolean;
-  status: "new" | "reviewing" | "engaged" | "closed" | "passed";
+  status: "new" | "reviewing" | "engaged" | "closed" | "passed" | "bookmarked";
   statusChangedAt: string | null;
   passReason: string | null;
   investmentAmount: number | null;
@@ -115,7 +115,19 @@ type PipelineData = {
   engaged: PipelineMatch[];
   closed: PipelineMatch[];
   passed: PipelineMatch[];
-  stats: { total: number; byStatus: Record<string, number> };
+  bookmarked: PipelineMatch[];
+  inFlight?: Array<{
+    startupId: string;
+    startupName: string;
+    startupLogoUrl: string | null;
+    startupStage: string | null;
+    startupIndustry: string | null;
+    startupDescription: string | null;
+    startupStatus: string;
+    createdAt: string;
+    verdict: string;
+  }>;
+  stats: { total: number; byStatus: Record<string, number>; inFlight?: number };
 };
 
 type Status = PipelineMatch["status"];
@@ -156,7 +168,14 @@ type PipelineCardItem = {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const STATUSES: Status[] = ["new", "reviewing", "engaged", "closed", "passed"];
+const STATUSES: Status[] = [
+  "new",
+  "reviewing",
+  "engaged",
+  "closed",
+  "passed",
+  "bookmarked",
+];
 
 const STATUS_CONFIG: Record<
   Status,
@@ -196,6 +215,13 @@ const STATUS_CONFIG: Record<
     iconClass: "text-muted-foreground",
     badgeClass: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
     borderClass: "border-red-500",
+  },
+  bookmarked: {
+    label: "Bookmarked",
+    icon: Bookmark,
+    iconClass: "text-primary",
+    badgeClass: "bg-primary/10 text-primary",
+    borderClass: "border-primary",
   },
 };
 
@@ -347,7 +373,7 @@ function filterPipelineItems(
 
     if (activeTab !== "all") {
       if (activeTab === "bookmarked") {
-        if (!item.isSaved) return false;
+        if (item.pipelineStatus !== "bookmarked") return false;
       } else if (item.pipelineStatus !== activeTab) {
         return false;
       }
@@ -454,7 +480,7 @@ function PipelineCard({
                 </Badge>
               ) : (
                 <Badge className={`${config.badgeClass} text-[11px]`}>
-                  {item.isSaved ? "Bookmarked" : config.label}
+                  {config.label}
                 </Badge>
               )}
             </div>
@@ -464,10 +490,12 @@ function PipelineCard({
                 size="icon"
                 className="h-7 w-7 shrink-0 opacity-60 hover:opacity-100"
                 onClick={handleBookmark}
-                aria-label={item.isSaved ? "Remove bookmark" : "Bookmark"}
+                aria-label={
+                  item.pipelineStatus === "bookmarked" ? "Remove bookmark" : "Bookmark"
+                }
               >
                 <Bookmark
-                  className={`h-4 w-4 ${item.isSaved ? "fill-current text-primary" : ""}`}
+                  className={`h-4 w-4 ${item.pipelineStatus === "bookmarked" ? "fill-current text-primary" : ""}`}
                 />
               </Button>
             )}
@@ -752,7 +780,7 @@ function BoardView({
   matchingJobs: Record<string, "queued" | "running">;
 }) {
   return (
-    <div className="grid grid-cols-1 gap-4 xl:grid-cols-5 md:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6">
       {STATUSES.map((status) => {
         const items = grouped[status];
         return (
@@ -943,7 +971,9 @@ function KanbanCard({
                     onToggleBookmark(item.startupId);
                   }}
                 >
-                  <Bookmark className={`h-3.5 w-3.5 ${item.isSaved ? "fill-current text-primary" : "text-muted-foreground"}`} />
+                  <Bookmark
+                    className={`h-3.5 w-3.5 ${item.pipelineStatus === "bookmarked" ? "fill-current text-primary" : "text-muted-foreground"}`}
+                  />
                 </button>
               )}
               <GripVertical className="h-4 w-4 text-muted-foreground" />
@@ -1392,7 +1422,10 @@ function InvestorDashboard() {
       if (activeTab === "all") return baseGrouped;
       if (activeTab === "bookmarked") {
         return Object.fromEntries(
-          STATUSES.map((status) => [status, baseGrouped[status].filter((item) => item.isSaved)]),
+          STATUSES.map((status) => [
+            status,
+            status === "bookmarked" ? baseGrouped[status] : [],
+          ]),
         ) as Record<Status, PipelineCardItem[]>;
       }
       return Object.fromEntries(
@@ -1408,7 +1441,12 @@ function InvestorDashboard() {
     }
     if (activeTab === "bookmarked") {
       return Object.fromEntries(
-        STATUSES.map((s) => [s, baseFiltered.filter((item) => item.pipelineStatus === s && item.isSaved)]),
+        STATUSES.map((s) => [
+          s,
+          s === "bookmarked"
+            ? baseFiltered.filter((item) => item.pipelineStatus === "bookmarked")
+            : [],
+        ]),
       ) as Record<Status, PipelineCardItem[]>;
     }
     return Object.fromEntries(
@@ -1428,7 +1466,7 @@ function InvestorDashboard() {
       engaged: items.filter(i => i.pipelineStatus === "engaged").length,
       closed: items.filter(i => i.pipelineStatus === "closed").length,
       passed: items.filter(i => i.pipelineStatus === "passed").length,
-      bookmarked: items.filter(i => i.isSaved).length,
+      bookmarked: items.filter((i) => i.pipelineStatus === "bookmarked").length,
     };
   }, [allItems, filters.source]);
 
@@ -1502,8 +1540,8 @@ function InvestorDashboard() {
             <p className="text-muted-foreground">Startups matched to your investment thesis</p>
           </div>
         </div>
-        <div className="grid gap-4 md:grid-cols-5">
-          {Array.from({ length: 5 }).map((_, i) => (
+        <div className="grid gap-4 md:grid-cols-6">
+          {Array.from({ length: 6 }).map((_, i) => (
             <Skeleton key={i} className="h-64 w-full" />
           ))}
         </div>
@@ -1511,8 +1549,44 @@ function InvestorDashboard() {
     );
   }
 
+  const inFlightDeals = pipeline?.inFlight ?? [];
+
   return (
     <div className="space-y-6">
+      <StageNav counts={{ dd: (pipeline?.stats?.total ?? 0) }} />
+      {inFlightDeals.length > 0 && (
+        <div className="flex flex-col gap-2 rounded-md border border-sky-300 bg-sky-50 p-4 text-sky-900">
+          <div className="flex items-center gap-2 font-semibold">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            {inFlightDeals.length} deal{inFlightDeals.length === 1 ? "" : "s"} in due diligence
+          </div>
+          <ul className="text-sm pl-6 list-disc space-y-0.5">
+            {inFlightDeals.map((d) => {
+              const stateLabel =
+                d.startupStatus === "analyzing"
+                  ? "running"
+                  : d.startupStatus === "pending_review"
+                    ? "awaiting review"
+                    : d.startupStatus;
+              return (
+                <li key={d.startupId}>
+                  <Link
+                    to="/investor/startup/$id"
+                    params={{ id: d.startupId }}
+                    className="hover:underline font-medium"
+                  >
+                    {d.startupName}
+                  </Link>
+                  {d.startupStage ? ` — ${d.startupStage}` : ""}
+                  <span className="ml-2 text-xs uppercase tracking-wide text-sky-700">
+                    {stateLabel}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
       {showThesisWarning && (
         <div className="flex flex-col gap-3 border border-amber-300 bg-amber-50 p-4 text-amber-900 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3">
@@ -1642,9 +1716,10 @@ function InvestorDashboard() {
           Renders only when the investor's thesis declares industries. */}
       <ThesisAxisFilter className="px-1" />
 
-      {/* DS-E7-F3-S1 — calibration card. Auto-hides until the investor has
-          recorded a few decisions; surfaces aggregate mismatch counts. */}
-      <CalibrationCard />
+      {/* Calibration card disabled — to be rebuilt from scratch.
+          The component, hooks, and backend services are intact; only
+          the mount is removed. Restore by uncommenting and re-importing.
+          <CalibrationCard /> */}
 
 
       {/* ─── Content Area ───

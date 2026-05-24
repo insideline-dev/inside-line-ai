@@ -195,11 +195,19 @@ export class FieldExtractorService {
 
   async extractDeckStructuredData(
     rawText: string,
+    options?: { pages?: Array<{ num: number; text: string }> },
   ): Promise<DeckStructuredData | null> {
     const trimmed = rawText.trim();
     if (!trimmed) {
       return null;
     }
+
+    // DS-E12-F1 — if the parser gave us per-page text, fold it into the
+    // prompt with explicit `--- Page N ---` markers so the LLM can return
+    // accurate `sourcePages` for each section. Falls back to the flat text
+    // when the parser path didn't preserve pages (OCR, pptx, etc.).
+    const paginatedPrompt = this.buildPaginatedPrompt(options?.pages);
+    const promptBody = paginatedPrompt ?? this.truncateForPrompt(trimmed);
 
     const systemPrompt = `You are a financial analyst extracting structured metrics from a startup pitch deck.
 
@@ -221,7 +229,14 @@ Rules:
 - For arrKpi: only populate if an ARR or annual recurring revenue figure is explicitly stated. Extract the value verbatim (e.g. "$2.5M"), the currency code (default "USD" if not stated), and the period it refers to verbatim (e.g. "Q1 2026", "current", "FY2025").
 - For growthRateKpi: only populate if a growth rate is explicitly stated. Extract the value verbatim (e.g. "15%"), identify the basis — "MoM" for monthly, "QoQ" for quarterly, "YoY" for annual/yearly, "CAGR" for compound annual. Use "unknown" only when context gives zero signal about the time basis. Extract the period verbatim if stated (default "current").
 - For grossMarginKpi: only populate if a gross margin percentage is explicitly stated. Extract the value verbatim (e.g. "72%") and the period it applies to (default "current").
-- For tamKpi: only populate if a total addressable market (TAM) figure is explicitly stated. Extract the value verbatim (e.g. "4.5"), identify the scale — "M" for millions, "B" for billions, "T" for trillions — and the currency code (default "USD").`;
+- For tamKpi: only populate if a total addressable market (TAM) figure is explicitly stated. Extract the value verbatim (e.g. "4.5"), identify the scale — "M" for millions, "B" for billions, "T" for trillions — and the currency code (default "USD").
+- For problem.statement: a one-sentence summary of the pain the startup addresses, verbatim from the deck if possible.
+- For problem.painPoints: up to 5 concrete pain points the deck names.
+- For solution.statement: a one-sentence summary of the startup's solution, verbatim from the deck if possible.
+- For solution.keyDifferentiators: up to 5 specific differentiators the deck claims.
+- For competitors.namedCompetitors: every named competitor in the deck with optional positioning ("low-cost", "incumbent", etc.). If a competitor matrix is present, prefer that.
+- For competitors.moat: one short sentence on why the startup wins against the named competitors, verbatim if stated.
+- For EVERY section (financials, traction, market, fundraising, product, team, problem, solution, competitors): populate sourcePages with the 1-based deck page numbers you read each field from. If a section spans pages 3-5, include [3,4,5]. If you cannot identify a page, leave the array empty. This is the page-level provenance that lets downstream consumers deep-link back into the deck without re-reading it.`;
 
     try {
       const model = this.providers.resolveModelForPurpose(ModelPurpose.EXTRACTION);
@@ -232,13 +247,13 @@ Rules:
             schema: DeckStructuredDataAiSchema,
             temperature: 0,
             system: systemPrompt,
-            prompt: this.truncateForPrompt(trimmed),
+            prompt: promptBody,
           })
         : await generateText({
             output: Output.object({ schema: DeckStructuredDataAiSchema }),
             temperature: 0,
             system: systemPrompt,
-            prompt: this.truncateForPrompt(trimmed),
+            prompt: promptBody,
             model,
           });
 
@@ -251,6 +266,40 @@ Rules:
       );
       return null;
     }
+  }
+
+  /**
+   * DS-E12-F1 — render per-page text with `--- Page N ---` separators so the
+   * structured-extraction LLM can fill each section's `sourcePages` with real
+   * deck pages. Returns null if no pages are supplied; the caller falls back
+   * to the flat text path.
+   */
+  private buildPaginatedPrompt(
+    pages: Array<{ num: number; text: string }> | undefined,
+  ): string | null {
+    if (!pages || pages.length === 0) {
+      return null;
+    }
+
+    const ordered = [...pages].sort((a, b) => a.num - b.num);
+    const max = this.aiConfig.getExtractionMaxInputLength();
+    const parts: string[] = [];
+    let used = 0;
+
+    for (const page of ordered) {
+      const body = page.text?.trim();
+      if (!body) continue;
+      const marker = `--- Page ${page.num} ---\n`;
+      const segment = `${marker}${body}\n`;
+      if (used + segment.length > max) {
+        parts.push("\n[TRUNCATED]");
+        break;
+      }
+      parts.push(segment);
+      used += segment.length;
+    }
+
+    return parts.length > 0 ? parts.join("\n") : null;
   }
 
   private truncateForPrompt(text: string, maxLength?: number): string {

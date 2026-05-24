@@ -1,13 +1,17 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { eq } from "drizzle-orm";
 import { marked } from "marked";
 import { RedisFallbackClient } from "../ai/services/redis-fallback.service";
-import { detectMissingMaterials } from "../ai/contracts/screening-output/missing-materials";
+import {
+  detectMissingMaterials,
+  type MissingMaterialCode,
+} from "../ai/contracts/screening-output/missing-materials";
 import type { AgentMail } from "agentmail";
 import { DrizzleService } from "../../database";
 import { user } from "../../auth/entities/auth.schema";
 import { startup } from "../startup/entities/startup.schema";
+import { DealEventService } from "../startup/deal-event.service";
 import {
   isMissingWebsiteValue,
   isLikelyPlaceholderStage,
@@ -66,6 +70,7 @@ export class ClaraService {
     private toolsService: ClaraToolsService,
     private copilotService: CopilotService,
     private pdfRenderService: PdfRenderService,
+    @Optional() private dealEvents?: DealEventService,
   ) {
     this.claraInboxId = this.config.get<string>("CLARA_INBOX_ID") ?? null;
     this.adminUserId =
@@ -826,6 +831,28 @@ export class ClaraService {
       );
 
       this.logger.log(`Processed message ${messageId}: intent=${intent}`);
+
+      // DS-E8-F2-S1 — surface the founder's inbound message on the deal
+      // timeline when the conversation is linked to a startup. Skips
+      // unlinked threads (Clara hasn't decided which deal yet) and
+      // self-originated messages (filtered earlier in this method).
+      const linkedStartupId = finalStartupId ?? conversation.startupId ?? null;
+      if (this.dealEvents && linkedStartupId) {
+        void this.dealEvents.record({
+          startupId: linkedStartupId,
+          actorUserId: null,
+          type: "founder.replied",
+          payload: {
+            channel: "email",
+            threadId,
+            messageId,
+            fromEmail,
+            subject: message.subject ?? null,
+            intent,
+            hasAttachments: (message.attachments ?? []).length > 0,
+          },
+        });
+      }
     } catch (error) {
       this.logger.error(
         `Failed to handle message ${messageId}: ${error}`,
@@ -1436,7 +1463,7 @@ export class ClaraService {
 
   async notifyScreeningMissingMaterials(
     startupId: string,
-    missingMaterials: Array<"deck" | "product_description" | "team" | "deal_terms" | "website">,
+    missingMaterials: MissingMaterialCode[],
     options?: {
       pipelineRunId?: string | null;
     },
@@ -1446,12 +1473,13 @@ export class ClaraService {
     const normalizedMissing = Array.from(
       new Set(
         missingMaterials.filter(
-          (material): material is "deck" | "product_description" | "team" | "deal_terms" | "website" =>
+          (material): material is MissingMaterialCode =>
             material === "deck" ||
             material === "product_description" ||
             material === "team" ||
             material === "deal_terms" ||
-            material === "website",
+            material === "website" ||
+            material === "evidence_claims",
         ),
       ),
     );
@@ -1608,14 +1636,16 @@ export class ClaraService {
   }
 
   private formatMissingMaterialLabels(
-    fields: Array<"deck" | "product_description" | "team" | "deal_terms" | "website">,
+    fields: MissingMaterialCode[],
   ): string[] {
-    const labels: Record<"deck" | "product_description" | "team" | "deal_terms" | "website", string> = {
+    const labels: Record<MissingMaterialCode, string> = {
       deck: "pitch deck / presentation",
       product_description: "product description",
       team: "team members and roles",
       deal_terms: "deal terms (funding target, valuation, or raise type)",
       website: "company website URL",
+      evidence_claims: "at least 3 source-linked evidence claims",
+      traction_data: "early traction data (customers, users, churn, or notable wins)",
     };
     return fields
       .map((field) => labels[field])
@@ -1623,7 +1653,7 @@ export class ClaraService {
   }
 
   private formatMaterialAcknowledgement(
-    fields: Array<"deck" | "product_description" | "team" | "deal_terms" | "website">,
+    fields: MissingMaterialCode[],
   ): string {
     const labels = this.formatMissingMaterialLabels(fields);
     if (labels.length === 0) {

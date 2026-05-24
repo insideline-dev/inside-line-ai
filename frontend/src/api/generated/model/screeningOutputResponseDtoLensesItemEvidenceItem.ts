@@ -6,10 +6,24 @@
  * OpenAPI spec version: 2.0
  */
 import type { ScreeningOutputResponseDtoLensesItemEvidenceItemConfidence } from './screeningOutputResponseDtoLensesItemEvidenceItemConfidence';
+import type { ScreeningOutputResponseDtoLensesItemEvidenceItemSourceType } from './screeningOutputResponseDtoLensesItemEvidenceItemSourceType';
 
 export type ScreeningOutputResponseDtoLensesItemEvidenceItem = {
   /** @minLength 1 */
   claim: string;
   source?: string;
   confidence: ScreeningOutputResponseDtoLensesItemEvidenceItemConfidence;
+  sourceType?: ScreeningOutputResponseDtoLensesItemEvidenceItemSourceType;
+  /** @minLength 1 */
+  sourceLabel?: string;
+  /** @minLength 1 */
+  sourceRef?: string;
+  url?: string;
+  /**
+   * @minimum 1
+   * @maximum 9007199254740991
+   */
+  pageNumber?: number;
+  /** @minLength 1 */
+  quote?: string;
 };

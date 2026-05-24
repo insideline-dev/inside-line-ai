@@ -33,6 +33,7 @@ import { industryGroups } from "@/data/industries";
 import {
   buildThesisSavePayload,
   extractResponseData,
+  hasCompletedThesisGenerationCycle,
   mapLegacyLabelsToNodeIds,
   shouldShowThesisGeneratingBanner,
   toggleGeographyNodeSelection,
@@ -55,6 +56,7 @@ import { OnboardingWebsiteForm } from "@/components/investor/OnboardingWebsiteFo
 import { ThesisGeneratingBanner } from "@/components/investor/ThesisGeneratingBanner";
 import { ThesisSummaryCard } from "@/components/investor/ThesisSummaryCard";
 import { DealbreakersEditor } from "@/components/investor/DealbreakersEditor";
+import { StructuredRulesEditor } from "@/components/investor/StructuredRulesEditor";
 import { useSubmitOnboardingWebsite } from "@/lib/investor/useSubmitOnboardingWebsite";
 import { useInvestorOnboardingEvents } from "@/lib/auth/useSocket";
 
@@ -289,11 +291,11 @@ function InvestorThesisPage() {
       return;
     }
 
-    const queuedAtMs = new Date(queuedWebsiteState.queuedAt).getTime();
-    const scrapedAtMs = new Date(websiteScrapedAt).getTime();
-    const summaryAtMs = new Date(thesisSummaryGeneratedAt).getTime();
-
-    if (scrapedAtMs >= queuedAtMs && summaryAtMs >= scrapedAtMs) {
+    if (hasCompletedThesisGenerationCycle({
+      queuedWebsiteAt: queuedWebsiteState.queuedAt,
+      websiteScrapedAt,
+      thesisSummaryGeneratedAt,
+    })) {
       clearPendingOnboardingWebsiteState();
       setQueuedWebsiteState(null);
     }
@@ -871,6 +873,9 @@ function InvestorThesisPage() {
               }
               exclusionNarrative={formData.antiPortfolio}
             />
+
+            {/* DS-E4-F3-S1 — structured (field, operator, value, action) rules. */}
+            <StructuredRulesEditor />
 
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={handleCancelNarrative}>

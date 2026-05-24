@@ -99,7 +99,7 @@ describe('BulkStartupIntakeService', () => {
   });
 
   describe('per-row processing', () => {
-    it('routes each row through StartupIntakeService.createStartup with source=bulk-upload', async () => {
+    it('routes each row through StartupIntakeService.createStartup with source=admin-csv', async () => {
       intake.createStartup.mockImplementation(async (params: StartupIntakeParams) =>
         ok('id-' + params.companyName, params.companyName),
       );
@@ -116,7 +116,7 @@ Acme,https://acme.com,Alice,alice@acme.com`;
           companyName: 'Acme',
           fromEmail: 'alice@acme.com',
           fromName: 'Alice',
-          source: 'bulk-upload',
+          source: 'admin-csv',
         }),
       );
     });

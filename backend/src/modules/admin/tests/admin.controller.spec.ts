@@ -22,6 +22,7 @@ import { AgentConfigService } from '../../ai/services/agent-config.service';
 import { DynamicFlowCatalogService } from '../../ai/services/dynamic-flow-catalog.service';
 import { EarlyAccessService } from '../../early-access';
 import { AdminInvestorService } from '../admin-investor.service';
+import { ScreeningQueueService } from '../../investor/screening-queue.service';
 import { AiConfigService } from '../../ai/services/ai-config.service';
 import { AiModelOverrideService } from '../../ai/services/ai-model-override.service';
 import { UserRole } from '../../../auth/entities/auth.schema';
@@ -257,6 +258,10 @@ describe('AdminController', () => {
             recomputeCalibrationSummary: jest.fn(),
           },
         },
+        {
+          provide: ScreeningQueueService,
+          useValue: { getQueue: jest.fn() },
+        },
       ],
     }).compile();
 
@@ -339,6 +344,18 @@ describe('AdminController', () => {
   });
 
   describe('Investor Calibration Endpoints', () => {
+    const prevCalibration = process.env.ENABLE_CALIBRATION;
+    beforeEach(() => {
+      process.env.ENABLE_CALIBRATION = 'true';
+    });
+    afterEach(() => {
+      if (prevCalibration === undefined) {
+        delete process.env.ENABLE_CALIBRATION;
+      } else {
+        process.env.ENABLE_CALIBRATION = prevCalibration;
+      }
+    });
+
     const mockSnapshotResponse = {
       investorId: 'user-1',
       status: 'completed' as const,

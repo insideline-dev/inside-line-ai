@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { customFetch } from "@/api/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -9,6 +11,7 @@ import {
   Download,
   FileText,
   Loader2,
+  RefreshCw,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -39,8 +42,6 @@ import {
   DataRoomPanel,
 } from "@/components/startup-view";
 import { useToast } from "@/hooks/use-toast";
-import { DealCard } from "@/components/deal-card";
-// import { DealActivityTimeline } from "@/components/startup-view/DealActivityTimeline";
 import type { Startup } from "@/types/startup";
 import type { Evaluation } from "@/types/evaluation";
 import type { ScoringWeights } from "@/lib/score-utils";
@@ -129,6 +130,32 @@ function InvestorStartupDetailPage() {
 
   const [activeTab, setActiveTab] = useState<InvestorStartupTab>("summary");
   const [downloading, setDownloading] = useState(false);
+  const queryClient = useQueryClient();
+  // Dev-only re-screen action. Hidden in production builds (Vite sets
+  // import.meta.env.DEV based on `vite dev` vs `vite build`).
+  const isDevEnv = import.meta.env.DEV;
+  const rescreenMutation = useMutation({
+    mutationFn: async () =>
+      customFetch<{
+        ok: boolean;
+        pipelineRunId: string;
+        classification: string | null;
+        overallScore: number | null;
+        lensCount: number;
+        note: string;
+      }>(`/investor/screening/${id}/rescreen-dev`, { method: "POST" }),
+    onSuccess: (res) => {
+      toast.success(
+        `Re-screened: ${res.classification ?? "unknown"} @ ${res.overallScore ?? "?"} (${res.lensCount} lenses)`,
+        { description: res.note },
+      );
+      queryClient.invalidateQueries({ queryKey: ["investor", "screening"] });
+    },
+    onError: (err) =>
+      toast.error("Re-screen failed", {
+        description: (err as Error).message,
+      }),
+  });
 
   const pdfData = evaluation
     ? {
@@ -181,13 +208,29 @@ function InvestorStartupDetailPage() {
 
   return (
     <div className="space-y-6">
-      <DealCard startupId={id} startup={startup as Startup} />
-      {/* <DealActivityTimeline startupId={id} limit={50} /> */}
       <StartupHeader
         startup={startup as Startup}
         backLink="/investor"
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            {isDevEnv && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => rescreenMutation.mutate()}
+                disabled={rescreenMutation.isPending}
+                className="border-amber-300 text-amber-800 hover:bg-amber-50"
+                data-testid="rescreen-dev-button"
+                title="Re-run screening lenses with existing data. Dev only — does not advance to DD."
+              >
+                {rescreenMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                )}
+                Re-screen (dev)
+              </Button>
+            )}
             {evaluation ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>

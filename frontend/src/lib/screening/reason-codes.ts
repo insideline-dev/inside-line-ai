@@ -7,6 +7,9 @@ export const REASON_CODE_LABELS: Record<string, string> = {
   borderline_overall_score: "Borderline scores",
   missing_materials: "Materials missing",
   out_of_thesis_scope: "Out of thesis scope",
+  out_of_stage: "Stage outside thesis",
+  out_of_scope: "Industry outside thesis",
+  out_of_geo: "Geography outside thesis",
   no_lens_signals: "No screening signals",
   "lens.market.reject": "Market red flag",
   "lens.market.review": "Market unclear",
@@ -28,12 +31,17 @@ export const REASON_CODE_LABELS: Record<string, string> = {
 const LENS_CODE_PATTERN =
   /^lens\.([^.]+)\.(reject|review|low_evidence|low_confidence_evidence)$/;
 const DEALBREAKER_CODE_PATTERN = /^dealbreaker:(.+)$/i;
+const BOUNDARY_CODES = new Set(["out_of_stage", "out_of_scope", "out_of_geo"]);
 const LENS_SUFFIX_LABELS: Record<string, string> = {
   reject: "red flag",
   review: "unclear",
   low_evidence: "needs more evidence",
   low_confidence_evidence: "evidence too weak",
 };
+
+export function isBoundaryViolation(code: string): boolean {
+  return BOUNDARY_CODES.has(code);
+}
 
 export function labelForReasonCode(code: string): string {
   const explicit = REASON_CODE_LABELS[code];

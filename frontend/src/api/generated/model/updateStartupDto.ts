@@ -24,20 +24,14 @@ export interface UpdateStartupDto {
   /** @maxLength 5000 */
   description?: string;
   website?: string;
-  /**
-   * @minLength 1
-   * @maxLength 200
-   */
+  /** @maxLength 200 */
   location?: string;
-  /**
-   * @minLength 1
-   * @maxLength 200
-   */
+  /** @maxLength 200 */
   industry?: string;
   stage?: UpdateStartupDtoStage;
   /**
+   * @minimum 0
    * @maximum 9007199254740991
-   * @exclusiveMinimum 0
    */
   fundingTarget?: number;
   /**

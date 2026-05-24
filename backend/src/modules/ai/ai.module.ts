@@ -9,6 +9,8 @@ import { OrchestratorModule } from "./orchestrator";
 import { LensesModule } from "./lenses";
 import { ContractsModule } from "./contracts/contracts.module";
 import { ScreeningTriageModule } from "./screening/triage";
+import { DdModule } from "../dd/dd.module";
+import { ScreeningCascadeService } from "./screening/cascade.service";
 import { AiProviderService } from "./providers/ai-provider.service";
 import {
   BusinessModelEvaluationAgent,
@@ -54,6 +56,7 @@ import { PipelineFeedbackService } from "./services/pipeline-feedback.service";
 import { PipelineAgentTraceService } from "./services/pipeline-agent-trace.service";
 import { PdfTextExtractorService } from "./services/pdf-text-extractor.service";
 import { DocumentClassificationService } from "./services/document-classification.service";
+import { ThesisFitService } from "./agents/thesis-fit";
 import { ExcelTextExtractorService } from "./services/excel-text-extractor.service";
 import { PptxTextExtractorService } from "./services/pptx-text-extractor.service";
 import { LinkedinEnrichmentService } from "./services/linkedin-enrichment.service";
@@ -100,6 +103,7 @@ import { OpenAiTextGenerationService } from "./services/openai-text-generation.s
     LensesModule,
     ContractsModule,
     ScreeningTriageModule,
+    DdModule,
     // DS-E11-F2-S1 — EvaluationProcessor injects LensDeltaService (in
     // InvestorModule) to persist DD-vs-screening deltas. forwardRef
     // because InvestorModule already depends on AiModule.
@@ -132,6 +136,7 @@ import { OpenAiTextGenerationService } from "./services/openai-text-generation.s
     OpenAiDirectClientService,
     OpenAiTextGenerationService,
     DocumentClassificationService,
+    ThesisFitService,
     ExtractionService,
     PdfTextExtractorService,
     PptxTextExtractorService,
@@ -177,6 +182,7 @@ import { OpenAiTextGenerationService } from "./services/openai-text-generation.s
     ScrapingProcessor,
     ResearchProcessor,
     ScreeningProcessor,
+    ScreeningCascadeService,
     EvaluationProcessor,
     SynthesisProcessor,
     MatchingProcessor,
@@ -201,6 +207,7 @@ import { OpenAiTextGenerationService } from "./services/openai-text-generation.s
     OpenAiDirectClientService,
     OpenAiTextGenerationService,
     DocumentClassificationService,
+    ThesisFitService,
     PipelineStateService,
     PipelineStateSnapshotService,
     PipelineFeedbackService,
@@ -211,6 +218,8 @@ import { OpenAiTextGenerationService } from "./services/openai-text-generation.s
     LensesModule,
     ContractsModule,
     ScreeningTriageModule,
+    ScreeningProcessor,
+    ScreeningCascadeService,
   ],
 })
 export class AiModule {}

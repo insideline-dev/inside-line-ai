@@ -28,6 +28,7 @@ export const matchStatusEnum = pgEnum('match_status', [
   'engaged',
   'closed',
   'passed',
+  'bookmarked',
 ]);
 
 export type MatchStatus = (typeof matchStatusEnum.enumValues)[number];
@@ -217,6 +218,8 @@ export const startupMatch = pgTable(
 
     // Pipeline status
     status: matchStatusEnum('status').default('new').notNull(),
+    /** Restored when unbookmarking from status=bookmarked (DS-E6-F3). */
+    statusBeforeBookmark: text('status_before_bookmark').$type<MatchStatus | null>(),
     statusChangedAt: timestamp('status_changed_at'),
     passReason: text('pass_reason'),
     passNotes: text('pass_notes'),

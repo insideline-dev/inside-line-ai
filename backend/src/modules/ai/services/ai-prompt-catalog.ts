@@ -23,6 +23,14 @@ import {
   ENRICHMENT_GAP_ANALYSIS_SYSTEM_PROMPT,
   ENRICHMENT_GAP_ANALYSIS_USER_PROMPT_TEMPLATE,
 } from "../prompts/enrichment/gap-analysis.prompt";
+import {
+  LENS_MARKET_SYSTEM_V2,
+  LENS_MARKET_USER_V2,
+  LENS_TEAM_SYSTEM_V2,
+  LENS_TEAM_USER_V2,
+  LENS_TRACTION_SYSTEM_V2,
+  LENS_TRACTION_USER_V2,
+} from "../prompts/lens/lens.prompts";
 
 export const AI_PROMPT_KEYS = [
   "extraction.fields",
@@ -1639,19 +1647,20 @@ export const AI_PROMPT_CATALOG: Record<AiPromptKey, PromptCatalogEntry> = {
   "lens.market": {
     key: "lens.market",
     displayName: "Lens — Market",
-    description: "Fast first-pass screen on market quality (DS-E2-F1-S1).",
+    description: "Fast first-pass screen on market quality, thesis-aware (DS-E2-F1-S1).",
     surface: "pipeline",
-    defaultSystemPrompt: "You are the Market Lens. Output structured LensOutput only.",
-    defaultUserPrompt: [
-      "Screen the market for {{startupName}}.",
-      "Sector: {{sector}}",
-      "Stage: {{stage}}",
-      "Description: {{startupDescription}}",
-      "Context notes: {{contextNotes}}",
-    ].join("\n"),
-    allowedVariables: ["startupName", "sector", "stage", "startupDescription", "contextNotes"],
+    defaultSystemPrompt: LENS_MARKET_SYSTEM_V2,
+    defaultUserPrompt: LENS_MARKET_USER_V2,
+    allowedVariables: [
+      "startupName",
+      "sector",
+      "stage",
+      "startupDescription",
+      "contextNotes",
+      "investorThesis",
+    ],
     requiredVariables: ["startupName"],
-    activeVersion: "1",
+    activeVersion: "2",
     versions: {
       "1": {
         systemPrompt: "You are the Market Lens. Output structured LensOutput only.",
@@ -1663,24 +1672,30 @@ export const AI_PROMPT_CATALOG: Record<AiPromptKey, PromptCatalogEntry> = {
           "Context notes: {{contextNotes}}",
         ].join("\n"),
       },
+      "2": {
+        systemPrompt: LENS_MARKET_SYSTEM_V2,
+        userPrompt: LENS_MARKET_USER_V2,
+      },
     },
   },
   "lens.team": {
     key: "lens.team",
     displayName: "Lens — Team",
-    description: "Fast first-pass screen on founder/team quality (DS-E2-F1-S1).",
+    description: "Fast first-pass screen on founder/team quality, thesis-aware (DS-E2-F1-S1).",
     surface: "pipeline",
-    defaultSystemPrompt: "You are the Team Lens. Output structured LensOutput only.",
-    defaultUserPrompt: [
-      "Screen the team for {{startupName}}.",
-      "Sector: {{sector}}",
-      "Stage: {{stage}}",
-      "Description: {{startupDescription}}",
-      "Context notes: {{contextNotes}}",
-    ].join("\n"),
-    allowedVariables: ["startupName", "sector", "stage", "startupDescription", "contextNotes"],
+    defaultSystemPrompt: LENS_TEAM_SYSTEM_V2,
+    defaultUserPrompt: LENS_TEAM_USER_V2,
+    allowedVariables: [
+      "startupName",
+      "sector",
+      "stage",
+      "startupDescription",
+      "contextNotes",
+      "investorThesis",
+      "teamMembers",
+    ],
     requiredVariables: ["startupName"],
-    activeVersion: "1",
+    activeVersion: "2",
     versions: {
       "1": {
         systemPrompt: "You are the Team Lens. Output structured LensOutput only.",
@@ -1692,24 +1707,29 @@ export const AI_PROMPT_CATALOG: Record<AiPromptKey, PromptCatalogEntry> = {
           "Context notes: {{contextNotes}}",
         ].join("\n"),
       },
+      "2": {
+        systemPrompt: LENS_TEAM_SYSTEM_V2,
+        userPrompt: LENS_TEAM_USER_V2,
+      },
     },
   },
   "lens.traction": {
     key: "lens.traction",
     displayName: "Lens — Traction",
-    description: "Fast first-pass screen on demand/momentum signal (DS-E2-F1-S1).",
+    description: "Fast first-pass screen on demand/momentum signal, thesis-aware (DS-E2-F1-S1).",
     surface: "pipeline",
-    defaultSystemPrompt: "You are the Traction Lens. Output structured LensOutput only.",
-    defaultUserPrompt: [
-      "Screen traction for {{startupName}}.",
-      "Sector: {{sector}}",
-      "Stage: {{stage}}",
-      "Description: {{startupDescription}}",
-      "Context notes: {{contextNotes}}",
-    ].join("\n"),
-    allowedVariables: ["startupName", "sector", "stage", "startupDescription", "contextNotes"],
+    defaultSystemPrompt: LENS_TRACTION_SYSTEM_V2,
+    defaultUserPrompt: LENS_TRACTION_USER_V2,
+    allowedVariables: [
+      "startupName",
+      "sector",
+      "stage",
+      "startupDescription",
+      "contextNotes",
+      "investorThesis",
+    ],
     requiredVariables: ["startupName"],
-    activeVersion: "1",
+    activeVersion: "2",
     versions: {
       "1": {
         systemPrompt: "You are the Traction Lens. Output structured LensOutput only.",
@@ -1720,6 +1740,10 @@ export const AI_PROMPT_CATALOG: Record<AiPromptKey, PromptCatalogEntry> = {
           "Description: {{startupDescription}}",
           "Context notes: {{contextNotes}}",
         ].join("\n"),
+      },
+      "2": {
+        systemPrompt: LENS_TRACTION_SYSTEM_V2,
+        userPrompt: LENS_TRACTION_USER_V2,
       },
     },
   },

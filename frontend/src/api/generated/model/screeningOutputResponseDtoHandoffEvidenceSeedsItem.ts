@@ -7,6 +7,7 @@
  */
 import type { ScreeningOutputResponseDtoHandoffEvidenceSeedsItemConfidence } from './screeningOutputResponseDtoHandoffEvidenceSeedsItemConfidence';
 import type { ScreeningOutputResponseDtoHandoffEvidenceSeedsItemSignal } from './screeningOutputResponseDtoHandoffEvidenceSeedsItemSignal';
+import type { ScreeningOutputResponseDtoHandoffEvidenceSeedsItemSourceType } from './screeningOutputResponseDtoHandoffEvidenceSeedsItemSourceType';
 
 export type ScreeningOutputResponseDtoHandoffEvidenceSeedsItem = {
   /** @minLength 1 */
@@ -17,6 +18,19 @@ export type ScreeningOutputResponseDtoHandoffEvidenceSeedsItem = {
   claim: string;
   source?: string;
   confidence: ScreeningOutputResponseDtoHandoffEvidenceSeedsItemConfidence;
+  sourceType?: ScreeningOutputResponseDtoHandoffEvidenceSeedsItemSourceType;
+  /** @minLength 1 */
+  sourceLabel?: string;
+  /** @minLength 1 */
+  sourceRef?: string;
+  url?: string;
+  /**
+   * @minimum 1
+   * @maximum 9007199254740991
+   */
+  pageNumber?: number;
+  /** @minLength 1 */
+  quote?: string;
   /**
    * @minimum 0
    * @maximum 100

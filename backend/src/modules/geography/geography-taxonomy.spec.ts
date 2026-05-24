@@ -48,6 +48,14 @@ describe("geography-taxonomy", () => {
     ).toBe(false);
   });
 
+  it("matches a selected sub-region against its parent startup country path", () => {
+    const startupGeo = deriveStartupGeography("San Francisco, CA");
+
+    expect(
+      geographySelectionMatchesStartupPath(["l4:us_ca"], startupGeo.path),
+    ).toBe(true);
+  });
+
   it("exposes MENA > GCC taxonomy nodes", () => {
     const taxonomy = getInvestorGeographyTaxonomy();
     const mena = taxonomy.find((node) => node.id === "l1:mena");
@@ -57,5 +65,15 @@ describe("geography-taxonomy", () => {
     expect(gcc).toBeDefined();
     expect(gcc?.children?.map((child) => child.id)).toContain("l3:ae");
     expect(gcc?.children?.map((child) => child.id)).toContain("l3:sa");
+  });
+
+  it("exposes California beneath United States", () => {
+    const taxonomy = getInvestorGeographyTaxonomy();
+    const northAmerica = taxonomy.find((node) => node.id === "l1:north_america");
+    const usCanada = northAmerica?.children?.find((node) => node.id === "l2:us_canada");
+    const unitedStates = usCanada?.children?.find((node) => node.id === "l3:us");
+
+    expect(unitedStates).toBeDefined();
+    expect(unitedStates?.children?.map((child) => child.id)).toContain("l4:us_ca");
   });
 });

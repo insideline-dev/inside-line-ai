@@ -40,6 +40,15 @@ export const DEAL_EVENT_TYPES = [
   "decision.recorded",
   "comment.added",
   "thesis.regenerated",
+  "open_questions.seeded",
+  "agent.refresh",
+  // DS-E8-F1-S2 / F2 — partner-visible lifecycle signals:
+  // `stage.changed` fires when an investor moves a deal across the
+  // kanban (new → reviewing → engaged → closed / passed / bookmarked).
+  // `founder.replied` fires when Clara logs an inbound message on a
+  // conversation that's linked to a deal.
+  "stage.changed",
+  "founder.replied",
 ] as const;
 
 export type DealEventType = (typeof DEAL_EVENT_TYPES)[number];

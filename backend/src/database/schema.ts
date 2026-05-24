@@ -50,3 +50,6 @@ export * from '../modules/copilot/entities';
 
 // Early Access
 export * from '../modules/early-access/entities';
+
+// Due Diligence support
+export * from '../modules/dd/entities';

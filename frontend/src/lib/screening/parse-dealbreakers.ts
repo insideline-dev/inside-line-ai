@@ -84,7 +84,9 @@ function stripLeadingVerbs(input: string): string {
 
 function normalizeTag(raw: string): string | null {
   const stripped = stripLeadingVerbs(raw);
-  const trimmed = stripped.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9.&/+-]+$/g, "");
+  const verticalAiMatch = stripped.match(/^(vertical\s+ai)\s+for\s+.+$/i);
+  const narrowed = verticalAiMatch ? "vertical AI" : stripped;
+  const trimmed = narrowed.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9.&/+-]+$/g, "");
   if (trimmed.length < MIN_TAG_LENGTH || trimmed.length > MAX_TAG_LENGTH) {
     return null;
   }

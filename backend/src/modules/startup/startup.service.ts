@@ -37,7 +37,12 @@ import {
   pipelineRun,
   pipelineStateSnapshot,
 } from "../ai/entities";
-import { startup, StartupStatus } from "./entities/startup.schema";
+import {
+  startup,
+  StartupSourcePath,
+  StartupStatus,
+  StartupStage,
+} from "./entities/startup.schema";
 import { agentConversation } from "../agent/entities/agent.schema";
 import { investorInboxSubmission } from "../integrations/agentmail/entities/investor-inbox-submission.schema";
 import {
@@ -58,6 +63,7 @@ import { deriveStartupGeography } from "../geography";
 import { sanitizeNarrativeText } from "../ai/services/narrative-sanitizer";
 import {
   findCanonicalStartupDuplicate,
+  buildScreeningInputV1,
   normalizeScreeningIntakeCandidate,
 } from "./screening-intake-normalization";
 import { FundingEnrichmentService } from "../integrations/funding-enrichment";
@@ -317,32 +323,63 @@ export class StartupService {
         }
       }
 
-      const slug = this.generateSlug(normalized.name);
-      const geography = deriveStartupGeography(normalized.location);
       const isInvestorSubmission = submittedByRole === UserRole.INVESTOR;
+      const sourcePath =
+        submittedByRole === UserRole.INVESTOR
+          ? StartupSourcePath.INVESTOR_MANUAL
+          : submittedByRole === UserRole.SCOUT
+            ? StartupSourcePath.SCOUT_SUBMITTED
+            : submittedByRole === UserRole.ADMIN
+              ? StartupSourcePath.ADMIN_MANUAL
+              : StartupSourcePath.FOUNDER_MANUAL;
+
+      // Investor / admin loose intake may submit without a stage or round
+      // size. DB columns are notNull, so default both — least committal,
+      // gets refined in DD. fundingTarget=0 is a sentinel meaning
+      // "unknown at intake".
+      const stageForInsert = dto.stage ?? StartupStage.PRE_SEED;
+      const fundingTargetForInsert = dto.fundingTarget ?? 0;
+
+      // DS-E1-F4-S1: route every insert through the canonical V1 shape.
+      const canonical = buildScreeningInputV1({
+        raw: dto,
+        sourcePath,
+        status: StartupStatus.DRAFT,
+        isPrivate: options?.isPrivate ?? isInvestorSubmission,
+        stage: stageForInsert,
+        fundingTarget: fundingTargetForInsert,
+        teamSize: dto.teamSize,
+        submittedByRole,
+        submitterUserId: userId,
+        scoutId: options?.scoutId ?? (submittedByRole === UserRole.SCOUT ? userId : undefined),
+      });
+      const slug = this.generateSlug(canonical.company.name);
 
       const [created] = await db
         .insert(startup)
         .values({
           userId,
-          submittedByRole,
-          scoutId: options?.scoutId ?? (submittedByRole === UserRole.SCOUT ? userId : undefined),
-          isPrivate: options?.isPrivate ?? isInvestorSubmission,
+          submittedByRole: canonical.owners.submittedByRole,
+          sourcePath: canonical.sourcePath,
+          scoutId: canonical.owners.scoutId,
+          isPrivate: canonical.stageGate.isPrivate,
           slug,
           ...dto,
-          name: normalized.name,
-          tagline: normalized.tagline,
-          description: normalized.description,
-          website: normalized.website,
-          location: normalized.location,
-          industry: normalized.industry,
-          normalizedRegion: geography.normalizedRegion,
-          geoCountryCode: geography.countryCode,
-          geoLevel1: geography.level1,
-          geoLevel2: geography.level2,
-          geoLevel3: geography.level3,
-          geoPath: geography.path,
-          status: StartupStatus.DRAFT,
+          stage: canonical.round.stage ?? stageForInsert,
+          fundingTarget: canonical.round.fundingTarget ?? fundingTargetForInsert,
+          name: canonical.company.name,
+          tagline: canonical.company.tagline,
+          description: canonical.company.description,
+          website: canonical.company.website,
+          location: canonical.geography.raw,
+          industry: canonical.company.industry,
+          normalizedRegion: canonical.geography.normalizedRegion,
+          geoCountryCode: canonical.geography.countryCode,
+          geoLevel1: canonical.geography.level1,
+          geoLevel2: canonical.geography.level2,
+          geoLevel3: canonical.geography.level3,
+          geoPath: canonical.geography.path,
+          status: canonical.stageGate.status,
         })
         .returning();
 

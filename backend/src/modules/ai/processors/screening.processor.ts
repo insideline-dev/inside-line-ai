@@ -20,9 +20,10 @@ import { DrizzleService } from "../../../database";
 import { NotificationGateway } from "../../../notification/notification.gateway";
 import { startup } from "../../startup/entities";
 import { DealEventService } from "../../startup/deal-event.service";
+import { OpenQuestionService } from "../../dd/open-question.service";
 import { user, UserRole } from "../../../auth/entities/auth.schema";
 import { investorThesis, startupMatch } from "../../investor/entities/investor.schema";
-import { startupLensResult } from "../entities";
+import { startupLensResult, type LensEvidence } from "../entities";
 import type { SynthesisResult } from "../interfaces/phase-results.interface";
 import { InvestorMatchingService } from "../services/investor-matching.service";
 import { PipelinePhase } from "../interfaces/pipeline.interface";
@@ -30,8 +31,17 @@ import type {
   ScreeningLensSummary,
   ScreeningResult,
 } from "../interfaces/phase-results.interface";
-import { LensRegistryService } from "../lenses/lens-registry.service";
-import type { LensInput } from "../schemas/lens";
+import { MarketLens } from "../lenses/market.lens";
+import { TeamLens } from "../lenses/team.lens";
+import { TractionLens } from "../lenses/traction.lens";
+import type { BaseLensAgent, LensRunResult } from "../lenses/base-lens.agent";
+import {
+  normalizeLensEvidenceLink,
+  type LensInput,
+  type LensOutput,
+} from "../schemas/lens";
+
+const LENS_RUN_CONCURRENCY = 3;
 import { ScreeningOutputService } from "../contracts/screening-output";
 import { ScreeningTriageService } from "../screening/triage";
 import { PipelineStateService } from "../services/pipeline-state.service";
@@ -50,6 +60,22 @@ function projectEvidence(
   return evidence.map((e) => ({ confidence: e.confidence }));
 }
 
+/**
+ * DS-E9-F2 — unlinked-claim firewall.
+ *
+ * A non-fallback lens output with zero evidence items would persist a
+ * rationale-as-claim with nothing backing it; that poisons the evidence
+ * graph. Fallback rows are allowed through because their rationale carries
+ * the LENS_FALLBACK marker and downstream consumers treat them as synthetic
+ * placeholders, not as load-bearing claims.
+ */
+export function isUnlinkedLensOutput(
+  usedFallback: boolean,
+  evidenceCount: number,
+): boolean {
+  return !usedFallback && evidenceCount === 0;
+}
+
 @Injectable()
 export class ScreeningProcessor
   extends BaseProcessor<AiScreeningJobData, AiScreeningJobResult>
@@ -57,9 +83,20 @@ export class ScreeningProcessor
 {
   protected readonly logger = new Logger(ScreeningProcessor.name);
 
+  /**
+   * Lens agents run in parallel during screening. The list is explicit (no
+   * registry indirection) so adding a lens means importing it here and
+   * appending to the constructor's `lenses` initializer. Versioning lives at
+   * the prompt-catalog layer (`activeVersion` on each prompt key), not at
+   * the lens class layer.
+   */
+  private readonly lenses: ReadonlyArray<BaseLensAgent<LensOutput>>;
+
   constructor(
     config: ConfigService,
-    private lensRegistry: LensRegistryService,
+    market: MarketLens,
+    team: TeamLens,
+    traction: TractionLens,
     private drizzle: DrizzleService,
     private pipelineState: PipelineStateService,
     private pipelineService: PipelineService,
@@ -68,6 +105,7 @@ export class ScreeningProcessor
     private screeningTriage: ScreeningTriageService,
     private dealEvents: DealEventService,
     private investorMatching: InvestorMatchingService,
+    private openQuestions: OpenQuestionService,
   ) {
     const redisUrl = config.get<string>("REDIS_URL", "redis://localhost:6379");
     const queuePrefix = config.get<string>("QUEUE_PREFIX");
@@ -77,6 +115,7 @@ export class ScreeningProcessor
       QUEUE_CONCURRENCY[QUEUE_NAMES.AI_SCREENING],
       queuePrefix,
     );
+    this.lenses = [market, team, traction];
   }
 
   async onModuleInit() {
@@ -119,7 +158,7 @@ export class ScreeningProcessor
   protected async process(
     job: Job<AiScreeningJobData>,
   ): Promise<Omit<AiScreeningJobResult, "jobId" | "duration" | "success">> {
-    const { startupId, pipelineRunId } = job.data;
+    const { startupId, pipelineRunId, userId } = job.data;
 
     if (job.data.type !== "ai_screening") {
       throw new Error("Invalid job type for screening processor");
@@ -147,7 +186,8 @@ export class ScreeningProcessor
         pipelineState: this.pipelineState,
         pipelineService: this.pipelineService,
         notificationGateway: this.notificationGateway,
-        run: () => this.runScreening(startupId, pipelineRunId),
+        run: () =>
+          this.runScreening(startupId, pipelineRunId, { userId }),
       });
     } finally {
       clearInterval(heartbeat);
@@ -161,21 +201,155 @@ export class ScreeningProcessor
     };
   }
 
+  /**
+   * Run the registered lenses in parallel with bounded concurrency. Each lens
+   * handles its own fallback so a single failure doesn't take the batch down;
+   * a missing entry in the returned map signals an unrecoverable error.
+   *
+   * Emits per-lens agent progress events (`started` → `completed`/`fallback`)
+   * via `pipelineService.onAgentProgress` so the admin pipeline-live view
+   * can render lens-by-lens execution inside the SCREENING phase — same UX
+   * pattern the research/evaluation phases already use.
+   */
+  private async runLenses(
+    ctx: LensInput,
+    progress?: { userId: string; pipelineRunId: string; startupId: string },
+  ): Promise<Record<string, LensRunResult<LensOutput>>> {
+    const out: Record<string, LensRunResult<LensOutput>> = {};
+    let cursor = 0;
+    const emit = async (
+      key: string,
+      lifecycle: "started" | "completed" | "fallback",
+      usedFallback = false,
+      errorMessage?: string,
+    ): Promise<void> => {
+      if (!progress) return;
+      try {
+        await this.pipelineService.onAgentProgress({
+          startupId: progress.startupId,
+          userId: progress.userId,
+          pipelineRunId: progress.pipelineRunId,
+          phase: PipelinePhase.SCREENING,
+          key: `lens_${key}`,
+          status: lifecycle === "started" ? "running" : "completed",
+          progress: lifecycle === "started" ? 0 : 100,
+          attempt: 1,
+          retryCount: 0,
+          phaseRetryCount: 0,
+          usedFallback,
+          error: errorMessage,
+          lifecycleEvent: lifecycle,
+        });
+      } catch (err) {
+        this.logger.warn(
+          `Lens progress emit failed (${key} ${lifecycle}): ${(err as Error).message}`,
+        );
+      }
+    };
+
+    const next = async (): Promise<void> => {
+      while (cursor < this.lenses.length) {
+        const idx = cursor++;
+        const lens = this.lenses[idx];
+        await emit(lens.key, "started");
+        try {
+          const r = await lens.run(ctx);
+          out[lens.key] = r;
+          await emit(
+            lens.key,
+            r.usedFallback ? "fallback" : "completed",
+            r.usedFallback,
+            r.error,
+          );
+        } catch (err) {
+          this.logger.error(
+            `Lens ${lens.key} threw outside its fallback: ${(err as Error).message}`,
+          );
+          await emit(lens.key, "completed", true, (err as Error).message);
+        }
+      }
+    };
+    const workerCount = Math.min(LENS_RUN_CONCURRENCY, this.lenses.length);
+    await Promise.all(Array.from({ length: workerCount }, () => next()));
+    return out;
+  }
+
   /** Public so unit tests can drive the screening flow without BullMQ. */
   async runScreening(
     startupId: string,
     pipelineRunId: string,
+    progressContext?: { userId: string },
   ): Promise<ScreeningResult> {
     const ctx = await this.buildContext(startupId);
-    const results = await this.lensRegistry.runAll(ctx);
+    const results = await this.runLenses(
+      ctx,
+      progressContext
+        ? {
+            userId: progressContext.userId,
+            pipelineRunId,
+            startupId,
+          }
+        : undefined,
+    );
 
     const lenses: ScreeningLensSummary[] = [];
     const failedKeys: string[] = [];
 
-    for (const key of this.lensRegistry.keys()) {
-      const result = results[key];
+    for (const lens of this.lenses) {
+      const result = results[lens.key];
       if (!result) {
-        failedKeys.push(key);
+        failedKeys.push(lens.key);
+        continue;
+      }
+
+      let normalizedEvidence: Array<
+        LensOutput["evidence"][number] & {
+          sourceType: "deck_page" | "public_url" | "enrichment_call" | "research_source" | "internal_trace";
+          sourceLabel: string;
+          sourceRef: string;
+          url?: string;
+          pageNumber?: number;
+        }
+      >;
+      try {
+        normalizedEvidence = result.output.evidence.map((item) => {
+          const link = normalizeLensEvidenceLink(item.source);
+          const url =
+            link.url ?? (item.url === null ? undefined : item.url);
+          const pageNumber =
+            link.pageNumber ??
+            (item.pageNumber === null ? undefined : item.pageNumber);
+          const quote =
+            item.quote === null || item.quote === undefined
+              ? undefined
+              : item.quote;
+          return {
+            claim: item.claim,
+            source: item.source.trim(),
+            confidence: item.confidence,
+            sourceType: link.sourceType,
+            sourceLabel: link.sourceLabel,
+            sourceRef: link.sourceRef,
+            url,
+            pageNumber,
+            quote,
+          };
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        this.logger.warn(
+          `[ScreeningProcessor] Rejecting lens '${result.key}' for ${startupId}: ${message}`,
+        );
+        failedKeys.push(lens.key);
+        continue;
+      }
+
+      // DS-E9-F2 — unlinked-claim firewall. See `isUnlinkedLensOutput`.
+      if (isUnlinkedLensOutput(result.usedFallback, normalizedEvidence.length)) {
+        this.logger.warn(
+          `[ScreeningProcessor] DS-E9-F2 firewall: rejecting unlinked lens '${result.key}' for ${startupId} (no evidence)`,
+        );
+        failedKeys.push(lens.key);
         continue;
       }
 
@@ -192,7 +366,7 @@ export class ScreeningProcessor
       });
 
       if (result.usedFallback) {
-        failedKeys.push(key);
+        failedKeys.push(lens.key);
       }
 
       try {
@@ -203,10 +377,7 @@ export class ScreeningProcessor
           score: result.output.score,
           signal: result.output.signal,
           rationale: result.output.rationale,
-          evidence: result.output.evidence.map((item) => ({
-            ...item,
-            source: item.source ?? undefined,
-          })),
+          evidence: normalizedEvidence as LensEvidence[],
           modelId: result.modelId,
           promptKey: result.promptKey,
           // DS-E2-F1-S2 — persist the version pair that produced this row so
@@ -312,6 +483,29 @@ export class ScreeningProcessor
       this.logger.debug(
         `[ScreeningProcessor] ScreeningOutput v${screeningContract.version} for ${startupId} run=${pipelineRunId}: overall=${screeningContract.overall.signal}@${screeningContract.overall.score} lenses=${screeningContract.lenses.length}`,
       );
+
+      try {
+        const seedResult = await this.openQuestions.seedFromHandoff(
+          startupId,
+          screeningContract.handoff.openIssues,
+        );
+        void this.dealEvents.record({
+          startupId,
+          type: "open_questions.seeded",
+          payload: {
+            count:
+              seedResult.seeded +
+              seedResult.updated +
+              screeningContract.handoff.openIssues.length,
+          },
+        });
+      } catch (seedErr) {
+        const seedMsg =
+          seedErr instanceof Error ? seedErr.message : String(seedErr);
+        this.logger.warn(
+          `[ScreeningProcessor] Open question seed failed for ${startupId}: ${seedMsg}`,
+        );
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.logger.warn(
@@ -366,10 +560,21 @@ export class ScreeningProcessor
       return null;
     }
 
-    const synthesis = (await this.pipelineState.getPhaseResult(
-      startupId,
-      PipelinePhase.SYNTHESIS,
-    )) as SynthesisResult | null;
+    // Pipeline state may not exist (e.g. dev-only rescreen-dev path that
+    // bypasses the BullMQ pipeline). Treat that as "no synthesis yet"
+    // rather than crashing the triage gate.
+    let synthesis: SynthesisResult | null = null;
+    try {
+      synthesis = (await this.pipelineState.getPhaseResult(
+        startupId,
+        PipelinePhase.SYNTHESIS,
+      )) as SynthesisResult | null;
+    } catch (err) {
+      this.logger.debug(
+        `[ScreeningProcessor] No pipeline state for ${startupId}; thesis-fit gate remains unseeded (${err instanceof Error ? err.message : String(err)})`,
+      );
+      return null;
+    }
     if (!synthesis) {
       this.logger.debug(
         `[ScreeningProcessor] No synthesis result available yet for ${startupId}; thesis-fit gate remains unseeded`,
@@ -465,6 +670,8 @@ export class ScreeningProcessor
         industry: startup.industry,
         sectorIndustry: startup.sectorIndustry,
         stage: startup.stage,
+        userId: startup.userId,
+        teamMembers: startup.teamMembers,
       })
       .from(startup)
       .where(eq(startup.id, startupId))
@@ -474,13 +681,92 @@ export class ScreeningProcessor
       throw new Error(`Startup ${startupId} not found for screening`);
     }
 
+    // Prefer the user-submitted `description` over the LLM-generated
+    // `productDescription`. The latter has shown evidence of fabricating
+    // content from unrelated startups during enrichment.
+    const userDescription = (row.description ?? "").trim();
+    const productDescription = (row.productDescription ?? "").trim();
+    const startupDescription =
+      userDescription.length > 0
+        ? userDescription
+        : productDescription;
+    const contextNotes =
+      userDescription.length > 0 && productDescription.length > 0
+        ? `Additional system-extracted notes (treat as low-confidence): ${productDescription.slice(0, 400)}`
+        : "";
+
+    // Pull the investor thesis owned by the user who submitted this deal.
+    // v2 lens prompts make thesis a first-class input; empty string is OK
+    // (the prompt is calibrated to handle "no thesis on file").
+    const investorThesis = await this.formatThesisForLens(row.userId);
+
+    // Pre-format team roster for the Team lens.
+    const teamMembers = this.formatTeamMembers(row.teamMembers);
+
     return {
       startupId,
       startupName: row.name,
-      startupDescription: row.productDescription ?? row.description ?? "",
+      startupDescription,
       sector: row.sectorIndustry ?? row.industry ?? "",
       stage: row.stage ?? "",
-      contextNotes: "",
+      contextNotes,
+      investorThesis,
+      teamMembers,
     };
+  }
+
+  private async formatThesisForLens(userId: string | null): Promise<string> {
+    if (!userId) return "";
+    const [t] = await this.drizzle.db
+      .select()
+      .from(investorThesis)
+      .where(eq(investorThesis.userId, userId))
+      .limit(1);
+    if (!t) return "";
+
+    const lines: string[] = [];
+    const push = (label: string, value: string | null | undefined) => {
+      if (value && value.trim().length > 0) lines.push(`- ${label}: ${value}`);
+    };
+    const pushList = (label: string, value: string[] | null | undefined) => {
+      if (value && value.length > 0) push(label, value.join(", "));
+    };
+
+    pushList("Sectors / industries", t.industries);
+    pushList("Stages", t.stages);
+    pushList("Geographic focus", t.geographicFocus);
+    pushList("Business models", t.businessModels);
+    if (t.checkSizeMin != null || t.checkSizeMax != null) {
+      const min =
+        t.checkSizeMin != null ? `$${t.checkSizeMin.toLocaleString()}` : "?";
+      const max =
+        t.checkSizeMax != null ? `$${t.checkSizeMax.toLocaleString()}` : "?";
+      push("Check size range", `${min} – ${max}`);
+    }
+    pushList("Must-have features", t.mustHaveFeatures);
+    pushList("Deal breakers", t.dealBreakers);
+    if (t.minTeamSize != null) push("Min team size", String(t.minTeamSize));
+    push("Narrative", t.thesisNarrative);
+
+    return lines.length > 0
+      ? lines.join("\n")
+      : "(thesis row exists but no criteria set)";
+  }
+
+  private formatTeamMembers(
+    members: Array<{ name?: string; role?: string; linkedinUrl?: string }> | null,
+  ): string {
+    if (!members || members.length === 0) return "";
+    return members
+      .filter((m) => m && (m.name || m.role || m.linkedinUrl))
+      .map((m) => {
+        const parts = [
+          m.name?.trim() || "(unnamed)",
+          m.role?.trim() ? `— ${m.role.trim()}` : "",
+          m.linkedinUrl?.trim() ? `(${m.linkedinUrl.trim()})` : "",
+        ].filter(Boolean);
+        return `- ${parts.join(" ")}`;
+      })
+      .join("\n");
   }
 }

@@ -1,7 +1,9 @@
 import { BadRequestException, Injectable, Logger, Optional } from "@nestjs/common";
 import { ModuleRef } from "@nestjs/core";
 import { randomUUID } from "crypto";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
+import { investorDealDecision } from "../../investor/entities/investor-deal-decision.schema";
+import { screeningDecision as screeningDecisionTbl } from "../entities/screening-decision.schema";
 import { DrizzleService } from "../../../database";
 import { StorageService } from "../../../storage";
 import { NotificationType } from "../../../notification/entities";
@@ -9,6 +11,7 @@ import { NotificationService } from "../../../notification/notification.service"
 import { QueueService } from "../../../queue";
 import { startup, StartupStatus } from "../../startup/entities";
 import { STARTUP_DESCRIPTION_PLACEHOLDER } from "../../startup/startup.constants";
+import type { MissingMaterialCode } from "../contracts/screening-output/missing-materials";
 import { UserRole } from "../../../auth/entities/auth.schema";
 import { startupEvaluation } from "../../analysis/entities";
 import { pipelineRun, pipelineAgentRun } from "../entities";
@@ -297,7 +300,7 @@ export class PipelineService {
 
   private async notifyClaraMissingMaterialsForScreening(
     startupId: string,
-    missingMaterials: Array<"deck" | "product_description" | "team" | "deal_terms" | "website">,
+    missingMaterials: MissingMaterialCode[],
     options?: {
       pipelineRunId?: string | null;
     },
@@ -368,7 +371,7 @@ export class PipelineService {
   }
 
   private humanizeScreeningMissingMaterial(
-    material: "deck" | "product_description" | "team" | "deal_terms" | "website",
+    material: MissingMaterialCode,
   ): string {
     switch (material) {
       case "deck":
@@ -381,6 +384,10 @@ export class PipelineService {
         return "deal terms";
       case "website":
         return "company website URL";
+      case "evidence_claims":
+        return "at least 3 source-linked evidence claims";
+      case "traction_data":
+        return "early traction data (customers, users, churn, or notable wins)";
     }
   }
 
@@ -1962,7 +1969,7 @@ export class PipelineService {
 
   private normalizeScreeningMissingMaterials(
     missingMaterials: ScreeningResult["missingMaterials"] | null | undefined,
-  ): Array<"deck" | "product_description" | "team" | "deal_terms" | "website"> {
+  ): MissingMaterialCode[] {
     return (
       missingMaterials?.filter(
         (material): material is
@@ -1987,6 +1994,60 @@ export class PipelineService {
     )) as ScreeningResult | null;
 
     if (!screening?.classification || screening.classification === "advance") {
+      return;
+    }
+
+    // Honor partner override: if an investor explicitly clicked ADVANCE
+    // recently (recorded as investor_deal_decision verdict='advance'),
+    // treat the deal as advance regardless of this run's automatic
+    // screening classification. Otherwise a fresh full pipeline restarted
+    // via the advance endpoint would re-screen and the new (possibly
+    // review/reject) verdict would cancel the partner's intent.
+    //
+    // We use a 1h lookback (rather than strict decidedAt >= runStartedAt)
+    // because the advance endpoint records the decision and starts the
+    // pipeline within ms of each other — clock skew between the DB now()
+    // and JS Date.now() can put decidedAt either side of runStartedAt.
+    // 1h is comfortably longer than any single pipeline run and short
+    // enough that a stale decision from days ago won't pollute a manual
+    // re-run.
+    const OVERRIDE_WINDOW_MS = 60 * 60 * 1000;
+    const cutoff = new Date(Date.now() - OVERRIDE_WINDOW_MS);
+    const [recentAdvance] = await this.drizzle.db
+      .select({ id: investorDealDecision.id, decidedAt: investorDealDecision.decidedAt })
+      .from(investorDealDecision)
+      .where(
+        and(
+          eq(investorDealDecision.startupId, state.startupId),
+          eq(investorDealDecision.verdict, "advance"),
+        ),
+      )
+      .orderBy(desc(investorDealDecision.decidedAt))
+      .limit(1);
+    if (recentAdvance && new Date(recentAdvance.decidedAt) >= cutoff) {
+      this.logger.log(
+        `[Pipeline] Investor advance override active for startup ${state.startupId} (decision ${recentAdvance.id}); honoring partner intent over auto-classification '${screening.classification}'.`,
+      );
+      // Patch the persisted screening_decision row so the queue + UI
+      // reflect the override too.
+      try {
+        const [latest] = await this.drizzle.db
+          .select({ id: screeningDecisionTbl.id })
+          .from(screeningDecisionTbl)
+          .where(eq(screeningDecisionTbl.startupId, state.startupId))
+          .orderBy(desc(screeningDecisionTbl.createdAt))
+          .limit(1);
+        if (latest) {
+          await this.drizzle.db
+            .update(screeningDecisionTbl)
+            .set({ classification: "advance" })
+            .where(eq(screeningDecisionTbl.id, latest.id));
+        }
+      } catch (err) {
+        this.logger.warn(
+          `[Pipeline] Could not patch screening_decision verdict for advance override on ${state.startupId}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
       return;
     }
 
@@ -2448,9 +2509,7 @@ export class PipelineService {
     startupId: string,
   ): Promise<{
     shouldSkipClaraCompletionEmail: boolean;
-    missingMaterials: Array<
-      "deck" | "product_description" | "team" | "deal_terms" | "website"
-    >;
+    missingMaterials: MissingMaterialCode[];
     actionNeededNotification?: {
       type: NotificationType;
       title: string;

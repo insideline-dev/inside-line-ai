@@ -21,11 +21,16 @@ import {
   PortalSubmissionAuditOutcome,
   PortalLinkIntegrity,
 } from './entities';
-import { startup, StartupStatus } from '../startup/entities/startup.schema';
+import {
+  startup,
+  StartupSourcePath,
+  StartupStatus,
+} from '../startup/entities/startup.schema';
 import { deriveStartupGeography } from '../geography';
 import {
   findCanonicalStartupDuplicate,
   normalizeScreeningCompanyNameForDuplicateMatching,
+  buildScreeningInputV1,
   normalizeScreeningIntakeCandidate,
 } from '../startup/screening-intake-normalization';
 import { SubmitToPortal, GetSubmissionsQuery } from './dto';
@@ -182,13 +187,28 @@ export class SubmissionService {
       this.logger.log(`Created new user for founder ${founderEmail}`);
     }
 
-    const normalizedStartup = normalizeScreeningIntakeCandidate(dto);
-    const duplicate = await findCanonicalStartupDuplicate(this.drizzle.db, {
-      companyName: normalizedStartup.name,
-      website: normalizedStartup.website || undefined,
+    // DS-E1-F4-S1: route every portal insert through the canonical V1 shape.
+    const canonical = buildScreeningInputV1({
+      raw: dto,
+      sourcePath: StartupSourcePath.FOUNDER_SUBMITTED,
+      status: StartupStatus.ANALYZING,
+      // DS-E1-F2-S2: founder picks distribution. 'this_fund_only' marks the
+      // deal private so cross-matching keeps it scoped to the portal owner;
+      // 'all_aligned' (default) leaves it cross-matchable.
+      isPrivate: dto.distributionMode === 'this_fund_only',
+      stage: dto.stage,
+      fundingTarget: dto.fundingTarget,
+      teamSize: dto.teamSize,
+      submitterUserId: foundUser.id,
+      portalId,
+      founderEmail,
+      founderName: dto.founderName,
     });
-    const slug = this.generateSlug(normalizedStartup.name);
-    const geography = deriveStartupGeography(normalizedStartup.location || dto.location);
+    const duplicate = await findCanonicalStartupDuplicate(this.drizzle.db, {
+      companyName: canonical.company.name,
+      website: canonical.company.website || undefined,
+    });
+    const slug = this.generateSlug(canonical.company.name);
 
     const result = await this.drizzle.db.transaction(async (tx) => {
       let startupId: string;
@@ -201,25 +221,27 @@ export class SubmissionService {
           .insert(startup)
           .values({
             userId: foundUser.id,
+            sourcePath: canonical.sourcePath,
+            isPrivate: canonical.stageGate.isPrivate,
             slug,
-            name: normalizedStartup.name,
-            tagline: normalizedStartup.tagline,
-            description: normalizedStartup.description,
-            website: normalizedStartup.website,
-            location: normalizedStartup.location,
-            normalizedRegion: geography.normalizedRegion,
-            geoCountryCode: geography.countryCode,
-            geoLevel1: geography.level1,
-            geoLevel2: geography.level2,
-            geoLevel3: geography.level3,
-            geoPath: geography.path,
-            industry: normalizedStartup.industry,
-            stage: dto.stage,
-            fundingTarget: dto.fundingTarget,
-            teamSize: dto.teamSize,
+            name: canonical.company.name,
+            tagline: canonical.company.tagline,
+            description: canonical.company.description,
+            website: canonical.company.website,
+            location: canonical.geography.raw,
+            normalizedRegion: canonical.geography.normalizedRegion,
+            geoCountryCode: canonical.geography.countryCode,
+            geoLevel1: canonical.geography.level1,
+            geoLevel2: canonical.geography.level2,
+            geoLevel3: canonical.geography.level3,
+            geoPath: canonical.geography.path,
+            industry: canonical.company.industry,
+            stage: canonical.round.stage!,
+            fundingTarget: canonical.round.fundingTarget!,
+            teamSize: canonical.round.teamSize!,
             pitchDeckUrl: dto.pitchDeckUrl,
             demoUrl: dto.demoUrl,
-            status: StartupStatus.ANALYZING,
+            status: canonical.stageGate.status,
             submittedAt: new Date(),
           })
           .returning();
@@ -241,8 +263,8 @@ export class SubmissionService {
         portalData.userId,
         'New Portal Submission',
         duplicate
-          ? `Existing startup linked from ${foundUser.email}: ${normalizedStartup.name}`
-          : `New submission to "${portalData.name}": ${normalizedStartup.name}`,
+          ? `Existing startup linked from ${foundUser.email}: ${canonical.company.name}`
+          : `New submission to "${portalData.name}": ${canonical.company.name}`,
         NotificationType.INFO,
         `/portals/${portalId}/submissions`,
       );

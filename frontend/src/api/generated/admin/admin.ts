@@ -71,6 +71,110 @@ type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
 
 
 
+export type adminControllerGetScreeningQueueResponse200 = {
+  data: void
+  status: 200
+}
+    
+export type adminControllerGetScreeningQueueResponseSuccess = (adminControllerGetScreeningQueueResponse200) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerGetScreeningQueueResponse = (adminControllerGetScreeningQueueResponseSuccess)
+
+export const getAdminControllerGetScreeningQueueUrl = () => {
+
+
+  
+
+  return `/admin/screening`
+}
+
+export const adminControllerGetScreeningQueue = async ( options?: RequestInit): Promise<adminControllerGetScreeningQueueResponse> => {
+  
+  return customFetch<adminControllerGetScreeningQueueResponse>(getAdminControllerGetScreeningQueueUrl(),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getAdminControllerGetScreeningQueueQueryKey = () => {
+    return [
+    `/admin/screening`
+    ] as const;
+    }
+
+    
+export const getAdminControllerGetScreeningQueueQueryOptions = <TData = Awaited<ReturnType<typeof adminControllerGetScreeningQueue>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetScreeningQueue>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAdminControllerGetScreeningQueueQueryKey();
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminControllerGetScreeningQueue>>> = ({ signal }) => adminControllerGetScreeningQueue({ signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetScreeningQueue>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type AdminControllerGetScreeningQueueQueryResult = NonNullable<Awaited<ReturnType<typeof adminControllerGetScreeningQueue>>>
+export type AdminControllerGetScreeningQueueQueryError = ErrorType<unknown>
+
+
+export function useAdminControllerGetScreeningQueue<TData = Awaited<ReturnType<typeof adminControllerGetScreeningQueue>>, TError = ErrorType<unknown>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetScreeningQueue>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerGetScreeningQueue>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerGetScreeningQueue>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerGetScreeningQueue<TData = Awaited<ReturnType<typeof adminControllerGetScreeningQueue>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetScreeningQueue>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerGetScreeningQueue>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerGetScreeningQueue>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerGetScreeningQueue<TData = Awaited<ReturnType<typeof adminControllerGetScreeningQueue>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetScreeningQueue>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useAdminControllerGetScreeningQueue<TData = Awaited<ReturnType<typeof adminControllerGetScreeningQueue>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetScreeningQueue>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getAdminControllerGetScreeningQueueQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
 export type adminControllerGetStatsResponse200 = {
   data: void
   status: 200

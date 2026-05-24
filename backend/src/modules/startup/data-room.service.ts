@@ -10,6 +10,7 @@ import { ASSET_TYPES } from '../../storage/storage.config';
 import { DocumentClassificationService } from '../ai/services/document-classification.service';
 import { DocumentCategory } from '../ai/interfaces/document-classification.interface';
 import { NotificationGateway } from '../../notification/notification.gateway';
+import { DealTriggerService } from './deal-trigger.service';
 
 export type ClassificationStatus = 'pending' | 'classifying' | 'completed' | 'failed';
 
@@ -58,6 +59,7 @@ export class DataRoomService {
     private storage: StorageService,
     private classificationService: DocumentClassificationService,
     private notificationGateway: NotificationGateway,
+    private dealTriggers: DealTriggerService,
   ) {}
 
   private async resolveOwnerId(startupId: string): Promise<string | null> {
@@ -173,7 +175,9 @@ export class DataRoomService {
       (existingDoc[0] as DataRoomRow | undefined) ??
       (await this.uploadDocument(startupId, assetRecord.id, category));
 
-    return this.runClassification(doc, { path, name, type });
+    const classified = await this.runClassification(doc, { path, name, type });
+    void this.dealTriggers.notifyDocUploaded(startupId, classified.id);
+    return classified;
   }
 
   async registerFiles(

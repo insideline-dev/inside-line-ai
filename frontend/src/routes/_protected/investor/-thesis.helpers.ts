@@ -29,6 +29,28 @@ export interface ThesisGenerationProgressInput {
   hasRecentFailure?: boolean;
 }
 
+export function hasCompletedThesisGenerationCycle({
+  queuedWebsiteAt,
+  websiteScrapedAt,
+  thesisSummaryGeneratedAt,
+}: Omit<ThesisGenerationProgressInput, "hasRecentFailure">): boolean {
+  const queuedAtMs = queuedWebsiteAt ? new Date(queuedWebsiteAt).getTime() : null;
+  const scrapedAtMs = websiteScrapedAt ? new Date(websiteScrapedAt).getTime() : null;
+  const summaryAtMs = thesisSummaryGeneratedAt
+    ? new Date(thesisSummaryGeneratedAt).getTime()
+    : null;
+
+  const hasQueuedState = Number.isFinite(queuedAtMs);
+  const hasScrape = Number.isFinite(scrapedAtMs);
+  const hasSummary = Number.isFinite(summaryAtMs);
+
+  if (!hasQueuedState || !hasScrape || !hasSummary) {
+    return false;
+  }
+
+  return (scrapedAtMs as number) >= (queuedAtMs as number) && (summaryAtMs as number) >= (queuedAtMs as number);
+}
+
 export function shouldShowThesisGeneratingBanner({
   queuedWebsiteAt,
   websiteScrapedAt,
@@ -37,14 +59,28 @@ export function shouldShowThesisGeneratingBanner({
 }: ThesisGenerationProgressInput): boolean {
   if (hasRecentFailure) return false;
 
-  if (queuedWebsiteAt) return true;
+  if (hasCompletedThesisGenerationCycle({
+    queuedWebsiteAt,
+    websiteScrapedAt,
+    thesisSummaryGeneratedAt,
+  })) {
+    return false;
+  }
 
-  if (!websiteScrapedAt) return false;
-  if (!thesisSummaryGeneratedAt) return true;
+  const scrapedAtMs = websiteScrapedAt ? new Date(websiteScrapedAt).getTime() : null;
+  const summaryAtMs = thesisSummaryGeneratedAt
+    ? new Date(thesisSummaryGeneratedAt).getTime()
+    : null;
 
-  return (
-    new Date(thesisSummaryGeneratedAt).getTime() < new Date(websiteScrapedAt).getTime()
-  );
+  const hasQueuedState = Number.isFinite(queuedWebsiteAt ? new Date(queuedWebsiteAt).getTime() : null);
+  const hasScrape = Number.isFinite(scrapedAtMs);
+  const hasSummary = Number.isFinite(summaryAtMs);
+
+  if (hasQueuedState) return true;
+  if (!hasScrape) return false;
+  if (!hasSummary) return true;
+
+  return (summaryAtMs as number) < (scrapedAtMs as number);
 }
 
 export function extractResponseData<T>(payload: unknown): T | null {

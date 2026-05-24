@@ -98,7 +98,15 @@ export function ThesisSummaryCard({
                 variant="outline"
                 size="sm"
                 className="gap-2"
-                onClick={onRegenerate}
+                onClick={() => {
+                  if (
+                    manuallyEdited &&
+                    !window.confirm("Regenerate summary and replace your manual edits?")
+                  ) {
+                    return;
+                  }
+                  onRegenerate();
+                }}
                 disabled={isGenerating || isSaving}
                 title="Replace with a fresh summary derived from your structured fields"
               >

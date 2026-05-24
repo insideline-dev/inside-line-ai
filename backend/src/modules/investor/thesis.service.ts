@@ -1,14 +1,25 @@
 import {
+  forwardRef,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
   Optional,
 } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { desc, eq, sql } from 'drizzle-orm';
 import { DrizzleService } from '../../database';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type * as schema from '../../database/schema';
 import {
   investorThesis,
 } from './entities/investor.schema';
+import { investorDealbreakerRuleVersion } from './entities/dealbreaker-rule-version.schema';
+import { investorEvent } from './entities/investor-event.schema';
+import {
+  dealbreakerSetsEqual,
+  diffDealbreakerSets,
+} from './dealbreaker-audit.util';
+import { DealTriggerService } from '../startup/deal-trigger.service';
 import { CreateThesis, UpdateThesis } from './dto';
 import {
   canonicalizeGeographicFocus,
@@ -22,6 +33,11 @@ import { AiProviderService } from '../ai/providers/ai-provider.service';
 import { ModelPurpose } from '../ai/interfaces/pipeline.interface';
 import { generateText } from 'ai';
 import { buildThesisSummary } from './thesis-summary.util';
+import { InvestorOnboardingService } from './onboarding/investor-onboarding.service';
+import {
+  StructuredDealbreakerRuleListSchema,
+  type StructuredDealbreakerRule,
+} from './structured-dealbreaker';
 
 const THESIS_SUMMARY_BATCH_SIZE = 10;
 
@@ -33,7 +49,120 @@ export class ThesisService {
     private drizzle: DrizzleService,
     @Optional() private startupMatching?: StartupMatchingPipelineService,
     @Optional() private aiProviders?: AiProviderService,
+    @Optional()
+    @Inject(forwardRef(() => InvestorOnboardingService))
+    private onboarding?: InvestorOnboardingService,
+    @Optional() private dealTriggers?: DealTriggerService,
   ) {}
+
+  async getDealbreakerHistory(userId: string, limit = 5) {
+    return this.drizzle.withRLS(userId, async (db) => {
+      return db
+        .select()
+        .from(investorDealbreakerRuleVersion)
+        .where(eq(investorDealbreakerRuleVersion.investorUserId, userId))
+        .orderBy(desc(investorDealbreakerRuleVersion.versionNumber))
+        .limit(Math.min(Math.max(limit, 1), 20));
+    });
+  }
+
+  /**
+   * DS-E4-F3 — load the latest structured rule set for the investor.
+   * Returns `[]` when no version has been authored yet.
+   */
+  async getStructuredDealbreakers(
+    userId: string,
+  ): Promise<StructuredDealbreakerRule[]> {
+    return this.drizzle.withRLS(userId, async (db) => {
+      const [row] = await db
+        .select({ structuredRules: investorDealbreakerRuleVersion.structuredRules })
+        .from(investorDealbreakerRuleVersion)
+        .where(eq(investorDealbreakerRuleVersion.investorUserId, userId))
+        .orderBy(desc(investorDealbreakerRuleVersion.versionNumber))
+        .limit(1);
+      return row?.structuredRules ?? [];
+    });
+  }
+
+  /**
+   * DS-E4-F3 — append a new dealbreaker rule version containing structured
+   * rules. Carries the existing legacy text `rules` forward unchanged so the
+   * narrative-term path (F4-F4) and structured path coexist on the same row.
+   */
+  async upsertStructuredDealbreakers(
+    userId: string,
+    rules: StructuredDealbreakerRule[],
+  ): Promise<{ versionNumber: number; rules: StructuredDealbreakerRule[] }> {
+    const validated = StructuredDealbreakerRuleListSchema.parse(rules);
+    return this.drizzle.withRLS(userId, async (db) => {
+      const [latest] = await db
+        .select({
+          versionNumber: investorDealbreakerRuleVersion.versionNumber,
+          rules: investorDealbreakerRuleVersion.rules,
+        })
+        .from(investorDealbreakerRuleVersion)
+        .where(eq(investorDealbreakerRuleVersion.investorUserId, userId))
+        .orderBy(desc(investorDealbreakerRuleVersion.versionNumber))
+        .limit(1);
+
+      const nextVersion = Number(latest?.versionNumber ?? 0) + 1;
+      const carriedRules = latest?.rules ?? [];
+
+      await db.insert(investorDealbreakerRuleVersion).values({
+        investorUserId: userId,
+        versionNumber: nextVersion,
+        rules: carriedRules,
+        structuredRules: validated,
+        createdBy: userId,
+      });
+
+      await db.insert(investorEvent).values({
+        investorUserId: userId,
+        type: 'dealbreakers.structured.updated',
+        payload: {
+          versionNumber: nextVersion,
+          ruleCount: validated.length,
+        },
+      });
+
+      return { versionNumber: nextVersion, rules: validated };
+    });
+  }
+
+  private async recordDealbreakerChange(
+    db: PostgresJsDatabase<typeof schema>,
+    userId: string,
+    input: { before: string[]; after: string[] },
+  ): Promise<void> {
+    const rows = await db
+      .select({
+        maxVersion: sql<number>`coalesce(max(${investorDealbreakerRuleVersion.versionNumber}), 0)`,
+      })
+      .from(investorDealbreakerRuleVersion)
+      .where(eq(investorDealbreakerRuleVersion.investorUserId, userId));
+
+    const versionNumber = Number(rows[0]?.maxVersion ?? 0) + 1;
+    const { added, removed } = diffDealbreakerSets(input.before, input.after);
+
+    await db.insert(investorDealbreakerRuleVersion).values({
+      investorUserId: userId,
+      versionNumber,
+      rules: input.after,
+      createdBy: userId,
+    });
+
+    await db.insert(investorEvent).values({
+      investorUserId: userId,
+      type: 'dealbreakers.updated',
+      payload: {
+        before: input.before,
+        after: input.after,
+        added,
+        removed,
+        versionNumber,
+      },
+    });
+  }
 
   async findOne(userId: string) {
     return this.drizzle.withRLS(userId, async (db) => {
@@ -100,6 +229,17 @@ export class ThesisService {
         payload.thesisSummaryGeneratedAt = new Date();
       }
 
+      const dtoSentDealBreakers = Object.prototype.hasOwnProperty.call(
+        dto,
+        'dealBreakers',
+      );
+      const nextDealBreakers = dtoSentDealBreakers
+        ? ((dto.dealBreakers as string[] | null | undefined) ?? [])
+        : (existing?.dealBreakers ?? []);
+      const dealBreakersChanged =
+        dtoSentDealBreakers &&
+        !dealbreakerSetsEqual(existing?.dealBreakers, nextDealBreakers);
+
       let result: typeof investorThesis.$inferSelect;
       if (existing) {
         const [updated] = await db
@@ -113,6 +253,13 @@ export class ThesisService {
 
         this.logger.log(`Updated thesis for user ${userId}`);
         result = updated;
+
+        if (dealBreakersChanged) {
+          await this.recordDealbreakerChange(db, userId, {
+            before: existing.dealBreakers ?? [],
+            after: updated.dealBreakers ?? [],
+          });
+        }
       } else {
         const [created] = await db
           .insert(investorThesis)
@@ -124,6 +271,17 @@ export class ThesisService {
 
         this.logger.log(`Created thesis for user ${userId}`);
         result = created;
+
+        if (dtoSentDealBreakers && (created.dealBreakers?.length ?? 0) > 0) {
+          await this.recordDealbreakerChange(db, userId, {
+            before: [],
+            after: created.dealBreakers ?? [],
+          });
+        }
+      }
+
+      if (dealBreakersChanged && this.dealTriggers) {
+        void this.dealTriggers.notifyThesisUpdated(userId);
       }
 
       // Trigger re-matching for all approved startups when thesis is updated
@@ -132,6 +290,35 @@ export class ThesisService {
           const msg = err instanceof Error ? err.message : String(err);
           this.logger.error(`Failed to trigger re-matching after thesis update for user ${userId}: ${msg}`);
         });
+      }
+
+      // DS-E3-F1-S2 — re-scrape the fund website when it changes on an
+      // already-registered investor (e.g. a partner pastes a new domain on
+      // /investor/thesis). The onboarding service handles normalization,
+      // dedup, and enqueues the scrape job; failures are logged but never
+      // block the thesis save.
+      const dtoSentWebsite = Object.prototype.hasOwnProperty.call(
+        dto,
+        'website',
+      );
+      const websiteValue =
+        dtoSentWebsite && typeof (dto as { website?: unknown }).website === 'string'
+          ? ((dto as { website: string }).website).trim()
+          : '';
+      const websiteChanged =
+        dtoSentWebsite &&
+        websiteValue.length > 0 &&
+        websiteValue !== (existing?.website ?? '');
+
+      if (websiteChanged && this.onboarding) {
+        void this.onboarding
+          .submitWebsite(userId, { website: websiteValue })
+          .catch((err: unknown) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            this.logger.warn(
+              `Failed to re-scrape investor website on thesis update for user ${userId}: ${msg}`,
+            );
+          });
       }
 
       return result;
@@ -334,7 +521,7 @@ export class ThesisService {
   getGeographyTaxonomy() {
     return {
       version: GEOGRAPHY_TAXONOMY_VERSION,
-      levels: 3,
+      levels: 4,
       nodes: getInvestorGeographyTaxonomy(),
     };
   }

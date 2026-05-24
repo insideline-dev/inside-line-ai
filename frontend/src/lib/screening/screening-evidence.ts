@@ -31,6 +31,7 @@ const MISSING_MATERIAL_LABELS: Record<string, string> = {
   team: "Team info",
   deal_terms: "Deal terms",
   website: "Website",
+  evidence_claims: "Source-linked evidence (≥3 claims)",
 };
 
 function normalizeLensKey(value: string): string {

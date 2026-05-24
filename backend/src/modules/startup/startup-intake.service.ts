@@ -1,20 +1,21 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { eq, ilike } from 'drizzle-orm';
 import { DrizzleService } from '../../database';
+import { UserRole } from '../../auth/entities/auth.schema';
 import {
   PipelineService,
   PIPELINE_MISSING_FIELDS_ERROR_PREFIX,
 } from '../ai/services/pipeline.service';
 import { NotificationService } from '../../notification/notification.service';
 import { NotificationType } from '../../notification/entities';
-import { startup, StartupStatus, StartupStage } from './entities/startup.schema';
-import { deriveStartupGeography } from '../geography';
 import {
-  findCanonicalStartupDuplicate,
-  normalizeScreeningCompanyNameCandidate,
-  normalizeScreeningIntakeCandidate,
-} from './screening-intake-normalization';
-import { extractWebsiteFromText } from '../ai/utils/startup-field-utils';
+  startup,
+  StartupSourcePath,
+  StartupStatus,
+  StartupStage,
+} from './entities/startup.schema';
+import { deriveStartupGeography } from '../geography';
+import { buildScreeningInputV1 } from './screening-intake-normalization';
 
 export interface QuickCreateParams {
   adminUserId: string;
@@ -38,7 +39,14 @@ export interface StartupIntakeParams {
   fromName?: string;
   bodyText?: string;
   pitchDeckPath?: string;
-  source: string; // 'clara' | 'investor-inbox' | etc
+  source: StartupSourcePath;
+  ownerUserId?: string;
+  submittedByRole?: UserRole.ADMIN | UserRole.INVESTOR;
+  isPrivate?: boolean;
+  website?: string;
+  stage?: StartupStage;
+  location?: string;
+  notificationPath?: string;
 }
 
 export interface StartupIntakeResult {
@@ -46,6 +54,10 @@ export interface StartupIntakeResult {
   startupName: string;
   isDuplicate: boolean;
   status: string;
+}
+
+export interface StartupIntakeRecordResult extends StartupIntakeResult {
+  ownerUserId: string;
 }
 
 @Injectable()
@@ -59,106 +71,159 @@ export class StartupIntakeService {
   ) {}
 
   async createStartup(params: StartupIntakeParams): Promise<StartupIntakeResult> {
-    const { adminUserId, companyName, fromEmail, fromName, bodyText, pitchDeckPath, source } = params;
+    const created = await this.findOrCreateStartupRecord(params);
+    const notificationPath =
+      params.notificationPath ??
+      (params.isPrivate ? `/investor/startup/${created.startupId}` : `/admin/startup/${created.startupId}`);
 
-    const normalizedCompanyName =
-      normalizeScreeningCompanyNameCandidate(companyName) ?? companyName.trim();
-    const extractedWebsite = extractWebsiteFromText(bodyText);
-    const normalizedWebsite = extractedWebsite ?? undefined;
-    const normalizedDescription = bodyText ? bodyText.trim().slice(0, 5000) : undefined;
-
-    const duplicate = await this.findDuplicate(normalizedCompanyName, normalizedWebsite);
-    if (duplicate) {
-      return {
-        startupId: duplicate.id,
-        startupName: duplicate.name,
-        isDuplicate: true,
-        status: duplicate.status,
-      };
+    if (created.isDuplicate) {
+      return created;
     }
 
-    const location = 'Unknown';
-    const geography = deriveStartupGeography(location);
-    const slug = this.generateSlug(normalizedCompanyName);
-
-    const [created] = await this.drizzle.db
-      .insert(startup)
-      .values({
-        userId: adminUserId,
-        name: normalizedCompanyName,
-        slug,
-        tagline: `Submitted via ${source} by ${fromEmail}`,
-        description: normalizedDescription || `Submitted via ${source}. Details will be extracted from the pitch deck.`,
-        website: normalizedWebsite ?? '',
-        location,
-        normalizedRegion: geography.normalizedRegion,
-        geoCountryCode: geography.countryCode,
-        geoLevel1: geography.level1,
-        geoLevel2: geography.level2,
-        geoLevel3: geography.level3,
-        geoPath: geography.path,
-        industry: 'Unknown',
-        stage: StartupStage.SEED,
-        fundingTarget: 0,
-        teamSize: 1,
-        contactEmail: fromEmail,
-        contactName: fromName ?? undefined,
-        pitchDeckPath: pitchDeckPath ?? undefined,
-        status: StartupStatus.SUBMITTED,
-        submittedAt: new Date(),
-      })
-      .returning();
-
-    await this.normalizeLegacyPlaceholderDefaults(created.id);
-    this.logger.log(`Created startup ${created.id} (${normalizedCompanyName}) from ${source} by ${fromEmail}`);
-
-    if (created.pitchDeckPath || created.pitchDeckUrl) {
+    const pitchDeckRecord = await this.loadPitchDeckSnapshot(created.startupId);
+    if (pitchDeckRecord?.pitchDeckPath || pitchDeckRecord?.pitchDeckUrl) {
       try {
         const prefill = await this.pipeline.prefillCriticalFieldsFromDeckExtraction(
-          created.id,
+          created.startupId,
         );
         this.logger.log(
-          `[Intake] Pre-pipeline extraction for ${created.id} | source=${prefill.extractionSource} | updated=${prefill.updatedFields.join(",") || "none"} | missingCritical=${prefill.missingCriticalFields.join(",") || "none"}`,
+          `[Intake] Pre-pipeline extraction for ${created.startupId} | source=${prefill.extractionSource} | updated=${prefill.updatedFields.join(",") || "none"} | missingCritical=${prefill.missingCriticalFields.join(",") || "none"}`,
         );
       } catch (error) {
         const message = this.getErrorMessage(error);
         this.logger.warn(
-          `[Intake] Pre-pipeline extraction failed for ${created.id}: ${message}`,
+          `[Intake] Pre-pipeline extraction failed for ${created.startupId}: ${message}`,
         );
       }
     }
 
     try {
-      await this.pipeline.startPipeline(created.id, adminUserId);
+      await this.pipeline.startPipeline(created.startupId, created.ownerUserId);
     } catch (error) {
       const message = this.getErrorMessage(error);
       if (!message.includes(PIPELINE_MISSING_FIELDS_ERROR_PREFIX)) {
         throw error;
       }
       this.logger.warn(
-        `[Intake] Pipeline start deferred for ${created.id}: ${message}`,
+        `[Intake] Pipeline start deferred for ${created.startupId}: ${message}`,
       );
     }
 
     await this.notifications.createAndBroadcast(
-      adminUserId,
-      `New startup submitted via ${source}`,
-      `${normalizedCompanyName} was submitted by ${fromEmail}`,
+      created.ownerUserId,
+      `New startup submitted via ${params.source}`,
+      `${created.startupName} was submitted by ${params.fromEmail}`,
       NotificationType.INFO,
-      `/admin/startup/${created.id}`,
+      notificationPath,
     );
+
+    return created;
+  }
+
+  async findOrCreateStartupRecord(
+    params: StartupIntakeParams,
+  ): Promise<StartupIntakeRecordResult> {
+    const {
+      adminUserId,
+      companyName,
+      fromEmail,
+      fromName,
+      bodyText,
+      pitchDeckPath,
+      source,
+      ownerUserId,
+      submittedByRole,
+      isPrivate,
+      website,
+      stage,
+      location,
+    } = params;
+
+    const duplicate = await this.findDuplicate(companyName);
+    if (duplicate) {
+      return {
+        startupId: duplicate.id,
+        startupName: duplicate.name,
+        isDuplicate: true,
+        status: duplicate.status,
+        ownerUserId: ownerUserId ?? adminUserId,
+      };
+    }
+
+    const resolvedOwnerUserId = ownerUserId ?? adminUserId;
+    const sourceLabel = this.describeSource(source);
+
+    // DS-E1-F4-S1: route Clara / email-forward intake through the canonical
+    // V1 shape so it lands in the same contract as every other path.
+    const canonical = buildScreeningInputV1({
+      raw: {
+        name: companyName,
+        website: website ?? null,
+        tagline: `Submitted via ${sourceLabel} by ${fromEmail}`,
+        description:
+          bodyText?.slice(0, 5000) ||
+          `Submitted via ${sourceLabel}. Details will be extracted from the pitch deck.`,
+        location: location ?? null,
+        industry: null,
+      },
+      sourcePath: source,
+      status: StartupStatus.SUBMITTED,
+      isPrivate: isPrivate ?? false,
+      stage: stage ?? StartupStage.SEED,
+      fundingTarget: 0,
+      teamSize: 1,
+      submittedByRole: submittedByRole ?? UserRole.ADMIN,
+      submitterUserId: resolvedOwnerUserId,
+      founderEmail: fromEmail,
+      founderName: fromName ?? undefined,
+    });
+    const slug = this.generateSlug(canonical.company.name);
+
+    const [created] = await this.drizzle.db
+      .insert(startup)
+      .values({
+        userId: resolvedOwnerUserId,
+        sourcePath: canonical.sourcePath,
+        submittedByRole: canonical.owners.submittedByRole,
+        isPrivate: canonical.stageGate.isPrivate,
+        name: canonical.company.name,
+        slug,
+        tagline: canonical.company.tagline,
+        description: canonical.company.description,
+        website: canonical.company.website,
+        location: canonical.geography.raw,
+        normalizedRegion: canonical.geography.normalizedRegion,
+        geoCountryCode: canonical.geography.countryCode,
+        geoLevel1: canonical.geography.level1,
+        geoLevel2: canonical.geography.level2,
+        geoLevel3: canonical.geography.level3,
+        geoPath: canonical.geography.path,
+        industry: canonical.company.industry,
+        stage: canonical.round.stage as StartupStage,
+        fundingTarget: canonical.round.fundingTarget!,
+        teamSize: canonical.round.teamSize!,
+        contactEmail: canonical.owners.founderEmail ?? undefined,
+        contactName: canonical.owners.founderName ?? undefined,
+        pitchDeckPath: pitchDeckPath ?? undefined,
+        status: canonical.stageGate.status,
+        submittedAt: new Date(),
+      })
+      .returning();
+
+    await this.normalizeLegacyPlaceholderDefaults(created.id);
+    this.logger.log(`Created startup ${created.id} (${companyName}) from ${source} by ${fromEmail}`);
 
     return {
       startupId: created.id,
-      startupName: normalizedCompanyName,
+      startupName: companyName,
       isDuplicate: false,
       status: StartupStatus.SUBMITTED,
+      ownerUserId: resolvedOwnerUserId,
     };
   }
 
   async quickCreateStartup(params: QuickCreateParams): Promise<StartupIntakeResult> {
-    const normalized = normalizeScreeningIntakeCandidate(params);
-    const duplicate = await this.findDuplicate(normalized.name, normalized.website || undefined);
+    const duplicate = await this.findDuplicate(params.name);
     if (duplicate) {
       return {
         startupId: duplicate.id,
@@ -168,19 +233,35 @@ export class StartupIntakeService {
       };
     }
 
-    const geography = deriveStartupGeography(normalized.location || params.location);
-    const slug = this.generateSlug(normalized.name);
+    // DS-E1-F4-S1: admin quick-create also rides the canonical V1 contract.
+    const canonical = buildScreeningInputV1({
+      raw: {
+        name: params.name,
+        website: params.website,
+        tagline: params.tagline,
+        description: params.description,
+        location: params.location,
+        industry: params.industry,
+      },
+      sourcePath: StartupSourcePath.ADMIN_MANUAL,
+      status: StartupStatus.SUBMITTED,
+      stage: params.stage,
+      fundingTarget: params.fundingTarget,
+      teamSize: params.teamSize,
+      submitterUserId: params.adminUserId,
+    });
+    const slug = this.generateSlug(canonical.company.name);
     const normalizedTeamMembers = (params.teamMembers ?? []).map((m) => ({
-      name: m.name.trim(),
-      role: m.role.trim(),
-      linkedinUrl: m.linkedinUrl?.trim() ?? '',
+      name: m.name,
+      role: m.role,
+      linkedinUrl: m.linkedinUrl ?? '',
     }));
     const teamMembersWithLinkedin = normalizedTeamMembers.filter((m) =>
       Boolean(m.linkedinUrl?.trim()),
     ).length;
 
     this.logger.debug(
-      `[QuickCreate] Input summary | name=${normalized.name} | website=${Boolean(normalized.website)} | pitchDeckUrl=${Boolean(params.pitchDeckUrl)} | stage=${params.stage} | fundingTarget=${params.fundingTarget} | teamSize=${params.teamSize} | teamMembers=${normalizedTeamMembers.length} | teamMembersWithLinkedin=${teamMembersWithLinkedin}`,
+      `[QuickCreate] Input summary | name=${params.name} | website=${Boolean(params.website)} | pitchDeckUrl=${Boolean(params.pitchDeckUrl)} | stage=${params.stage} | fundingTarget=${params.fundingTarget} | teamSize=${params.teamSize} | teamMembers=${normalizedTeamMembers.length} | teamMembersWithLinkedin=${teamMembersWithLinkedin}`,
     );
 
     if (!params.pitchDeckUrl) {
@@ -197,21 +278,22 @@ export class StartupIntakeService {
       .insert(startup)
       .values({
         userId: params.adminUserId,
-        name: normalized.name,
+        sourcePath: canonical.sourcePath,
+        name: canonical.company.name,
         slug,
-        tagline: normalized.tagline,
-        description: normalized.description,
-        website: normalized.website,
-        location: normalized.location,
-        normalizedRegion: geography.normalizedRegion,
-        geoCountryCode: geography.countryCode,
-        geoLevel1: geography.level1,
-        geoLevel2: geography.level2,
-        geoLevel3: geography.level3,
-        geoPath: geography.path,
-        industry: normalized.industry,
-        stage: params.stage,
-        fundingTarget: params.fundingTarget,
+        tagline: canonical.company.tagline,
+        description: canonical.company.description,
+        website: canonical.company.website,
+        location: canonical.geography.raw,
+        normalizedRegion: canonical.geography.normalizedRegion,
+        geoCountryCode: canonical.geography.countryCode,
+        geoLevel1: canonical.geography.level1,
+        geoLevel2: canonical.geography.level2,
+        geoLevel3: canonical.geography.level3,
+        geoPath: canonical.geography.path,
+        industry: canonical.company.industry,
+        stage: canonical.round.stage as StartupStage,
+        fundingTarget: canonical.round.fundingTarget!,
         teamSize: params.teamSize,
         teamMembers: normalizedTeamMembers,
         pitchDeckUrl: params.pitchDeckUrl ?? undefined,
@@ -220,7 +302,7 @@ export class StartupIntakeService {
       })
       .returning();
 
-    this.logger.log(`Quick-created startup ${created.id} (${normalized.name}) by admin ${params.adminUserId}`);
+    this.logger.log(`Quick-created startup ${created.id} (${params.name}) by admin ${params.adminUserId}`);
     this.logger.debug(
       `[QuickCreate] Persisted startup ${created.id} | pitchDeckPath=${Boolean(created.pitchDeckPath)} | pitchDeckUrl=${Boolean(created.pitchDeckUrl)} | roundCurrency=${created.roundCurrency ?? "null"} | valuationKnown=${created.valuationKnown === null ? "null" : String(created.valuationKnown)} | valuationType=${created.valuationType ?? "null"} | raiseType=${created.raiseType ?? "null"} | contactEmail=${Boolean(created.contactEmail)} | productDescription=${Boolean(created.productDescription)}`,
     );
@@ -257,14 +339,14 @@ export class StartupIntakeService {
     };
   }
 
-  async findDuplicate(
-    companyName: string,
-    website?: string,
-  ): Promise<{ id: string; name: string; status: string } | null> {
-    return findCanonicalStartupDuplicate(this.drizzle.db, {
-      companyName,
-      website,
-    });
+  async findDuplicate(companyName: string): Promise<{ id: string; name: string; status: string } | null> {
+    const escaped = companyName.replace(/[%_\\]/g, (ch) => `\\${ch}`);
+    const [match] = await this.drizzle.db
+      .select({ id: startup.id, name: startup.name, status: startup.status })
+      .from(startup)
+      .where(ilike(startup.name, escaped))
+      .limit(1);
+    return match ?? null;
   }
 
   extractCompanyFromBody(body: string | null): string | null {
@@ -285,6 +367,21 @@ export class StartupIntakeService {
     return name || undefined;
   }
 
+  private describeSource(source: string): string {
+    switch (source) {
+      case 'whatsapp-forward':
+        return 'WhatsApp forward';
+      case 'email-forward':
+        return 'email forward';
+      case 'investor-inbox':
+        return 'investor inbox';
+      case 'bulk-upload':
+        return 'bulk upload';
+      default:
+        return source.replace(/[-_]+/g, ' ');
+    }
+  }
+
   private generateSlug(name: string): string {
     const base = name
       .toLowerCase()
@@ -292,6 +389,22 @@ export class StartupIntakeService {
       .replace(/^-+|-+$/g, '');
     const suffix = Math.random().toString(36).slice(2, 6);
     return `${base}-${suffix}`;
+  }
+
+  private async loadPitchDeckSnapshot(startupId: string): Promise<{
+    pitchDeckPath: string | null;
+    pitchDeckUrl: string | null;
+  } | null> {
+    const [record] = await this.drizzle.db
+      .select({
+        pitchDeckPath: startup.pitchDeckPath,
+        pitchDeckUrl: startup.pitchDeckUrl,
+      })
+      .from(startup)
+      .where(eq(startup.id, startupId))
+      .limit(1);
+
+    return record ?? null;
   }
 
   private getErrorMessage(error: unknown): string {

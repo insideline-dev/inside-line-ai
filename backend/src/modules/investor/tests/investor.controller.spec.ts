@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { InvestorController } from '../investor.controller';
 import { ThesisService } from '../thesis.service';
+import { DealbreakerParseService } from '../dealbreaker-parse.service';
 import { MatchService } from '../match.service';
 import { TeamService } from '../team.service';
 import { InvestorNoteService } from '../investor-note.service';
@@ -14,6 +15,13 @@ import { CalibrationService } from '../calibration.service';
 import { CalibrationProposalService } from '../calibration-proposal.service';
 import { DealDecisionService } from '../deal-decision.service';
 import { StartupMatchingPipelineService } from '../../ai/services/startup-matching-pipeline.service';
+import { ScreeningQueueService } from '../screening-queue.service';
+import { ScreeningCalibrationService } from '../screening-calibration.service';
+import { ScreeningProcessor } from '../../ai/processors/screening.processor';
+import { PipelineService } from '../../ai/services/pipeline.service';
+import { ProgressTrackerService } from '../../ai/orchestrator/progress-tracker.service';
+import { PipelineStateService } from '../../ai/services/pipeline-state.service';
+import { DrizzleService } from '../../../database';
 import { UserRole } from '../../../auth/entities/auth.schema';
 
 describe('InvestorController', () => {
@@ -99,6 +107,10 @@ describe('InvestorController', () => {
             delete: jest.fn(),
             getGeographyTaxonomy: jest.fn(),
           },
+        },
+        {
+          provide: DealbreakerParseService,
+          useValue: { parse: jest.fn() },
         },
         {
           provide: MatchService,
@@ -190,6 +202,37 @@ describe('InvestorController', () => {
             queueStartupMatching: jest.fn(),
             getLatestMatchingStatus: jest.fn(),
           },
+        },
+        {
+          provide: ScreeningQueueService,
+          useValue: { getQueue: jest.fn() },
+        },
+        {
+          provide: ScreeningCalibrationService,
+          useValue: { listForInvestor: jest.fn() },
+        },
+        {
+          provide: ScreeningProcessor,
+          useValue: { runScreening: jest.fn() },
+        },
+        {
+          provide: DrizzleService,
+          useValue: { db: { insert: jest.fn() } },
+        },
+        {
+          provide: PipelineService,
+          useValue: { rerunFromPhase: jest.fn() },
+        },
+        {
+          provide: ProgressTrackerService,
+          useValue: {
+            initProgress: jest.fn(),
+            updatePhaseProgress: jest.fn(),
+          },
+        },
+        {
+          provide: PipelineStateService,
+          useValue: { getPhaseResult: jest.fn().mockResolvedValue(null) },
         },
       ],
     }).compile();
@@ -418,6 +461,17 @@ describe('InvestorController', () => {
 
   // DS-E11-F3-S1 — investor's review/approve/reject calibration proposals
   describe('Calibration proposal endpoints', () => {
+    const prevCalibration = process.env.ENABLE_CALIBRATION;
+    beforeEach(() => {
+      process.env.ENABLE_CALIBRATION = 'true';
+    });
+    afterEach(() => {
+      if (prevCalibration === undefined) {
+        delete process.env.ENABLE_CALIBRATION;
+      } else {
+        process.env.ENABLE_CALIBRATION = prevCalibration;
+      }
+    });
     const proposalId = '123e4567-e89b-12d3-a456-426614174900';
     const proposalRow = {
       id: proposalId,

@@ -95,3 +95,15 @@ pnpm-lock.yaml
 dump.rdb
 .worktrees/
 .snapshots/
+
+# Disposable dev notes (handoffs, plans, reviews, bug-lists)
+# These were leaking dev creds and are not meant to be committed
+HANDOFF*
+HANDOFF-*.md
+PLAN-*.md
+REVIEW-*.md
+DS-E*-BUG-LIST-*.md
+INVESTIGATION.md
+.claude/YUSUP_PROJECT_MEMORY.md
+.claude/*.xlsx
+.claude/*.json

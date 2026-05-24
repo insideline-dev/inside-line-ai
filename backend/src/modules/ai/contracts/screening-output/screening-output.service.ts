@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
 import { and, desc, eq } from "drizzle-orm";
 import { DrizzleService } from "../../../../database";
 import { LENS_FALLBACK_RATIONALE_PREFIX } from "../../lenses/base-lens.agent";
@@ -15,6 +15,7 @@ import {
 import { resolveCanonicalScreeningOutcome } from "./screening-outcome";
 import type {
   ScreeningEvidence,
+  ScreeningEvidenceConfidence,
   ScreeningHandoff,
   ScreeningHandoffEvidence,
   ScreeningHandoffIssue,
@@ -23,6 +24,19 @@ import type {
   ScreeningOverallV1,
   ScreeningSignal,
 } from "./v1.schema";
+import type {
+  ScreeningLensScoreV2,
+  ScreeningOutputV2,
+} from "./v2.schema";
+import type {
+  ScreeningDealbreakerObservation,
+  ScreeningOutputV3,
+  ScreeningOverallConfidence,
+} from "./v3.schema";
+import type { ThesisFitOutput } from "../../schemas/thesis-fit.schema";
+import { normalizeLensEvidenceLink } from "../../schemas/lens";
+import { PipelineStateService } from "../../services/pipeline-state.service";
+import { PipelinePhase } from "../../interfaces/pipeline.interface";
 
 /**
  * Builds the public {@link ScreeningOutputV1} contract from persisted
@@ -38,7 +52,10 @@ import type {
 export class ScreeningOutputService {
   private readonly logger = new Logger(ScreeningOutputService.name);
 
-  constructor(private readonly drizzle: DrizzleService) {}
+  constructor(
+    private readonly drizzle: DrizzleService,
+    @Optional() private readonly pipelineState?: PipelineStateService,
+  ) {}
 
   /**
    * Build a v1 ScreeningOutput for a startup. If `pipelineRunId` is supplied,
@@ -64,6 +81,35 @@ export class ScreeningOutputService {
       latestPerLens,
       materials,
       decision,
+    );
+  }
+
+  /**
+   * DS-E10-F1 — v3 contract with hydrated DB inputs. Same hydration path as
+   * `buildForStartup` but routes through `buildV3` so callers get the
+   * dealbreakersObserved / reasoning / confidence additions.
+   *
+   * `thesisFit` defaults to null because the live persisted decision row
+   * carries thesis-fit on a sibling column; supply it explicitly when you
+   * need it — the rest of the contract is correct without it.
+   */
+  async buildForStartupV3(
+    startupId: string,
+    pipelineRunId?: string | null,
+    thesisFit: ThesisFitOutput | null = null,
+  ): Promise<ScreeningOutputV3> {
+    const runId = pipelineRunId ?? null;
+    const rows = await this.fetchRows(startupId, runId);
+    const latestPerLens = this.pickLatestPerLens(rows);
+    const materials = await this.fetchMaterialsInput(startupId);
+    const decision = await this.fetchDecisionSnapshot(startupId, runId);
+    return this.buildV3(
+      startupId,
+      runId,
+      latestPerLens,
+      materials,
+      decision,
+      thesisFit,
     );
   }
 
@@ -131,7 +177,49 @@ export class ScreeningOutputService {
       .from(startup)
       .where(eq(startup.id, startupId))
       .limit(1);
-    return row ?? null;
+    if (!row) return null;
+
+    // DS-E7-F4 part (c) — pull the deck's traction snapshot from the live
+    // extraction phase result when available. `tractionSnapshot` stays
+    // `undefined` when we couldn't inspect the deck (no PipelineStateService
+    // injected OR no cached extraction); the materials checker treats that
+    // as "no signal in either direction" and skips the `traction_data` flag.
+    // We only emit a concrete object (possibly with all-null fields) when
+    // we DID inspect the extraction and it had a traction block.
+    const materials: MaterialsInput = { ...row };
+    if (this.pipelineState) {
+      try {
+        const extraction = await this.pipelineState.getPhaseResult(
+          startupId,
+          PipelinePhase.EXTRACTION,
+        );
+        const deck = (extraction as { deckStructuredData?: unknown } | null | undefined)
+          ?.deckStructuredData as
+          | {
+              traction?: {
+                customers?: string | null;
+                users?: string | null;
+                churnRate?: string | null;
+                notableClaims?: string[];
+              };
+            }
+          | undefined;
+        if (deck) {
+          materials.tractionSnapshot = deck.traction
+            ? {
+                customers: deck.traction.customers ?? null,
+                users: deck.traction.users ?? null,
+                churnRate: deck.traction.churnRate ?? null,
+                notableClaims: deck.traction.notableClaims ?? [],
+              }
+            : null;
+        }
+      } catch {
+        // Pipeline state cache miss is non-fatal — silent miss path above.
+      }
+    }
+
+    return materials;
   }
 
   private async fetchDecisionSnapshot(
@@ -226,6 +314,121 @@ export class ScreeningOutputService {
     };
   }
 
+  /**
+   * Build a v2 ScreeningOutput. Identical to v1's shape on the inherited
+   * fields, with `thesisFit` (nullable when no thesis was on file) and
+   * `lensScores` (compact roll-up keyed by lens) added on top.
+   *
+   * Pulled out as a separate method so v1 callers stay on the frozen
+   * contract; new callers (Screening UI, DD handoff post-PR4) opt in to v2.
+   */
+  buildV2(
+    startupId: string,
+    pipelineRunId: string | null,
+    rows: StartupLensResult[],
+    materials: MaterialsInput | null,
+    decision: { signal: ScreeningSignal; score: number; reasonCodes: string[] } | null,
+    thesisFit: ThesisFitOutput | null,
+  ): ScreeningOutputV2 {
+    const v1 = this.assemble(
+      startupId,
+      pipelineRunId,
+      rows,
+      materials,
+      decision,
+    );
+    const lensScores: ScreeningLensScoreV2[] = v1.lenses
+      .filter((l): l is ScreeningLensV1 & { key: "market" | "team" | "traction" } =>
+        l.key === "market" || l.key === "team" || l.key === "traction",
+      )
+      .map((l) => ({
+        key: l.key,
+        score: l.score,
+        signal: l.signal,
+        rationale: l.rationale,
+      }));
+    return {
+      ...v1,
+      version: 2,
+      thesisFit,
+      lensScores,
+    };
+  }
+
+  /**
+   * DS-E10-F1 — v3 closes the typed-contract gaps: dealbreakersObserved[],
+   * reasoning, and overall confidence. v2 stays the default `latest` for now
+   * so existing callers don't break; opt in by calling buildV3 explicitly.
+   */
+  buildV3(
+    startupId: string,
+    pipelineRunId: string | null,
+    rows: StartupLensResult[],
+    materials: MaterialsInput | null,
+    decision: { signal: ScreeningSignal; score: number; reasonCodes: string[] } | null,
+    thesisFit: ThesisFitOutput | null,
+  ): ScreeningOutputV3 {
+    const v2 = this.buildV2(
+      startupId,
+      pipelineRunId,
+      rows,
+      materials,
+      decision,
+      thesisFit,
+    );
+    const reasonCodes = decision?.reasonCodes ?? [];
+    return {
+      ...v2,
+      version: 3,
+      dealbreakersObserved: buildDealbreakersObserved(reasonCodes),
+      reasoning: this.buildOverallReasoning(v2, reasonCodes),
+      confidence: this.deriveOverallConfidence(v2.lenses),
+    };
+  }
+
+  /**
+   * One-paragraph narrative summarising the verdict. Pulls the strongest
+   * per-lens rationale + the leading reason codes so the consumer doesn't
+   * have to scan the lens array to know what the verdict means.
+   */
+  private buildOverallReasoning(
+    v2: ScreeningOutputV2,
+    reasonCodes: string[],
+  ): string {
+    const verdictLabel = v2.overall.signal.toUpperCase();
+    const pickedLens =
+      v2.lenses.find((l) => l.signal === "reject") ??
+      v2.lenses.find((l) => l.signal === "review") ??
+      v2.lenses.find((l) => l.signal === "advance");
+    const lensSnippet = pickedLens
+      ? `${pickedLens.key}: ${truncate(pickedLens.rationale, 200)}`
+      : "no per-lens rationale available";
+    const topCodes = reasonCodes.slice(0, 4).join(", ");
+    const codeSuffix = topCodes ? ` Reason codes: ${topCodes}.` : "";
+    const score = v2.overall.score;
+    const overall = `Overall score ${score}/100, verdict ${verdictLabel}.`;
+    return truncate(`${overall} ${lensSnippet}.${codeSuffix}`, 1200);
+  }
+
+  /**
+   * Roll up per-lens evidence into a single Low/Med/High band. Uses the
+   * same EVIDENCE_CONFIDENCE_WEIGHTS shape the triage policy uses so the
+   * contract's confidence agrees with the F7-F2 gate decision.
+   */
+  private deriveOverallConfidence(
+    lenses: readonly ScreeningLensV1[],
+  ): ScreeningOverallConfidence {
+    const items = lenses.flatMap((l) => l.evidence);
+    if (items.length === 0) return "low";
+    const weight = (c: ScreeningEvidenceConfidence): number =>
+      c === "high" ? 1 : c === "medium" ? 0.5 : 0.2;
+    const avg =
+      items.reduce((sum, e) => sum + weight(e.confidence), 0) / items.length;
+    if (avg >= 0.8) return "high";
+    if (avg >= 0.5) return "medium";
+    return "low";
+  }
+
   private toContractLens(row: StartupLensResult): ScreeningLensV1 {
     return {
       key: row.lensKey,
@@ -269,17 +472,43 @@ export class ScreeningOutputService {
           claim: string;
           source?: unknown;
           confidence?: unknown;
+          sourceType?: unknown;
+          sourceLabel?: unknown;
+          sourceRef?: unknown;
+          url?: unknown;
+          pageNumber?: unknown;
+          quote?: unknown;
         };
+        const source =
+          typeof candidate.source === "string" ? candidate.source.trim() : undefined;
+        const normalized = source ? normalizeLensEvidenceLink(source) : null;
         out.push({
           claim: candidate.claim,
-          source:
-            typeof candidate.source === "string" ? candidate.source : undefined,
+          source,
           confidence:
             candidate.confidence === "low" ||
             candidate.confidence === "medium" ||
             candidate.confidence === "high"
               ? candidate.confidence
               : "low",
+          sourceType:
+            typeof candidate.sourceType === "string"
+              ? (candidate.sourceType as ScreeningEvidence["sourceType"])
+              : normalized?.sourceType,
+          sourceLabel:
+            typeof candidate.sourceLabel === "string"
+              ? candidate.sourceLabel
+              : normalized?.sourceLabel,
+          sourceRef:
+            typeof candidate.sourceRef === "string"
+              ? candidate.sourceRef
+              : normalized?.sourceRef,
+          url: typeof candidate.url === "string" ? candidate.url : normalized?.url,
+          pageNumber:
+            typeof candidate.pageNumber === "number"
+              ? candidate.pageNumber
+              : normalized?.pageNumber,
+          quote: typeof candidate.quote === "string" ? candidate.quote : undefined,
         });
       }
     }
@@ -300,7 +529,17 @@ export class ScreeningOutputService {
     materials: MaterialsInput | null,
     decision: { signal: ScreeningSignal; score: number; reasonCodes: string[] } | null,
   ): ScreeningOverallV1 {
-    const missingMaterials = materials ? detectMissingMaterials(materials) : [];
+    let missingMaterials = materials ? detectMissingMaterials(materials) : [];
+    const linkedEvidenceCount = lenses.reduce(
+      (sum, lens) =>
+        sum +
+        lens.evidence.filter((e) => typeof e.source === "string" && e.source.trim().length > 0)
+          .length,
+      0,
+    );
+    if (linkedEvidenceCount < 3 && !missingMaterials.includes("evidence_claims")) {
+      missingMaterials = [...missingMaterials, "evidence_claims"];
+    }
     const canonicalBase = decision ?? this.computeFallbackDecision(lenses);
     const canonical = resolveCanonicalScreeningOutcome({
       signal: canonicalBase.signal,
@@ -351,6 +590,12 @@ export class ScreeningOutputService {
           claim,
           source,
           confidence: evidence.confidence,
+          sourceType: evidence.sourceType,
+          sourceLabel: evidence.sourceLabel,
+          sourceRef: evidence.sourceRef,
+          url: evidence.url,
+          pageNumber: evidence.pageNumber,
+          quote: evidence.quote,
           lensScore: lens.score,
           signal: lens.signal,
         });
@@ -448,6 +693,8 @@ export class ScreeningOutputService {
       team: "Team info",
       deal_terms: "Deal terms",
       website: "Website",
+      evidence_claims: "Source-linked evidence (≥3 claims)",
+      traction_data: "Early traction data",
     };
 
     return labels[value] ?? this.formatLensLabel(value);
@@ -558,4 +805,99 @@ export class ScreeningOutputService {
 
     return { signal, score, reasonCodes };
   }
+}
+
+// DS-E10-F1 helpers — pulled out of the class so the v3 builder + tests
+// can call them without instantiating the service.
+
+const BOUNDARY_CODE_LABELS: Record<string, string> = {
+  out_of_stage: "Stage outside thesis boundary",
+  out_of_scope: "Industry outside thesis boundary",
+  out_of_geo: "Geography outside thesis boundary",
+};
+
+/**
+ * Parse the triage decision's `reason_codes[]` into a typed array of
+ * dealbreaker observations. The four kinds correspond to the four
+ * sources that emit reject signals today:
+ *
+ *  - boundary  → DS-E4-F1 out_of_stage / out_of_scope / out_of_geo
+ *  - portfolio → DS-E4-F2 portfolio_conflict:<name>
+ *  - tag       → DS-E4-F4 dealbreaker:<term> (excluding structured)
+ *  - structured → DS-E4-F3 dealbreaker:structured:<rule-id>:<action>
+ *
+ * Anything outside this taxonomy (lens.* codes, score gate codes,
+ * missing materials) is intentionally not surfaced — those are
+ * advisory, not dealbreakers.
+ */
+export function buildDealbreakersObserved(
+  reasonCodes: readonly string[],
+): ScreeningDealbreakerObservation[] {
+  const observations: ScreeningDealbreakerObservation[] = [];
+  for (const raw of reasonCodes) {
+    const code = raw.trim();
+    if (!code) continue;
+
+    // 1. Structured rules. Format: dealbreaker:structured:<rule-id>:<action>
+    if (code.startsWith("dealbreaker:structured:")) {
+      const tail = code.slice("dealbreaker:structured:".length);
+      const lastColon = tail.lastIndexOf(":");
+      const ruleId = lastColon >= 0 ? tail.slice(0, lastColon) : tail;
+      const action = lastColon >= 0 ? tail.slice(lastColon + 1) : "reject";
+      observations.push({
+        code,
+        kind: "structured",
+        label: `Structured rule "${ruleId}" matched`,
+        ref: ruleId,
+        action: action === "require_override" ? "require_override" : "reject",
+      });
+      continue;
+    }
+
+    // 2. Generic dealbreaker tags. Format: dealbreaker:<term>
+    if (code.startsWith("dealbreaker:")) {
+      const term = code.slice("dealbreaker:".length).trim();
+      observations.push({
+        code,
+        kind: "tag",
+        label: `Matches dealbreaker term "${term}"`,
+        ref: term || null,
+        action: "reject",
+      });
+      continue;
+    }
+
+    // 3. Portfolio conflicts. Format: portfolio_conflict:<name>
+    if (code.startsWith("portfolio_conflict:")) {
+      const name = code.slice("portfolio_conflict:".length).trim();
+      observations.push({
+        code,
+        kind: "portfolio",
+        label: name
+          ? `Conflicts with portfolio company "${name}"`
+          : "Conflicts with an existing portfolio company",
+        ref: name || null,
+        action: "reject",
+      });
+      continue;
+    }
+
+    // 4. Thesis-boundary codes (DS-E4-F1).
+    if (code in BOUNDARY_CODE_LABELS) {
+      observations.push({
+        code,
+        kind: "boundary",
+        label: BOUNDARY_CODE_LABELS[code]!,
+        ref: code.replace(/^out_of_/, ""),
+        action: "reject",
+      });
+      continue;
+    }
+  }
+  return observations;
+}
+
+function truncate(value: string, max: number): string {
+  if (value.length <= max) return value;
+  return `${value.slice(0, Math.max(0, max - 1))}…`;
 }

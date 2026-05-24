@@ -8,7 +8,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -28,23 +27,12 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { DataTable } from "@/components/DataTable";
 import { customFetch } from "@/api/client";
 import {
-  useInvestorCalibration,
-  useInvestorCalibrationSocket,
-  useRecomputeInvestorCalibration,
-  type InvestorCalibrationSummary,
-} from "@/lib/calibration/useCalibration";
-import {
   Users as UsersIcon,
   Globe,
   DollarSign,
   TrendingUp,
   ShieldAlert,
   Scale,
-  Loader2,
-  RefreshCw,
-  AlertTriangle,
-  CheckCircle2,
-  XCircle,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_protected/admin/investors")({
@@ -142,14 +130,6 @@ function formatCheckSize(min: number | null, max: number | null) {
   return `Up to ${fmt(max!)}`;
 }
 
-function formatMismatchType(mismatchType: string) {
-  return mismatchType.replace(/_/g, " ");
-}
-
-function formatCalibrationPath(item: InvestorCalibrationSummary["recentMismatches"][number]) {
-  return `${item.modelVerdict} → ${item.investorVerdict}`;
-}
-
 const statusColors: Record<string, string> = {
   new: "bg-blue-100 text-blue-800",
   reviewing: "bg-yellow-100 text-yellow-800",
@@ -163,10 +143,6 @@ const statusColors: Record<string, string> = {
 function AdminInvestorsPage() {
   const [search, setSearch] = useState("");
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
-  const [recomputeNotice, setRecomputeNotice] = useState<
-    | { kind: "completed" | "failed"; message: string }
-    | null
-  >(null);
 
   const {
     data: investors = [],
@@ -183,35 +159,6 @@ function AdminInvestorsPage() {
       customFetch<InvestorDetail>(`/admin/investors/${selectedUserId}`),
     enabled: !!selectedUserId,
   });
-
-  const {
-    data: calibrationSnapshot,
-    isLoading: calibrationLoading,
-    error: calibrationError,
-  } = useInvestorCalibration(selectedUserId);
-
-  const recomputeCalibration = useRecomputeInvestorCalibration(selectedUserId);
-
-  useInvestorCalibrationSocket(selectedUserId, {
-    onCompleted: () =>
-      setRecomputeNotice({
-        kind: "completed",
-        message: "Calibration recompute completed.",
-      }),
-    onFailed: (event) =>
-      setRecomputeNotice({
-        kind: "failed",
-        message: `Calibration recompute failed: ${event.error}`,
-      }),
-  });
-
-  const calibration: InvestorCalibrationSummary | undefined =
-    calibrationSnapshot?.summary;
-  const recomputeStatus = calibrationSnapshot?.status ?? null;
-  const recomputeInFlight =
-    recomputeCalibration.isPending ||
-    recomputeStatus === "queued" ||
-    recomputeStatus === "running";
 
   const filtered = investors.filter((inv) => {
     if (!search) return true;
@@ -378,7 +325,6 @@ function AdminInvestorsPage() {
                     Matches ({detail.matches.length})
                   </TabsTrigger>
                   <TabsTrigger value="scoring">Scoring</TabsTrigger>
-                  <TabsTrigger value="calibration">Calibration</TabsTrigger>
                 </TabsList>
 
                 <ScrollArea className="flex-1">
@@ -684,230 +630,6 @@ function AdminInvestorsPage() {
                         ))}
                       </div>
                     )}
-                  </TabsContent>
-
-                  {/* ---- Tab: Calibration ---- */}
-                  <TabsContent value="calibration" className="px-6 pb-6">
-                    {!selectedUserId ? (
-                      <p className="text-sm text-muted-foreground py-4">
-                        Select an investor to review calibration.
-                      </p>
-                    ) : calibrationLoading ? (
-                      <div className="space-y-3">
-                        <Skeleton className="h-24 w-full" />
-                        <Skeleton className="h-32 w-full" />
-                      </div>
-                    ) : calibrationError ? (
-                      <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-3 text-sm text-destructive">
-                        <AlertTriangle className="h-4 w-4" />
-                        <span>
-                          Failed to load calibration: {(calibrationError as Error).message}
-                        </span>
-                      </div>
-                    ) : calibration ? (
-                      <div className="space-y-4">
-                        <Card>
-                          <CardContent className="space-y-4 pt-4">
-                            <div className="flex items-start justify-between gap-4">
-                              <div>
-                                <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                                  Calibration summary
-                                </p>
-                                <p className="text-sm text-muted-foreground">
-                                  Screening vs. investor verdict deltas on {calibration.decisionsWithTriage} of {calibration.totalDecisions} decisions.
-                                </p>
-                                {calibrationSnapshot?.computedAt && (
-                                  <p className="text-xs text-muted-foreground mt-1">
-                                    Last computed {formatDate(calibrationSnapshot.computedAt)}
-                                  </p>
-                                )}
-                              </div>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  setRecomputeNotice(null);
-                                  recomputeCalibration.mutate();
-                                }}
-                                disabled={recomputeInFlight}
-                              >
-                                {recomputeInFlight ? (
-                                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                                ) : (
-                                  <RefreshCw className="mr-1.5 h-4 w-4" />
-                                )}
-                                {recomputeStatus === "running"
-                                  ? "Running"
-                                  : recomputeStatus === "queued"
-                                    ? "Queued"
-                                    : "Recompute"}
-                              </Button>
-                            </div>
-
-                            {recomputeNotice && (
-                              <div
-                                className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm ${
-                                  recomputeNotice.kind === "completed"
-                                    ? "border-emerald-200 bg-emerald-50 text-emerald-900"
-                                    : "border-rose-200 bg-rose-50 text-rose-900"
-                                }`}
-                              >
-                                {recomputeNotice.kind === "completed" ? (
-                                  <CheckCircle2 className="h-4 w-4" />
-                                ) : (
-                                  <XCircle className="h-4 w-4" />
-                                )}
-                                <span>{recomputeNotice.message}</span>
-                              </div>
-                            )}
-
-                            {calibrationSnapshot?.status === "failed" &&
-                              calibrationSnapshot.lastError && (
-                                <div className="flex items-center gap-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">
-                                  <AlertTriangle className="h-4 w-4" />
-                                  <span>
-                                    Last recompute failed: {calibrationSnapshot.lastError}
-                                  </span>
-                                </div>
-                              )}
-
-                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                              <div className="rounded-md border bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
-                                <div className="text-[10px] uppercase tracking-wide opacity-80">
-                                  Aligned
-                                </div>
-                                <div className="text-lg font-semibold">{calibration.aligned}</div>
-                              </div>
-                              <div className="rounded-md border bg-rose-50 px-3 py-2 text-sm text-rose-900">
-                                <div className="text-[10px] uppercase tracking-wide opacity-80">
-                                  False positive
-                                </div>
-                                <div className="text-lg font-semibold">{calibration.falsePositive}</div>
-                              </div>
-                              <div className="rounded-md border bg-rose-50 px-3 py-2 text-sm text-rose-900">
-                                <div className="text-[10px] uppercase tracking-wide opacity-80">
-                                  False negative
-                                </div>
-                                <div className="text-lg font-semibold">{calibration.falseNegative}</div>
-                              </div>
-                              <div className="rounded-md border bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                                <div className="text-[10px] uppercase tracking-wide opacity-80">
-                                  Soft mismatch
-                                </div>
-                                <div className="text-lg font-semibold">{calibration.softMismatch}</div>
-                              </div>
-                            </div>
-
-                            <div className="flex flex-wrap gap-2 text-xs">
-                              <Badge variant="secondary">Alignment {calibration.alignmentRate == null ? "—" : `${Math.round(calibration.alignmentRate * 100)}%`}</Badge>
-                              <Badge variant="outline">{calibration.decisionsWithTriage} decisions with triage</Badge>
-                            </div>
-                          </CardContent>
-                        </Card>
-
-                        {/* DS-E11-F2-S1 — DD vs Screening lens deltas */}
-                        <Card data-testid="dd-vs-screening-panel">
-                          <CardContent className="space-y-3 pt-4">
-                            <div>
-                              <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                                DD vs Screening
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                How DD's final lens score compares to screening's prediction on the three overlapping lenses.
-                              </p>
-                            </div>
-                            {calibration.lensDeltas && calibration.lensDeltas.length > 0 ? (
-                              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                                {calibration.lensDeltas.map((delta) => (
-                                  <div
-                                    key={delta.lensKey}
-                                    className="rounded-md border bg-muted/40 px-3 py-2 text-sm"
-                                    data-testid={`lens-delta-${delta.lensKey}`}
-                                  >
-                                    <div className="flex items-center justify-between">
-                                      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                                        {delta.lensKey}
-                                      </span>
-                                      <Badge variant="outline" className="text-[10px]">
-                                        n={delta.count}
-                                      </Badge>
-                                    </div>
-                                    <div className="mt-1 flex items-baseline gap-2">
-                                      <span className={`text-lg font-semibold ${delta.meanDelta > 0 ? "text-emerald-700" : delta.meanDelta < 0 ? "text-rose-700" : ""}`}>
-                                        {delta.meanDelta > 0 ? "+" : ""}{delta.meanDelta}
-                                      </span>
-                                      <span className="text-xs text-muted-foreground">
-                                        mean Δ
-                                      </span>
-                                    </div>
-                                    <div className="text-xs text-muted-foreground">
-                                      |Δ| {delta.meanAbsDelta}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="text-sm text-muted-foreground">
-                                No DD lens scores compared yet. Runs that complete evaluation after screening will populate this panel.
-                              </p>
-                            )}
-                          </CardContent>
-                        </Card>
-
-                        <Card>
-                          <CardContent className="space-y-3 pt-4">
-                            <div>
-                              <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                                Top override reasons
-                              </p>
-                              {calibration.topOverrideReasons.length > 0 ? (
-                                <div className="mt-2 flex flex-wrap gap-1.5">
-                                  {calibration.topOverrideReasons.map((reason) => (
-                                    <Badge key={reason.reasonTag} variant="outline" className="gap-1 capitalize text-xs">
-                                      {reason.reasonTag}
-                                      <span className="text-muted-foreground">×{reason.count}</span>
-                                    </Badge>
-                                  ))}
-                                </div>
-                              ) : (
-                                <p className="mt-2 text-sm text-muted-foreground">
-                                  No override tags captured yet.
-                                </p>
-                              )}
-                            </div>
-
-                            <div>
-                              <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                                Recent mismatches
-                              </p>
-                              {calibration.recentMismatches.length > 0 ? (
-                                <div className="mt-2 space-y-2">
-                                  {calibration.recentMismatches.map((item) => (
-                                    <div key={`${item.startupId}-${item.decidedAt}`} className="rounded-md border px-3 py-2 text-sm">
-                                      <div className="flex flex-wrap items-center gap-2">
-                                        <span className="font-medium">{formatCalibrationPath(item)}</span>
-                                        <Badge variant="secondary" className="capitalize">
-                                          {formatMismatchType(item.mismatchType)}
-                                        </Badge>
-                                      </div>
-                                      <div className="mt-1 text-xs text-muted-foreground">
-                                        {item.reasonTags.length > 0 ? item.reasonTags.join(", ") : "No reason tags"}
-                                        {" · "}
-                                        {formatDate(item.decidedAt)}
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <p className="mt-2 text-sm text-muted-foreground">
-                                  No mismatches recorded yet.
-                                </p>
-                              )}
-                            </div>
-                          </CardContent>
-                        </Card>
-                      </div>
-                    ) : null}
                   </TabsContent>
                 </ScrollArea>
               </Tabs>

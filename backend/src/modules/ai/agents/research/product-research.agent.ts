@@ -30,7 +30,7 @@ export const ProductResearchAgent: ResearchAgentConfig<string> = {
       message: `Product research output failed report contract: ${validationError}`,
     });
   }),
-  contextBuilder: ({ extraction, scraping, researchParameters }) => ({
+  contextBuilder: ({ extraction, scraping, researchParameters, screeningObservations }) => ({
     productDescription:
       researchParameters?.productDescription?.trim() ||
       extraction.startupContext?.productDescription?.trim() ||
@@ -50,6 +50,10 @@ export const ProductResearchAgent: ResearchAgentConfig<string> = {
       scraping.website?.headings.filter((heading) => heading.trim().length > 0) ?? [],
     businessModel: researchParameters?.businessModel,
     specificMarket: researchParameters?.specificMarket,
+    screeningPriorObservations: screeningObservations
+      ?.filter((o) => o.lensKey === "traction")
+      .map((o) => o.rationale)
+      .join("\n") || undefined,
   }),
   fallback: ({ extraction }) => {
     const websiteUrl = toValidUrl(extraction.website);

@@ -1,7 +1,7 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { Download, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { customFetch } from "@/api/client";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import type { InvestmentThesis } from "@/types/investor";
 import { findPortfolioConflicts } from "@/lib/screening/portfolio-conflicts";
 import type { Startup } from "@/types/startup";
 import { useScreeningOutput } from "@/lib/screening/useScreeningOutput";
+import { downloadScreening } from "@/lib/pdf/download";
 
 function fetchScreeningQueue() {
   return customFetch<ScreeningRow[]>("/investor/screening");
@@ -33,8 +34,13 @@ function ScreeningDetailPage() {
   const { id } = Route.useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [isDownloadingScreening, setIsDownloadingScreening] = useState(false);
 
-  const { data: rows, isLoading, error } = useQuery({
+  const {
+    data: rows,
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ["investor", "screening"],
     queryFn: fetchScreeningQueue,
     staleTime: 30_000,
@@ -110,6 +116,31 @@ function ScreeningDetailPage() {
     advanceMutation.mutate(row.id);
   }, [row, advanceMutation]);
 
+  const handleDownloadScreening = useCallback(async () => {
+    if (!row || !screeningOutput.data) return;
+
+    setIsDownloadingScreening(true);
+    try {
+      await downloadScreening({
+        startup: {
+          id: row.id,
+          name: row.companyName,
+          description: row.description ?? undefined,
+          industry: row.industry ?? undefined,
+          stage: row.stage ?? undefined,
+          location: row.location ?? undefined,
+          website: row.website ?? undefined,
+        } as Startup,
+      });
+    } catch (err) {
+      toast.error("Could not download screening report", {
+        description: err instanceof Error ? err.message : "Please try again.",
+      });
+    } finally {
+      setIsDownloadingScreening(false);
+    }
+  }, [row, screeningOutput.data]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -149,6 +180,26 @@ function ScreeningDetailPage() {
         onPass={handlePass}
         onAdvance={handleAdvance}
         busy={advanceMutation.isPending || passMutation.isPending}
+        extraActions={
+          <Button
+            variant="outline"
+            onClick={handleDownloadScreening}
+            disabled={!screeningOutput.data || isDownloadingScreening}
+            title={
+              screeningOutput.data
+                ? "Download a 1-page screening report you can share"
+                : "Run screening first to enable download"
+            }
+            data-testid="screening-detail-download-screening"
+          >
+            {isDownloadingScreening ? (
+              <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="mr-1 h-4 w-4" />
+            )}
+            Share PDF
+          </Button>
+        }
       />
       <ScreeningDetailBody
         row={row}

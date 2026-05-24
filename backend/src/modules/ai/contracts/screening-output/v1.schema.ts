@@ -97,10 +97,16 @@ export const ScreeningLensV1Schema = z.object({
 });
 export type ScreeningLensV1 = z.infer<typeof ScreeningLensV1Schema>;
 
+export const ScreeningOverallConfidenceSchema = z.enum(["low", "medium", "high"]);
+export type ScreeningOverallConfidence = z.infer<
+  typeof ScreeningOverallConfidenceSchema
+>;
+
 export const ScreeningOverallV1Schema = z.object({
   score: z.number().int().min(0).max(100),
   signal: ScreeningSignalSchema,
   nextAction: ScreeningNextActionSchema,
+  confidence: ScreeningOverallConfidenceSchema,
   /**
    * Hold-list populated by DS-E7-F4 (missing-materials gate). v1 always
    * defaults to []; the contract is stable so the gate can fill this without

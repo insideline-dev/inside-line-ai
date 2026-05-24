@@ -8,6 +8,7 @@ import {
   POLICY_VERSION,
   ScreeningTriageService,
   applyTriagePolicy,
+  computeScreeningAggregateScore,
   collectPortfolioConflictReasonCodes,
   collectThesisBoundaryViolations,
   computeEvidenceConfidenceScore,
@@ -155,7 +156,20 @@ describe("applyTriagePolicy (pure)", () => {
     ]);
     expect(out.classification).toBe("reject");
     expect(out.reasonCodes).toEqual(["lens.team.reject"]);
-    expect(out.overallScore).toBe(57); // round((80+20+70)/3)
+    expect(out.overallScore).toBe(57);
+  });
+
+  it("computeScreeningAggregateScore uses normalized Team/Traction/Market weights", () => {
+    expect(
+      computeScreeningAggregateScore(
+        [
+          lens("market", 80, "advance"),
+          lens("team", 20, "reject"),
+          lens("traction", 70, "advance"),
+        ],
+        { market: 50, team: 25, traction: 25 },
+      ),
+    ).toBe(63);
   });
 
   it("multiple rejects produce one reason per offender", () => {
@@ -191,6 +205,48 @@ describe("applyTriagePolicy (pure)", () => {
     expect(out.classification).toBe("reject");
     expect(out.reasonCodes).toEqual(["low_overall_score"]);
     expect(out.overallScore).toBe(35);
+  });
+
+  it("uses investor minimum startup score as the reject floor", () => {
+    const out = applyTriagePolicy(
+      [
+        lens("market", 70, "advance"),
+        lens("team", 70, "advance"),
+        lens("traction", 70, "advance"),
+      ],
+      { minStartupScore: 75 },
+    );
+    expect(out.classification).toBe("reject");
+    expect(out.reasonCodes).toEqual(["low_overall_score"]);
+    expect(out.overallScore).toBe(70);
+  });
+
+  it("uses investor minimum thesis-fit score as the out-of-scope floor", () => {
+    const out = applyTriagePolicy(
+      [
+        lens("market", 90, "advance"),
+        lens("team", 90, "advance"),
+        lens("traction", 90, "advance"),
+      ],
+      { thesisFitScore: 64, minThesisFitScore: 65 },
+    );
+    expect(out.classification).toBe("reject");
+    expect(out.reasonCodes).toEqual(["out_of_thesis_scope"]);
+    expect(out.overallScore).toBe(90);
+  });
+
+  it("rejects deals that miss the investor minimum startup score", () => {
+    const out = applyTriagePolicy(
+      [
+        lens("market", 70, "advance"),
+        lens("team", 80, "advance"),
+        lens("traction", 90, "advance"),
+      ],
+      { minStartupScore: 85 },
+    );
+    expect(out.classification).toBe("reject");
+    expect(out.reasonCodes).toEqual(["low_overall_score"]);
+    expect(out.overallScore).toBe(80);
   });
 
   it("borderline 40-59 with all advance → review(borderline_overall_score)", () => {

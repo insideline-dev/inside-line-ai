@@ -581,6 +581,12 @@ export class StartupService {
       await this.triggerAnalysis(id, userId);
 
       this.logger.log(`Submitted startup ${id} for review`);
+      this.dealEvents.record({
+        startupId: id,
+        actorUserId: userId,
+        type: "startup.submitted",
+        payload: { resubmission: false },
+      });
       return updated;
     });
   }
@@ -607,6 +613,12 @@ export class StartupService {
       await this.triggerAnalysis(id, userId);
 
       this.logger.log(`Resubmitted startup ${id}`);
+      this.dealEvents.record({
+        startupId: id,
+        actorUserId: userId,
+        type: "startup.submitted",
+        payload: { resubmission: true },
+      });
       return updated;
     });
   }

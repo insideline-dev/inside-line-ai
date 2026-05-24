@@ -265,6 +265,11 @@ export abstract class BaseEvaluationAgent<TOutput>
       if (pipelineData.relevantSupportingDocuments) {
         promptContext.supportingDocuments = pipelineData.relevantSupportingDocuments;
       }
+      if (pipelineData.screeningObservations?.length) {
+        promptContext.screeningPriorObservations = pipelineData.screeningObservations
+          .map((o) => `[${o.lensKey}] ${o.rationale}`)
+          .join("\n\n");
+      }
       const promptConfig = await this.promptService.resolve({
         key: EVALUATION_PROMPT_KEY_BY_AGENT[this.key],
         stage: pipelineData.extraction.stage,

@@ -12,7 +12,7 @@ export const TeamResearchAgent: ResearchAgentConfig<string> = {
   systemPrompt: TEAM_RESEARCH_SYSTEM_PROMPT,
   humanPromptTemplate: TEAM_RESEARCH_HUMAN_PROMPT,
   schema: z.string(),
-  contextBuilder: ({ extraction, scraping, researchParameters }) => ({
+  contextBuilder: ({ extraction, scraping, researchParameters, screeningObservations }) => ({
     companyName: extraction.companyName,
     teamMembers: scraping.teamMembers,
     companyDescription: extraction.rawText,
@@ -20,6 +20,10 @@ export const TeamResearchAgent: ResearchAgentConfig<string> = {
     websiteUrl: extraction.website,
     specificMarket: researchParameters?.specificMarket,
     productDescription: researchParameters?.productDescription,
+    screeningPriorObservations: screeningObservations
+      ?.filter((o) => o.lensKey === "team")
+      .map((o) => o.rationale)
+      .join("\n") || undefined,
   }),
   fallback: ({ extraction, scraping }) => {
     const websiteUrl = toValidUrl(extraction.website);

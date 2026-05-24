@@ -875,7 +875,7 @@ function InvestorThesisPage() {
             />
 
             {/* DS-E4-F3-S1 — structured (field, operator, value, action) rules. */}
-            <StructuredRulesEditor />
+            <StructuredRulesEditor exclusionNarrative={formData.antiPortfolio} />
 
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={handleCancelNarrative}>

@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   ScreeningHandoffSchema,
   ScreeningLensV1Schema,
+  ScreeningOverallConfidenceSchema,
   ScreeningOverallV1Schema,
 } from "./v1.schema";
 import { ScreeningLensScoreV2Schema } from "./v2.schema";
@@ -43,7 +44,6 @@ export type ScreeningDealbreakerKind = z.infer<
   typeof ScreeningDealbreakerKindSchema
 >;
 
-export const ScreeningOverallConfidenceSchema = z.enum(["low", "medium", "high"]);
 export type ScreeningOverallConfidence = z.infer<
   typeof ScreeningOverallConfidenceSchema
 >;

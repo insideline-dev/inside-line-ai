@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { ClassificationBadge } from "@/components/deal-card/ClassificationBadge";
+import { ConfidenceBadge } from "@/components/ConfidenceBadge";
 import { summarizeReasonCodes, labelForReasonCode } from "@/lib/screening/reason-codes";
 import { useScreeningOutput } from "@/lib/screening/useScreeningOutput";
 import { useTriageDecision } from "@/lib/screening/useTriageDecision";
@@ -111,6 +112,7 @@ export function ScreeningSummaryCard({
   const screeningSignal = screeningState.signal;
   const screeningScore = screeningState.score;
   const nextAction = screeningState.nextAction;
+  const screeningConfidence = screeningState.confidence;
   const missingMaterials = screeningState.missingMaterials;
   const displayReasonCodes = screeningState.reasonCodes.filter(
     (code) => !(code === "missing_materials" && missingMaterials.length > 0),
@@ -171,6 +173,10 @@ export function ScreeningSummaryCard({
                 Score {Math.round(screeningScore)}/100
               </Badge>
             )}
+            <ConfidenceBadge
+              confidence={screeningConfidence}
+              dataTestId="screening-confidence"
+            />
             {nextAction && (
               <Badge variant="outline" className="text-[10px] text-muted-foreground">
                 Next {nextActionLabel(nextAction)}

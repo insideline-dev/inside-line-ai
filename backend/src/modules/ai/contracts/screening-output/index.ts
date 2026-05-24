@@ -16,6 +16,7 @@ export {
   ScreeningHandoffSchema,
   ScreeningLensV1Schema,
   ScreeningOutputV1Schema,
+  ScreeningOverallConfidenceSchema,
   ScreeningOverallV1Schema,
 } from "./v1.schema";
 
@@ -30,7 +31,6 @@ export {
   ScreeningDealbreakerKindSchema,
   ScreeningDealbreakerObservationSchema,
   ScreeningOutputV3Schema,
-  ScreeningOverallConfidenceSchema,
 } from "./v3.schema";
 
 export type {

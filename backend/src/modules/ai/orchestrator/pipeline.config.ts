@@ -78,20 +78,10 @@ export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
       queue: QUEUE_NAMES.AI_SCRAPING,
     },
     {
-      phase: PipelinePhase.RESEARCH,
-      dependsOn: [PipelinePhase.ENRICHMENT, PipelinePhase.SCRAPING],
-      canRunParallelWith: [],
-      timeoutMs: 40 * 60 * 1000, // 40 minutes — accommodates 5 staggered agents + hard timeout
-      maxRetries: 2,
-      required: false,
-      queue: QUEUE_NAMES.AI_RESEARCH,
-    },
-    {
-      // First-pass screening lenses (market/team/traction). SCREENING must
-      // finish before EVALUATION so the thesis gate can short-circuit or
-      // qualify a deal before the deep-dive agents run.
+      // Deal Screening gate — runs BEFORE research so rejected/review deals
+      // never enter the Due Diligence pipeline. Only "advance" proceeds.
       phase: PipelinePhase.SCREENING,
-      dependsOn: [PipelinePhase.RESEARCH],
+      dependsOn: [PipelinePhase.ENRICHMENT, PipelinePhase.SCRAPING],
       canRunParallelWith: [],
       timeoutMs: 3 * 60 * 1000,
       maxRetries: 2,
@@ -99,8 +89,17 @@ export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
       queue: QUEUE_NAMES.AI_SCREENING,
     },
     {
+      phase: PipelinePhase.RESEARCH,
+      dependsOn: [PipelinePhase.SCREENING],
+      canRunParallelWith: [],
+      timeoutMs: 40 * 60 * 1000,
+      maxRetries: 2,
+      required: false,
+      queue: QUEUE_NAMES.AI_RESEARCH,
+    },
+    {
       phase: PipelinePhase.EVALUATION,
-      dependsOn: [PipelinePhase.RESEARCH, PipelinePhase.SCREENING],
+      dependsOn: [PipelinePhase.RESEARCH],
       canRunParallelWith: [],
       timeoutMs: 150 * 60 * 1000, // 2.5 hours — server-side polling, let agents finish
       maxRetries: 2,

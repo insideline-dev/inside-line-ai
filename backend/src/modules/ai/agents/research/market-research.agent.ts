@@ -12,7 +12,7 @@ export const MarketResearchAgent: ResearchAgentConfig<string> = {
   systemPrompt: MARKET_RESEARCH_SYSTEM_PROMPT,
   humanPromptTemplate: MARKET_RESEARCH_HUMAN_PROMPT,
   schema: z.string(),
-  contextBuilder: ({ extraction, scraping, researchParameters }) => ({
+  contextBuilder: ({ extraction, scraping, researchParameters, screeningObservations }) => ({
     industry: extraction.industry,
     geographicFocus: researchParameters?.geographicFocus ?? (extraction.location ? [extraction.location] : []),
     companyDescription: extraction.rawText,
@@ -21,6 +21,10 @@ export const MarketResearchAgent: ResearchAgentConfig<string> = {
     claimedTam: researchParameters?.claimedMetrics?.tam,
     claimedGrowthRate: researchParameters?.claimedMetrics?.growthRate,
     businessModel: researchParameters?.businessModel,
+    screeningPriorObservations: screeningObservations
+      ?.filter((o) => o.lensKey === "market")
+      .map((o) => o.rationale)
+      .join("\n") || undefined,
   }),
   fallback: ({ extraction }) => {
     const websiteUrl = toValidUrl(extraction.website);

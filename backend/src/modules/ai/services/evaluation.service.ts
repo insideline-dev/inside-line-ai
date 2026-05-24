@@ -167,13 +167,25 @@ export class EvaluationService {
       startupId,
       PipelinePhase.ENRICHMENT,
     );
+    const screening = await this.pipelineState.getPhaseResult(
+      startupId,
+      PipelinePhase.SCREENING,
+    );
 
     const { result: normalizedResearch } = normalizeResearchResult(research);
 
     const agentDocumentMap = this.buildAgentDocumentMap(dataRoomFiles);
 
     return {
-      pipelineInput: { extraction, scraping, research: normalizedResearch, enrichment: enrichment ?? undefined },
+      pipelineInput: {
+        extraction,
+        scraping,
+        research: normalizedResearch,
+        enrichment: enrichment ?? undefined,
+        screeningObservations: screening?.lenses
+          ?.filter((l) => !l.usedFallback && !l.error)
+          .map((l) => ({ lensKey: l.key, rationale: l.rationale })),
+      },
       agentDocumentMap,
     };
   }

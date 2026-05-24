@@ -11,7 +11,7 @@ export const CompetitorResearchAgent: ResearchAgentConfig<string> = {
   systemPrompt: COMPETITOR_RESEARCH_SYSTEM_PROMPT,
   humanPromptTemplate: COMPETITOR_RESEARCH_HUMAN_PROMPT,
   schema: z.string(),
-  contextBuilder: ({ extraction, scraping, researchParameters }) => ({
+  contextBuilder: ({ extraction, scraping, researchParameters, screeningObservations }) => ({
     companyName: extraction.companyName,
     industry: extraction.industry,
     tagline: extraction.tagline,
@@ -22,6 +22,10 @@ export const CompetitorResearchAgent: ResearchAgentConfig<string> = {
     knownCompetitors: researchParameters?.knownCompetitors,
     specificMarket: researchParameters?.specificMarket,
     businessModel: researchParameters?.businessModel,
+    screeningPriorObservations: screeningObservations
+      ?.filter((o) => o.lensKey === "market")
+      .map((o) => o.rationale)
+      .join("\n") || undefined,
   }),
   fallback: ({ extraction }) =>
     [

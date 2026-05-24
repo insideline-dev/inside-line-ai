@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { DrizzleService } from "../../../../database";
 import type { Env } from "../../../../config/env.schema";
@@ -10,7 +10,12 @@ import {
   type ScreeningDecisionRow,
 } from "../../entities/screening-decision.schema";
 import { startup } from "../../../startup/entities/startup.schema";
-import { investorThesis } from "../../../investor/entities/investor.schema";
+import {
+  investorScoringPreference,
+  investorThesis,
+  stageScoringWeight,
+  type ScoringWeights,
+} from "../../../investor/entities/investor.schema";
 import { investorPortfolio } from "../../../investor/entities/investor-portfolio.schema";
 import { investorDealbreakerRuleVersion } from "../../../investor/entities/dealbreaker-rule-version.schema";
 import {
@@ -228,6 +233,17 @@ interface OwnerThesisBoundarySnapshot {
   stages: string[] | null;
   industries: string[] | null;
   geographicFocus: string[] | null;
+}
+
+interface OwnerThresholdSnapshot {
+  minThesisFitScore: number | null;
+  minStartupScore: number | null;
+}
+
+type ScreeningAggregateWeights = Pick<ScoringWeights, "team" | "traction" | "market">;
+
+function normalizeScoringStage(stage: string): string {
+  return stage === "growth" ? "series_f_plus" : stage;
 }
 
 const DEALBREAKER_REASON_PREFIX = "dealbreaker:";
@@ -521,18 +537,54 @@ function hasLowConfidenceEvidence(
  *    `SCREENING_ADVANCE_CONFIDENCE_FLOOR` once at construction and threads
  *    it through here.
  */
+export function computeScreeningAggregateScore(
+  lenses: TriageLensInput[],
+  weights?: ScreeningAggregateWeights | null,
+): number {
+  const scoringLenses = lenses.filter(
+    (lens) => lens.key === "team" || lens.key === "traction" || lens.key === "market",
+  );
+  if (scoringLenses.length === 0) {
+    if (lenses.length === 0) return 0;
+    return Math.round(
+      lenses.reduce((sum, lens) => sum + lens.score, 0) / lenses.length,
+    );
+  }
+
+  const weighted = weights ?? { team: 1, traction: 1, market: 1 };
+  const weightFor = (key: string): number => {
+    if (key === "team") return weighted.team;
+    if (key === "traction") return weighted.traction;
+    if (key === "market") return weighted.market;
+    return 0;
+  };
+  const totalWeight = scoringLenses.reduce((sum, lens) => sum + Math.max(weightFor(lens.key), 0), 0);
+  if (totalWeight <= 0) {
+    return Math.round(scoringLenses.reduce((sum, lens) => sum + lens.score, 0) / scoringLenses.length);
+  }
+
+  const score = scoringLenses.reduce(
+    (sum, lens) => sum + lens.score * Math.max(weightFor(lens.key), 0),
+    0,
+  ) / totalWeight;
+  return Math.round(score);
+}
+
 export function applyTriagePolicy(
   lenses: TriageLensInput[],
   options?: {
     thesisFitScore?: number | null;
+    minThesisFitScore?: number | null;
+    minStartupScore?: number | null;
     dealbreakerReasonCodes?: readonly string[];
     advanceConfidenceFloor?: number;
+    screeningWeights?: ScreeningAggregateWeights | null;
   },
 ): TriageOutcome {
-  const overallScore =
-    lenses.length === 0
-      ? 0
-      : Math.round(lenses.reduce((sum, l) => sum + l.score, 0) / lenses.length);
+  const overallScore = computeScreeningAggregateScore(
+    lenses,
+    options?.screeningWeights ?? null,
+  );
 
   const dealbreakerReasonCodes = dedupeStrings(
     (options?.dealbreakerReasonCodes ?? [])
@@ -567,10 +619,12 @@ export function applyTriagePolicy(
   // even runs. Caller may pass null to opt out (e.g. when no investor
   // thesis is registered yet).
   const thesisFitScore = options?.thesisFitScore;
+  const thesisFitThreshold =
+    options?.minThesisFitScore ?? OUT_OF_SCOPE_THESIS_THRESHOLD;
   if (
     thesisFitScore !== null &&
     thesisFitScore !== undefined &&
-    thesisFitScore < OUT_OF_SCOPE_THESIS_THRESHOLD
+    thesisFitScore < thesisFitThreshold
   ) {
     return {
       classification: "reject",
@@ -617,7 +671,8 @@ export function applyTriagePolicy(
     };
   }
 
-  if (overallScore < LOW_SCORE_THRESHOLD) {
+  const minimumStartupScore = options?.minStartupScore ?? LOW_SCORE_THRESHOLD;
+  if (overallScore < minimumStartupScore) {
     return {
       classification: "reject",
       overallScore,
@@ -633,7 +688,11 @@ export function applyTriagePolicy(
   const reviewing = effectiveLenses.filter(
     (l) => l.signal === "review" && !downgradedKeys.has(l.key),
   );
-  const borderline = overallScore < ADVANCE_SCORE_THRESHOLD;
+  const advanceScoreThreshold = Math.max(
+    ADVANCE_SCORE_THRESHOLD,
+    options?.minStartupScore ?? 0,
+  );
+  const borderline = overallScore < advanceScoreThreshold;
 
   if (
     reviewing.length > 0 ||
@@ -719,10 +778,20 @@ export class ScreeningTriageService {
     const dealbreakerReasonCodes = await this.fetchDealbreakerReasonCodes(
       startupSnapshot,
     );
+    const ownerThresholds = await this.fetchOwnerThresholds(
+      startupSnapshot?.userId ?? null,
+    );
+    const screeningWeights = await this.fetchOwnerScreeningWeights(
+      startupSnapshot?.userId ?? null,
+      startupSnapshot?.stage ?? null,
+    );
     const outcome = applyTriagePolicy(parsed.lensResults, {
       thesisFitScore: parsed.thesisFitScore ?? null,
+      minThesisFitScore: ownerThresholds?.minThesisFitScore ?? null,
+      minStartupScore: ownerThresholds?.minStartupScore ?? null,
       dealbreakerReasonCodes,
       advanceConfidenceFloor: this.advanceConfidenceFloor,
+      screeningWeights,
     });
     const materials = buildMissingMaterials(startupSnapshot);
     const canonical = canonicalizeDecision(outcome, materials);
@@ -841,6 +910,67 @@ export class ScreeningTriageService {
       .where(eq(investorThesis.userId, ownerUserId))
       .limit(1);
     return row ?? null;
+  }
+
+  private async fetchOwnerThresholds(
+    ownerUserId: string | null,
+  ): Promise<OwnerThresholdSnapshot | null> {
+    if (!ownerUserId) return null;
+    const [row] = await this.drizzle.db
+      .select({
+        minThesisFitScore: investorThesis.minThesisFitScore,
+        minStartupScore: investorThesis.minStartupScore,
+      })
+      .from(investorThesis)
+      .where(eq(investorThesis.userId, ownerUserId))
+      .limit(1);
+    return row ?? null;
+  }
+
+  private async fetchOwnerScreeningWeights(
+    ownerUserId: string | null,
+    stage: string | null,
+  ): Promise<ScreeningAggregateWeights | null> {
+    if (!ownerUserId || !stage) return null;
+    const scoringStage = normalizeScoringStage(stage);
+
+    const [pref] = await this.drizzle.db
+      .select({
+        useCustomWeights: investorScoringPreference.useCustomWeights,
+        customWeights: investorScoringPreference.customWeights,
+      })
+      .from(investorScoringPreference)
+      .where(
+        and(
+          and(
+          eq(investorScoringPreference.investorId, ownerUserId),
+          eq(investorScoringPreference.stage, scoringStage as never),
+        ),
+          eq(investorScoringPreference.stage, stage as never),
+        ),
+      )
+      .orderBy(desc(investorScoringPreference.updatedAt))
+      .limit(1);
+
+    if (pref?.useCustomWeights && pref.customWeights) {
+      return this.pickScreeningWeights(pref.customWeights);
+    }
+
+    const [defaults] = await this.drizzle.db
+      .select({ weights: stageScoringWeight.weights })
+      .from(stageScoringWeight)
+      .where(eq(stageScoringWeight.stage, scoringStage as never))
+      .limit(1);
+
+    return defaults?.weights ? this.pickScreeningWeights(defaults.weights) : null;
+  }
+
+  private pickScreeningWeights(weights: ScoringWeights): ScreeningAggregateWeights {
+    return {
+      team: weights.team,
+      traction: weights.traction,
+      market: weights.market,
+    };
   }
 
   private async fetchDealbreakerReasonCodes(

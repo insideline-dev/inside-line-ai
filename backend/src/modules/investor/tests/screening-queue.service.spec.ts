@@ -3,6 +3,7 @@ import {
   buildTriageRationale,
   dealbreakerNoteFromReasonCodes,
   isVerdict,
+  shouldHideByInvestorThresholds,
 } from "../screening-queue.service";
 import type { ScreeningDecisionThesisFit } from "../../ai/entities/screening-decision.schema";
 
@@ -55,16 +56,48 @@ describe("dealbreakerNoteFromReasonCodes", () => {
     ).toBe("dealbreaker crypto");
   });
 
-  it("picks reject-suffixed codes as a fallback", () => {
-    expect(dealbreakerNoteFromReasonCodes(["lens.market.reject"])).toBe(
-      "lens.market.reject",
-    );
-  });
-
   it("returns null when nothing looks like a blocker", () => {
     expect(
       dealbreakerNoteFromReasonCodes(["lens.team.review", "missing_materials"]),
     ).toBeNull();
+  });
+});
+
+describe("shouldHideByInvestorThresholds", () => {
+  it("keeps rows visible when thesis-fit is missing", () => {
+    expect(
+      shouldHideByInvestorThresholds(
+        { overallScore: 90, fit: null },
+        { minThesisFitScore: 80, minStartupScore: null },
+      ),
+    ).toBe(false);
+  });
+
+  it("hides rows below the thesis-fit threshold", () => {
+    expect(
+      shouldHideByInvestorThresholds(
+        { overallScore: 90, fit: { ...fit, overall: 79 } },
+        { minThesisFitScore: 80, minStartupScore: null },
+      ),
+    ).toBe(true);
+  });
+
+  it("hides rows below the startup-score threshold", () => {
+    expect(
+      shouldHideByInvestorThresholds(
+        { overallScore: 69, fit },
+        { minThesisFitScore: null, minStartupScore: 70 },
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps rows visible when both thresholds pass", () => {
+    expect(
+      shouldHideByInvestorThresholds(
+        { overallScore: 80, fit },
+        { minThesisFitScore: 70, minStartupScore: 75 },
+      ),
+    ).toBe(false);
   });
 });
 

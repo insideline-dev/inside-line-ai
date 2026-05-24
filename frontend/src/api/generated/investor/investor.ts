@@ -29,6 +29,7 @@ import type {
   CreateNoteDto,
   CreateTeamInviteDto,
   CreateThesisDto,
+  GenerateStructuredDealbreakersDto,
   InvestorControllerGetMatchesParams,
   InvestorControllerListCalibrationProposalsParams,
   ParseDealbreakersDto,
@@ -841,6 +842,82 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getInvestorControllerUpdateStructuredDealbreakersMutationOptions(options), queryClient);
+    }
+    export type investorControllerGenerateStructuredDealbreakersResponse201 = {
+  data: void
+  status: 201
+}
+    
+export type investorControllerGenerateStructuredDealbreakersResponseSuccess = (investorControllerGenerateStructuredDealbreakersResponse201) & {
+  headers: Headers;
+};
+;
+
+export type investorControllerGenerateStructuredDealbreakersResponse = (investorControllerGenerateStructuredDealbreakersResponseSuccess)
+
+export const getInvestorControllerGenerateStructuredDealbreakersUrl = () => {
+
+
+  
+
+  return `/investor/thesis/structured-dealbreakers/generate`
+}
+
+export const investorControllerGenerateStructuredDealbreakers = async (generateStructuredDealbreakersDto: GenerateStructuredDealbreakersDto, options?: RequestInit): Promise<investorControllerGenerateStructuredDealbreakersResponse> => {
+  
+  return customFetch<investorControllerGenerateStructuredDealbreakersResponse>(getInvestorControllerGenerateStructuredDealbreakersUrl(),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      generateStructuredDealbreakersDto,)
+  }
+);}
+
+
+
+
+export const getInvestorControllerGenerateStructuredDealbreakersMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof investorControllerGenerateStructuredDealbreakers>>, TError,{data: BodyType<GenerateStructuredDealbreakersDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof investorControllerGenerateStructuredDealbreakers>>, TError,{data: BodyType<GenerateStructuredDealbreakersDto>}, TContext> => {
+
+const mutationKey = ['investorControllerGenerateStructuredDealbreakers'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof investorControllerGenerateStructuredDealbreakers>>, {data: BodyType<GenerateStructuredDealbreakersDto>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  investorControllerGenerateStructuredDealbreakers(data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type InvestorControllerGenerateStructuredDealbreakersMutationResult = NonNullable<Awaited<ReturnType<typeof investorControllerGenerateStructuredDealbreakers>>>
+    export type InvestorControllerGenerateStructuredDealbreakersMutationBody = BodyType<GenerateStructuredDealbreakersDto>
+    export type InvestorControllerGenerateStructuredDealbreakersMutationError = ErrorType<unknown>
+
+    export const useInvestorControllerGenerateStructuredDealbreakers = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof investorControllerGenerateStructuredDealbreakers>>, TError,{data: BodyType<GenerateStructuredDealbreakersDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof investorControllerGenerateStructuredDealbreakers>>,
+        TError,
+        {data: BodyType<GenerateStructuredDealbreakersDto>},
+        TContext
+      > => {
+      return useMutation(getInvestorControllerGenerateStructuredDealbreakersMutationOptions(options), queryClient);
     }
     export type investorControllerRecordDealDecisionResponse201 = {
   data: void

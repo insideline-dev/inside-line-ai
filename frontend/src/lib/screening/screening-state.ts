@@ -5,6 +5,7 @@ export interface ScreeningDisplayState {
   signal: ScreeningOutputV1["overall"]["signal"] | TriageDecision["classification"] | null;
   score: number | null;
   nextAction: ScreeningOutputV1["overall"]["nextAction"] | TriageDecision["nextAction"] | null;
+  confidence: ScreeningOutputV1["overall"]["confidence"] | null;
   reasonCodes: string[];
   missingMaterials: ScreeningOutputV1["overall"]["missingMaterials"];
   source: "decision" | "output" | "none";
@@ -19,6 +20,7 @@ export function resolveScreeningDisplayState(
       signal: decision.classification,
       score: decision.overallScore,
       nextAction: decision.nextAction,
+      confidence: output?.overall.confidence ?? null,
       reasonCodes: decision.reasonCodes,
       missingMaterials: output?.overall.missingMaterials ?? [],
       source: "decision",
@@ -30,6 +32,7 @@ export function resolveScreeningDisplayState(
       signal: output.overall.signal,
       score: output.overall.score,
       nextAction: output.overall.nextAction,
+      confidence: output.overall.confidence ?? null,
       reasonCodes: [],
       missingMaterials: output.overall.missingMaterials,
       source: "output",
@@ -40,6 +43,7 @@ export function resolveScreeningDisplayState(
     signal: null,
     score: null,
     nextAction: null,
+    confidence: null,
     reasonCodes: [],
     missingMaterials: [],
     source: "none",

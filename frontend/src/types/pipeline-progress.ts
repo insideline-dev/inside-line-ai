@@ -3,8 +3,8 @@ export const PIPELINE_PHASE_ORDER = [
   "extraction",
   "enrichment",
   "scraping",
-  "research",
   "screening",
+  "research",
   "evaluation",
   "synthesis",
 ] as const;

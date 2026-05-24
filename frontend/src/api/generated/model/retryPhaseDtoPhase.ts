@@ -14,8 +14,8 @@ export const RetryPhaseDtoPhase = {
   extraction: 'extraction',
   enrichment: 'enrichment',
   scraping: 'scraping',
-  research: 'research',
   screening: 'screening',
+  research: 'research',
   evaluation: 'evaluation',
   synthesis: 'synthesis',
 } as const;

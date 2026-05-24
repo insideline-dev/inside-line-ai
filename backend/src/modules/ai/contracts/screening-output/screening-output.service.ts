@@ -382,7 +382,7 @@ export class ScreeningOutputService {
       version: 3,
       dealbreakersObserved: buildDealbreakersObserved(reasonCodes),
       reasoning: this.buildOverallReasoning(v2, reasonCodes),
-      confidence: this.deriveOverallConfidence(v2.lenses),
+      confidence: v2.overall.confidence,
     };
   }
 
@@ -551,6 +551,7 @@ export class ScreeningOutputService {
       score: canonicalBase.score,
       signal: canonical.signal,
       nextAction: canonical.nextAction,
+      confidence: this.deriveOverallConfidence(lenses),
       missingMaterials: canonical.missingMaterials,
     };
   }

@@ -31,7 +31,7 @@ import { startup, StartupStatus } from '../startup/entities/startup.schema';
 import { StartupMatchingPipelineService } from '../ai/services/startup-matching-pipeline.service';
 import { AiProviderService } from '../ai/providers/ai-provider.service';
 import { ModelPurpose } from '../ai/interfaces/pipeline.interface';
-import { generateText } from 'ai';
+import { generateText, Output } from 'ai';
 import { buildThesisSummary } from './thesis-summary.util';
 import { InvestorOnboardingService } from './onboarding/investor-onboarding.service';
 import {
@@ -40,6 +40,11 @@ import {
 } from './structured-dealbreaker';
 
 const THESIS_SUMMARY_BATCH_SIZE = 10;
+const MAX_GENERATED_STRUCTURED_DEALBREAKERS = 8;
+const MAX_GENERATED_STRUCTURED_DEALBREAKER_CANDIDATES = 16;
+const STRUCTURED_DEALBREAKER_GENERATION_SCHEMA = StructuredDealbreakerRuleListSchema.max(
+  MAX_GENERATED_STRUCTURED_DEALBREAKER_CANDIDATES,
+).transform((rules) => ({ rules }));
 
 @Injectable()
 export class ThesisService {
@@ -127,6 +132,95 @@ export class ThesisService {
 
       return { versionNumber: nextVersion, rules: validated };
     });
+  }
+
+  async generateStructuredDealbreakers(
+    userId: string,
+    narrative: string,
+  ): Promise<StructuredDealbreakerRule[]> {
+    const trimmed = narrative.trim();
+    if (trimmed.length < 12) return [];
+    if (!this.aiProviders) {
+      this.logger.warn(
+        `Structured dealbreaker generation requested without AI providers configured for user ${userId}`,
+      );
+      return [];
+    }
+
+    const model = 'gpt-5.4-mini';
+    const prompt = [
+      'You convert an investor anti-portfolio narrative into structured dealbreaker rules.',
+      'Return only explicit exclusions that the investor clearly stated.',
+      'Prefer omission over guessing. Do not add adjacent concepts, synonyms, or broader categories unless they are explicitly named.',
+      'Only use these fields: industry, stage, geography, raiseType, fundingTarget, valuation, teamSize.',
+      'Use string-list rules when the narrative names categories like sectors, stages, geographies, or raise types.',
+      'Use numeric rules only when the narrative explicitly gives a threshold or exact number.',
+      'Default action to reject unless the investor clearly implies a softer rule, in which case use require_override.',
+      'Write short professional labels that read well in a UI.',
+      `Return at most ${MAX_GENERATED_STRUCTURED_DEALBREAKERS} rules.`,
+      '',
+      'Investor anti-portfolio narrative:',
+      trimmed,
+    ].join('\n');
+
+    try {
+      const { output } = await generateText({
+        model: this.aiProviders.resolveModel(model),
+        prompt,
+        temperature: 0.1,
+        maxOutputTokens: 900,
+        output: Output.object({ schema: STRUCTURED_DEALBREAKER_GENERATION_SCHEMA }),
+      });
+
+      const generated = output?.rules ?? [];
+      return this.normalizeGeneratedStructuredDealbreakers(generated);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(
+        `Structured dealbreaker generation failed for user ${userId}: ${msg}`,
+      );
+      return [];
+    }
+  }
+
+  private normalizeGeneratedStructuredDealbreakers(
+    rules: StructuredDealbreakerRule[],
+  ): StructuredDealbreakerRule[] {
+    const validated = StructuredDealbreakerRuleListSchema.safeParse(
+      rules.slice(0, MAX_GENERATED_STRUCTURED_DEALBREAKER_CANDIDATES),
+    );
+    if (!validated.success) return [];
+
+    const deduped = new Map<string, StructuredDealbreakerRule>();
+    for (const rule of validated.data) {
+      const normalized = 'values' in rule
+        ? {
+            ...rule,
+            values: Array.from(
+              new Set(rule.values.map((value) => value.trim()).filter(Boolean)),
+            ),
+          }
+        : rule;
+
+      if ('values' in normalized && normalized.values.length === 0) {
+        continue;
+      }
+
+      const key = JSON.stringify({
+        field: normalized.field,
+        operator: normalized.operator,
+        action: normalized.action,
+        value: 'values' in normalized ? [...normalized.values].sort() : normalized.value,
+      });
+      if (!deduped.has(key)) {
+        deduped.set(key, normalized);
+      }
+      if (deduped.size >= MAX_GENERATED_STRUCTURED_DEALBREAKERS) {
+        break;
+      }
+    }
+
+    return Array.from(deduped.values());
   }
 
   private async recordDealbreakerChange(

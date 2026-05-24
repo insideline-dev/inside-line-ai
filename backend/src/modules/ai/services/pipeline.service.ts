@@ -2054,7 +2054,7 @@ export class PipelineService {
     const reasonCodes = screening.reasonCodes?.join(", ") || "screening_gate";
     const reason = `Screening classified this deal as ${screening.classification}; downstream evaluation stopped (${reasonCodes}).`;
 
-    for (const downstreamPhase of [PipelinePhase.EVALUATION, PipelinePhase.SYNTHESIS]) {
+    for (const downstreamPhase of [PipelinePhase.RESEARCH, PipelinePhase.EVALUATION, PipelinePhase.SYNTHESIS]) {
       const currentStatus = (await this.pipelineState.get(state.startupId))?.phases[
         downstreamPhase
       ]?.status;

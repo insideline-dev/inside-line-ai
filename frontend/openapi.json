@@ -5827,6 +5827,30 @@
         ]
       }
     },
+    "/investor/thesis/structured-dealbreakers/generate": {
+      "post": {
+        "operationId": "InvestorController_generateStructuredDealbreakers",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateStructuredDealbreakersDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      }
+    },
     "/investor/deals/{startupId}/decision": {
       "post": {
         "operationId": "InvestorController_recordDealDecision",
@@ -11315,8 +11339,8 @@
               "extraction",
               "enrichment",
               "scraping",
-              "research",
               "screening",
+              "research",
               "evaluation",
               "synthesis"
             ]
@@ -14166,6 +14190,19 @@
         },
         "required": [
           "rules"
+        ]
+      },
+      "GenerateStructuredDealbreakersDto": {
+        "type": "object",
+        "properties": {
+          "narrative": {
+            "type": "string",
+            "minLength": 12,
+            "maxLength": 4000
+          }
+        },
+        "required": [
+          "narrative"
         ]
       },
       "RecordDealDecisionDto": {

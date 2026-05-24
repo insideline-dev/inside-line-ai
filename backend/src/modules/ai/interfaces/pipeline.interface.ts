@@ -14,8 +14,8 @@ export enum PipelinePhase {
   EXTRACTION = "extraction",
   ENRICHMENT = "enrichment",
   SCRAPING = "scraping",
-  RESEARCH = "research",
   SCREENING = "screening",
+  RESEARCH = "research",
   EVALUATION = "evaluation",
   SYNTHESIS = "synthesis",
 }

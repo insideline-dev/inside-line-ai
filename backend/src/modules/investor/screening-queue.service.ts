@@ -102,6 +102,28 @@ const BOUNDARY_CODE_LABELS: Record<string, string> = {
   out_of_geo: "Geography is outside this investor's thesis",
 };
 
+export function shouldHideByInvestorThresholds(
+  input: {
+    overallScore: number;
+    fit: ScreeningDecisionThesisFit | null;
+  },
+  thresholds: {
+    minThesisFitScore: number | null;
+    minStartupScore: number | null;
+  } | null,
+): boolean {
+  if (!thresholds) return false;
+  const belowThesisFit =
+    thresholds.minThesisFitScore !== null &&
+    input.fit?.overall !== undefined &&
+    input.fit.overall < thresholds.minThesisFitScore;
+  const belowStartupScore =
+    thresholds.minStartupScore !== null &&
+    input.overallScore < thresholds.minStartupScore;
+
+  return belowThesisFit || belowStartupScore;
+}
+
 export function dealbreakerNoteFromReasonCodes(codes: string[]): string | null {
   // Only surface genuine thesis dealbreakers/exclusions — not lens evaluation
   // outcomes (lens.*.reject). Lens results are surfaced in the lens write-up
@@ -322,6 +344,21 @@ export class ScreeningQueueService {
             `[ScreeningQueue] thesis-fit backfill failed for startup ${r.startup_id}: ${err instanceof Error ? err.message : String(err)}`,
           );
         }
+      }
+
+      if (
+        !options?.allStartups &&
+        shouldHideByInvestorThresholds(
+          { overallScore: r.overall_score, fit },
+          thesisRow
+            ? {
+                minThesisFitScore: thesisRow.minThesisFitScore,
+                minStartupScore: thesisRow.minStartupScore,
+              }
+            : null,
+        )
+      ) {
+        continue;
       }
 
       out.push({

@@ -244,6 +244,7 @@ export * from './fundingHistoryListResponseDto';
 export * from './fundingHistoryListResponseDtoRowsItem';
 export * from './fundingHistoryListResponseDtoRowsItemSourcesItem';
 export * from './fundingHistoryListResponseDtoRowsItemSourcesItemProvider';
+export * from './generateStructuredDealbreakersDto';
 export * from './getProgressResponseDto';
 export * from './getProgressResponseDtoProgress';
 export * from './getProgressResponseDtoStatus';

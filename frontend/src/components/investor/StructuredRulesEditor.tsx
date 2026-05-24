@@ -3,7 +3,7 @@
 // dealbreaker editor; the same versioned table backs both.
 
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, ShieldAlert, ShieldQuestion, Loader2, Save } from "lucide-react";
+import { Plus, Trash2, ShieldAlert, ShieldQuestion, Loader2, Save, Sparkles } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   useInvestorControllerGetStructuredDealbreakers,
   useInvestorControllerUpdateStructuredDealbreakers,
+  useInvestorControllerGenerateStructuredDealbreakers,
 } from "@/api/generated/investor/investor";
 
 const STRING_FIELDS = ["industry", "stage", "geography", "raiseType"] as const;
@@ -158,7 +159,41 @@ function toServerPayload(rules: RuleDraft[]) {
   });
 }
 
-export function StructuredRulesEditor() {
+function normalizedRuleKey(rule: RuleDraft): string {
+  return JSON.stringify({
+    field: rule.field,
+    operator: rule.operator,
+    action: rule.action,
+    value: isNumericField(rule.field)
+      ? (rule as NumericRuleDraft).value
+      : [...(rule as StringRuleDraft).values]
+          .map((v) => v.trim().toLowerCase())
+          .filter(Boolean)
+          .sort(),
+  });
+}
+
+function mergeGeneratedRules(current: RuleDraft[], incoming: RuleDraft[]): RuleDraft[] {
+  const merged = [...current];
+  const keys = new Set(current.map((rule) => normalizedRuleKey(rule)));
+
+  for (const rule of incoming) {
+    const key = normalizedRuleKey(rule);
+    if (keys.has(key)) continue;
+    keys.add(key);
+    merged.push(rule);
+  }
+
+  return merged;
+}
+
+interface StructuredRulesEditorProps {
+  exclusionNarrative?: string;
+}
+
+export function StructuredRulesEditor({
+  exclusionNarrative,
+}: StructuredRulesEditorProps) {
   const { toast } = useToast();
   const { data, isLoading, refetch } =
     useInvestorControllerGetStructuredDealbreakers();
@@ -169,11 +204,16 @@ export function StructuredRulesEditor() {
 
   const [rules, setRules] = useState<RuleDraft[]>([]);
   const [dirty, setDirty] = useState(false);
+  const [draftGenerated, setDraftGenerated] = useState(false);
+  const [hasHydratedRemote, setHasHydratedRemote] = useState(false);
 
   useEffect(() => {
+    if (hasHydratedRemote && dirty) return;
     setRules(remoteRules);
     setDirty(false);
-  }, [remoteRules]);
+    setDraftGenerated(false);
+    setHasHydratedRemote(true);
+  }, [remoteRules, hasHydratedRemote, dirty]);
 
   const { mutate: save, isPending: isSaving } =
     useInvestorControllerUpdateStructuredDealbreakers({
@@ -181,10 +221,38 @@ export function StructuredRulesEditor() {
         onSuccess: () => {
           toast.success("Structured rules saved");
           setDirty(false);
+          setDraftGenerated(false);
+          setHasHydratedRemote(false);
           refetch();
         },
         onError: (error) => {
           toast.error("Failed to save rules", {
+            description: (error as Error).message,
+          });
+        },
+      },
+    });
+
+  const { mutate: generateDraft, isPending: isGenerating } =
+    useInvestorControllerGenerateStructuredDealbreakers({
+      mutation: {
+        onSuccess: (response) => {
+          const payload = response.data as { rules?: unknown[] } | undefined;
+          const generatedRules = rehydrateFromServer(payload?.rules ?? []).map((rule) => ({
+            ...rule,
+            id: makeId(),
+          }));
+          setRules((prev) => mergeGeneratedRules(prev, generatedRules));
+          setDirty(true);
+          setDraftGenerated(generatedRules.length > 0);
+          toast.success(
+            generatedRules.length > 0
+              ? "Draft rules added. Review before saving"
+              : "No clear structured rules found",
+          );
+        },
+        onError: (error) => {
+          toast.error("Failed to generate draft rules", {
             description: (error as Error).message,
           });
         },
@@ -224,6 +292,14 @@ export function StructuredRulesEditor() {
     save({ data: { rules: toServerPayload(rules) as never } });
   };
 
+  const canGenerate = (exclusionNarrative?.trim().length ?? 0) >= 12;
+
+  const handleGenerate = () => {
+    const narrative = exclusionNarrative?.trim();
+    if (!narrative || narrative.length < 12) return;
+    generateDraft({ data: { narrative } });
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -238,6 +314,35 @@ export function StructuredRulesEditor() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        <div className="flex flex-col gap-3 rounded-lg border border-dashed bg-muted/30 p-3 md:flex-row md:items-center md:justify-between">
+          <div className="space-y-1">
+            <p className="text-sm font-medium">Generate structured rules from your narrative</p>
+            <p className="text-xs text-muted-foreground">
+              Turn the anti-portfolio notes above into editable draft rules. Nothing is saved until you click Save rules.
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="gap-2"
+            onClick={handleGenerate}
+            disabled={!canGenerate || isGenerating}
+            data-testid="generate-structured-rules"
+          >
+            {isGenerating ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Sparkles className="h-4 w-4" />
+            )}
+            Generate from narrative
+          </Button>
+        </div>
+
+        {draftGenerated && (
+          <div className="rounded-md border border-amber-300/60 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+            AI draft added to this form. Review and edit anything you want before saving.
+          </div>
+        )}
         {isLoading ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -397,20 +502,27 @@ export function StructuredRulesEditor() {
             <Plus className="h-4 w-4 mr-1" />
             Add rule
           </Button>
-          <Button
-            type="button"
-            onClick={handleSave}
-            disabled={!dirty || isSaving}
-            className="gap-2"
-            data-testid="save-structured-rules"
-          >
-            {isSaving ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Save className="h-4 w-4" />
+          <div className="flex items-center gap-2">
+            {!canGenerate && (
+              <p className="text-xs text-muted-foreground">
+                Add a bit more anti-portfolio detail above to generate a draft.
+              </p>
             )}
-            Save rules
-          </Button>
+            <Button
+              type="button"
+              onClick={handleSave}
+              disabled={!dirty || isSaving}
+              className="gap-2"
+              data-testid="save-structured-rules"
+            >
+              {isSaving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4" />
+              )}
+              Save rules
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>

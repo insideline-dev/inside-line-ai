@@ -78,25 +78,38 @@ export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
       queue: QUEUE_NAMES.AI_SCRAPING,
     },
     {
-      phase: PipelinePhase.RESEARCH,
+      // First-pass screening lenses (market/team/traction). Runs the
+      // CHEAP pre-check directly after enrichment + scraping so an
+      // investor gets a screening verdict before any of the expensive
+      // DD phases (RESEARCH / EVALUATION / SYNTHESIS) start. The market
+      // lens itself does its own scoped web search (it's configured as
+      // a research-capable agent) so it doesn't need the 40-min deep
+      // RESEARCH phase to have run first.
+      //
+      // Pipeline default: STOP at SCREENING. `applyScreeningGate` only
+      // releases RESEARCH/EVALUATION/SYNTHESIS when the screening result
+      // is `advance` with no dealbreaker reason codes, OR when an
+      // investor has explicitly recorded an advance verdict.
+      phase: PipelinePhase.SCREENING,
       dependsOn: [PipelinePhase.ENRICHMENT, PipelinePhase.SCRAPING],
       canRunParallelWith: [],
-      timeoutMs: 40 * 60 * 1000, // 40 minutes — accommodates 5 staggered agents + hard timeout
-      maxRetries: 2,
-      required: false,
-      queue: QUEUE_NAMES.AI_RESEARCH,
-    },
-    {
-      // First-pass screening lenses (market/team/traction). SCREENING must
-      // finish before EVALUATION so the thesis gate can short-circuit or
-      // qualify a deal before the deep-dive agents run.
-      phase: PipelinePhase.SCREENING,
-      dependsOn: [PipelinePhase.RESEARCH],
-      canRunParallelWith: [],
-      timeoutMs: 3 * 60 * 1000,
+      timeoutMs: 5 * 60 * 1000,
       maxRetries: 2,
       required: true,
       queue: QUEUE_NAMES.AI_SCREENING,
+    },
+    {
+      // Deep research — 5 staggered agents. Only runs AFTER screening
+      // returns advance OR an investor manually advances. Depending on
+      // SCREENING (not just ENRICHMENT+SCRAPING) gives the gate a place
+      // to short-circuit between the two.
+      phase: PipelinePhase.RESEARCH,
+      dependsOn: [PipelinePhase.SCREENING],
+      canRunParallelWith: [],
+      timeoutMs: 40 * 60 * 1000,
+      maxRetries: 2,
+      required: false,
+      queue: QUEUE_NAMES.AI_RESEARCH,
     },
     {
       phase: PipelinePhase.EVALUATION,

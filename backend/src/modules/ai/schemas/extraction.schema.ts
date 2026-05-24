@@ -46,6 +46,20 @@ const StartupFormContextSchema = z.object({
   productScreenshots: z.array(z.string()).optional(),
 });
 
+/**
+ * Per-document text excerpt cached during EXTRACTION for non-deck
+ * classified files. Screening lenses pull these via the lens content
+ * router so each lens only sees the docs it actually needs (financials
+ * for traction, team CVs for team, etc.). See {@link SupportingDocText}.
+ */
+const SupportingDocTextSchema = z.object({
+  fileName: z.string().min(1),
+  contentType: z.string().default(""),
+  category: z.nativeEnum(DocumentCategory).nullable().default(null),
+  text: z.string().default(""),
+  truncated: z.boolean().default(false),
+});
+
 export const ExtractionSchema = z.object({
   companyName: z.string().min(1),
   description: z
@@ -72,6 +86,7 @@ export const ExtractionSchema = z.object({
   pageCount: z.number().int().nonnegative().optional(),
   warnings: z.array(z.string()).optional().default([]),
   deckStructuredData: DeckStructuredDataSchema.optional(),
+  supportingDocTexts: z.array(SupportingDocTextSchema).optional().default([]),
 });
 
 export type Extraction = z.infer<typeof ExtractionSchema>;

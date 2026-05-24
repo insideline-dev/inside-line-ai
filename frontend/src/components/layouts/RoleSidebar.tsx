@@ -2,6 +2,7 @@ import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { NotificationCenter } from "@/components/NotificationCenter";
+import { GlobalAddStartupButton } from "@/components/layouts/GlobalAddStartupButton";
 import {
   Collapsible,
   CollapsibleContent,
@@ -344,6 +345,7 @@ export function RoleSidebar({ role, children }: RoleSidebarProps) {
           <SidebarTrigger className="-ml-1" />
           <div className="flex-1" />
           <div className="flex items-center gap-2">
+            <GlobalAddStartupButton role={role} />
             <NotificationCenter />
             <ThemeToggle />
           </div>

@@ -64,7 +64,6 @@ import {
   Star,
   Eye,
   Clock,
-  Plus,
   List,
   Columns3,
   FileSearch,
@@ -1630,12 +1629,6 @@ function InvestorDashboard() {
               <Columns3 className="w-4 h-4" />
             </Button>
           </div>
-          <Button asChild data-testid="button-submit-startup">
-            <Link to="/investor/submit">
-              <Plus className="w-4 h-4 mr-2" />
-              Analyze Startup
-            </Link>
-          </Button>
         </div>
       </div>
 

@@ -122,5 +122,24 @@ export const LensInputSchema = z.object({
    * variable but typically ignore it.
    */
   teamMembers: z.string().optional().default(""),
+  /**
+   * DS-E2-F1-S3 — scoped document content blocks. Pre-formatted markdown
+   * sections produced by `LensContentRouterService` per lens so each lens
+   * only sees the upstream-cached content it actually needs. Empty string
+   * when no content of that kind is available (the prompt template uses
+   * the variable verbatim, so empty produces an empty section).
+   */
+  /** Per-lens slice of `extractionResult.deckStructuredData` formatted as bullets with `(deck p.N)` page citations. */
+  deckSectionsBlock: z.string().optional().default(""),
+  /** Capped excerpt of `extractionResult.rawText` — primary fallback for sections the LLM didn't extract structurally. */
+  deckExcerptBlock: z.string().optional().default(""),
+  /** Per-lens slice of `EnrichmentResult` (e.g. tractionSignals for traction lens, fundingHistory for market lens). */
+  enrichmentBlock: z.string().optional().default(""),
+  /** Per-lens slice of `ScrapingResult` (pricing/customers for traction, website summary for market, team bios for team). */
+  scrapedBlock: z.string().optional().default(""),
+  /** Per-lens slice of cached supporting-doc text (financials docs for traction, team_hr for team, etc.). */
+  supportingDocsBlock: z.string().optional().default(""),
+  /** Detailed LinkedIn profiles (experience + education) for each team member — consumed by the team lens only. */
+  teamProfilesBlock: z.string().optional().default(""),
 });
 export type LensInput = z.infer<typeof LensInputSchema>;

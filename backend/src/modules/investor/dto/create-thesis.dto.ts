@@ -39,6 +39,8 @@ export const CreateThesisSchema = z.object({
   // subsequent saves until the explicit "Regenerate from structured
   // params" action is invoked.
   thesisSummary: z.string().max(2000).optional(),
+  skipRematching: z.boolean().optional(),
+  regenerateSummary: z.boolean().optional(),
 }).refine(
   (data) => {
     if (data.checkSizeMin && data.checkSizeMax) {

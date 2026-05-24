@@ -1598,17 +1598,22 @@ export function AdminPipelineLivePanel({
           </div>
         )}
 
-        <ScreeningSummaryCard startupId={startupId} progress={progress} />
+        {!phaseFilter && (!phaseAllowSet || phaseAllowSet.has("screening")) && (
+          <ScreeningSummaryCard startupId={startupId} progress={progress} />
+        )}
 
         <div className="space-y-3">
           {([
             { label: "Deal Screening", filter: (e: { phase: string }) => DS_PHASES.has(e.phase) },
             { label: "Due Diligence", filter: (e: { phase: string }) => !DS_PHASES.has(e.phase) },
-          ] as const).map((group) => (
+          ] as const).map((group) => {
+            const groupEntries = phaseEntries.filter(group.filter);
+            if (groupEntries.length === 0) return null;
+            return (
             <div key={group.label} className="space-y-1.5">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group.label}</h3>
               <div className="rounded-lg border divide-y">
-              {phaseEntries.filter(group.filter).map((entry) => {
+              {groupEntries.map((entry) => {
                 const runningAgents = Object.entries(entry.data.agents ?? {})
                   .filter(([k, a]) => a.status === "running" && !PHASE_STEP_AGENT_KEYS.has(k));
                 const hasSignals = entry.failedAgentCount > 0 || entry.fallbackAgentCount > 0 || entry.retriedAgentCount > 0 || entry.retryingAgentCount > 0;
@@ -1694,7 +1699,8 @@ export function AdminPipelineLivePanel({
               })}
               </div>
             </div>
-          ))}
+          );
+          })}
         </div>
 
         <details className="group">
@@ -1769,37 +1775,45 @@ export function AdminPipelineLivePanel({
                     <div
                       key={item.id}
                       className={cn(
-                        "rounded-md border px-2.5 py-2",
+                        "overflow-hidden rounded-md border px-2.5 py-2",
                         SURFACE_TONE_CLASS[item.tone],
                         isTrace && "cursor-pointer",
                         isTrackedAgent && "ring-1 ring-primary/50",
                       )}
                       onClick={isTrace && item.trace ? () => setSelectedTrace(item.trace!) : undefined}
                     >
-                      <div className="flex items-center gap-2">
-                        <div className="flex min-w-0 flex-1 items-center gap-2">
-                          {isEvent ? eventIcon(item.event!.event) : statusIcon(displayStatus)}
-                          <span className="truncate text-sm font-medium">{item.name}</span>
-                          <Badge variant="outline" className="shrink-0 border-border bg-muted/50 text-[10px] text-muted-foreground">
-                            {formatLabel(item.phase)}
-                          </Badge>
-                          {item.kind !== "agent" && (
-                            <Badge variant="outline" className="shrink-0 border-border bg-muted/50 text-[10px] text-muted-foreground">
-                              {item.kind === "event" ? "event" : item.kind === "ai_trace" ? "trace" : "step"}
-                            </Badge>
-                          )}
-                          {traceOperation && (
-                            <Badge variant="outline" className="shrink-0 border-border bg-muted/50 text-[10px] text-muted-foreground">
-                              {traceOperation}
-                            </Badge>
-                          )}
-                          {item.runtimeSummary && (
-                            <Badge variant="outline" className="shrink-0 border-border bg-muted/50 text-[10px] text-muted-foreground">
-                              {item.runtimeSummary}
-                            </Badge>
-                          )}
+                      <div className="flex items-start gap-2">
+                        <div className="flex min-w-0 flex-1 gap-2">
+                          <div className="mt-0.5 shrink-0">
+                            {isEvent ? eventIcon(item.event!.event) : statusIcon(displayStatus)}
+                          </div>
+                          <div className="min-w-0 flex-1 space-y-1">
+                            <div className="flex min-w-0 items-center gap-2">
+                              <span className="truncate text-sm font-medium">{item.name}</span>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <Badge variant="outline" className="shrink-0 border-border bg-muted/50 text-[10px] text-muted-foreground">
+                                {formatLabel(item.phase)}
+                              </Badge>
+                              {item.kind !== "agent" && (
+                                <Badge variant="outline" className="shrink-0 border-border bg-muted/50 text-[10px] text-muted-foreground">
+                                  {item.kind === "event" ? "event" : item.kind === "ai_trace" ? "trace" : "step"}
+                                </Badge>
+                              )}
+                              {traceOperation && (
+                                <Badge variant="outline" className="shrink-0 border-border bg-muted/50 text-[10px] text-muted-foreground">
+                                  {traceOperation}
+                                </Badge>
+                              )}
+                              {item.runtimeSummary && (
+                                <Badge variant="outline" className="shrink-0 border-border bg-muted/50 text-[10px] text-muted-foreground">
+                                  {item.runtimeSummary}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                        <div className="flex shrink-0 items-center gap-2">
+                        <div className="flex shrink-0 items-center gap-2 self-start pt-0.5">
                           {isTrace && (
                             <button
                               type="button"
@@ -1824,7 +1838,7 @@ export function AdminPipelineLivePanel({
 
                       {item.error && (
                         <p className={cn(
-                          "mt-1 truncate text-xs",
+                          "mt-1 line-clamp-2 break-all text-xs",
                           item.tone === "danger"
                             ? "text-destructive"
                             : item.tone === "warning"
@@ -1836,7 +1850,7 @@ export function AdminPipelineLivePanel({
                       )}
 
                       {item.diagnostic && (
-                        <p className="mt-1 truncate text-[11px] text-muted-foreground">
+                        <p className="mt-1 line-clamp-2 break-all text-[11px] text-muted-foreground">
                           {item.diagnostic}
                         </p>
                       )}

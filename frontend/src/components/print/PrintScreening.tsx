@@ -1,10 +1,17 @@
+import { AlertTriangle, CheckCircle2, AlertCircle, XCircle, CircleHelp, Sparkles } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { ScoreRing } from "@/components/analysis/ScoreRing";
+import { cn } from "@/lib/utils";
+import { PrintLayout, PrintCover, PrintPage } from "./PrintLayout";
 import type { Startup } from "@/types/startup";
+import type { FitAxis, FitStatus, ThesisFitOutput } from "@/types/thesis-fit";
 import type {
-  ScreeningHandoffEvidenceV1,
+  ScreeningEvidence,
+  ScreeningHandoffIssueV1,
+  ScreeningLensV1,
   ScreeningOutputV1,
 } from "@/lib/screening/useScreeningOutput";
-import { PrintLayout } from "./PrintLayout";
-import insideLineLogo from "@/assets/icon-insideline.svg";
 
 interface PrintScreeningProps {
   startup: Startup;
@@ -13,51 +20,58 @@ interface PrintScreeningProps {
   generatedBy?: string | null;
 }
 
-interface PrintableLens {
-  key: string;
-  label: string;
-  score: number;
-  signal: ScreeningOutputV1["overall"]["signal"];
-  rationale?: string;
-}
+// ---------------------------------------------------------------------------
+// Verdict config
+// ---------------------------------------------------------------------------
 
-interface ThesisFitPrintSummary {
-  score: number;
-  label: string;
-  rationale?: string;
-}
+type Verdict = ScreeningOutputV1["overall"]["signal"];
 
-const SIGNAL_TONES: Record<
-  ScreeningOutputV1["overall"]["signal"],
-  { label: string; bg: string; fg: string; border: string }
-> = {
+const VERDICT_BADGE: Record<Verdict, { label: string; className: string }> = {
   advance: {
-    label: "Advance",
-    bg: "#ECFDF5",
-    fg: "#065F46",
-    border: "#10B981",
+    label: "ADVANCE",
+    className: "bg-emerald-100 text-emerald-900 hover:bg-emerald-100",
   },
   review: {
-    label: "Review",
-    bg: "#FFFBEB",
-    fg: "#92400E",
-    border: "#F59E0B",
+    label: "REVIEW",
+    className: "bg-amber-100 text-amber-900 hover:bg-amber-100",
   },
   reject: {
-    label: "Reject",
-    bg: "#FEF2F2",
-    fg: "#991B1B",
-    border: "#F43F5E",
+    label: "REJECT",
+    className: "bg-red-100 text-red-900 hover:bg-red-100",
   },
 };
 
-const FIT_STATUS_SCORES: Record<string, number> = {
-  match: 92,
-  borderline: 58,
-  mismatch: 24,
+// ---------------------------------------------------------------------------
+// Fit table helpers (mirrored from ScreeningDetail.tsx)
+// ---------------------------------------------------------------------------
+
+const STATUS_ICON: Record<FitStatus, React.ElementType> = {
+  match: CheckCircle2,
+  borderline: AlertCircle,
+  mismatch: XCircle,
 };
 
-const MISSING_LABELS: Record<string, string> = {
+const STATUS_COLOR: Record<FitStatus, string> = {
+  match: "text-emerald-600",
+  borderline: "text-amber-600",
+  mismatch: "text-red-600",
+};
+
+const FIT_AXES = [
+  ["geography", "Geography"],
+  ["stage", "Stage"],
+  ["sector", "Sector"],
+  ["checkSize", "Check size"],
+] as const;
+
+const AXIS_CHIP_LABEL: Record<string, string> = {
+  geography: "geo",
+  stage: "stage",
+  sector: "sector",
+  checkSize: "check",
+};
+
+const MISSING_MATERIAL_LABELS: Record<string, string> = {
   deck: "Pitch deck",
   product_description: "Product description",
   team: "Team info",
@@ -65,320 +79,267 @@ const MISSING_LABELS: Record<string, string> = {
   website: "Website",
 };
 
-const NEXT_ACTION_LABELS: Record<string, string> = {
-  continue_evaluation: "Advance to DD handoff",
-  manual_review: "Partner review",
-  request_materials: "Request materials",
-  stop: "Do not advance",
-};
+// ---------------------------------------------------------------------------
+// Data helpers
+// ---------------------------------------------------------------------------
 
-function lensName(key: string): string {
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return Boolean(v) && typeof v === "object" && !Array.isArray(v);
+}
+
+function parseThesisFit(raw: unknown): ThesisFitOutput | null {
+  if (!isRecord(raw)) return null;
+  const axes = ["geography", "stage", "sector", "checkSize"] as const;
+  for (const key of axes) {
+    const axis = raw[key];
+    if (!isRecord(axis) || typeof axis.status !== "string") return null;
+    if (typeof axis.note !== "string") {
+      (axis as Record<string, unknown>).note = "";
+    }
+  }
+  if (typeof raw.overall !== "number") return null;
+  if (typeof raw.rationale !== "string") {
+    (raw as Record<string, unknown>).rationale = "";
+  }
+  return raw as unknown as ThesisFitOutput;
+}
+
+interface PrintLens {
+  key: string;
+  label: string;
+  score: number;
+  signal: string;
+  rationale?: string;
+  detail?: ScreeningLensV1;
+}
+
+function lensLabel(key: string): string {
   if (key.length === 0) return key;
   return key.charAt(0).toUpperCase() + key.slice(1).replace(/[-_]/g, " ");
 }
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+function clamp(n: number): number {
+  return Math.max(0, Math.min(100, Math.round(n)));
 }
 
-function nextActionLabel(action: string): string {
-  return NEXT_ACTION_LABELS[action] ?? action;
-}
+function buildLenses(output: ScreeningOutputV1): PrintLens[] {
+  const detailMap = new Map(output.lenses.map((l) => [l.key, l]));
+  const v2 = output.lensScores ?? [];
 
-function confidenceLabel(confidence: ScreeningOutputV1["overall"]["confidence"]): string {
-  if (!confidence) return "Confidence n/a";
-  return `${confidence.charAt(0).toUpperCase()}${confidence.slice(1)} confidence`;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
-function clampScore(score: number): number {
-  return Math.max(0, Math.min(100, Math.round(score)));
-}
-
-function getPrintableLenses(output: ScreeningOutputV1): PrintableLens[] {
-  const v2Scores = output.lensScores ?? [];
-  if (v2Scores.length > 0) {
-    const v1ByKey = new Map(output.lenses.map((lens) => [lens.key, lens]));
-    return v2Scores.map((lens) => ({
-      key: lens.key,
-      label: lensName(lens.key),
-      score: clampScore(lens.score),
-      signal: lens.signal,
-      rationale: lens.rationale ?? v1ByKey.get(lens.key)?.rationale,
+  if (v2.length > 0) {
+    return v2.map((ls) => ({
+      key: ls.key,
+      label: lensLabel(ls.key),
+      score: clamp(ls.score),
+      signal: ls.signal,
+      rationale: ls.rationale ?? detailMap.get(ls.key)?.rationale,
+      detail: detailMap.get(ls.key),
     }));
   }
 
-  return output.lenses.map((lens) => ({
-    key: lens.key,
-    label: lensName(lens.key),
-    score: clampScore(lens.score),
-    signal: lens.signal,
-    rationale: lens.rationale,
+  return output.lenses.map((l) => ({
+    key: l.key,
+    label: lensLabel(l.key),
+    score: clamp(l.score),
+    signal: l.signal,
+    rationale: l.rationale,
+    detail: l,
   }));
 }
 
-function getThesisFitSummary(output: ScreeningOutputV1): ThesisFitPrintSummary {
-  const fit = output.thesisFit;
-  if (!isRecord(fit)) {
-    return {
-      score: clampScore(output.overall.score),
-      label: "Screening fit",
-    };
-  }
-
-  const overall = fit.overall;
-  const rationale =
-    typeof fit.rationale === "string" ? fit.rationale : undefined;
-
-  if (typeof overall === "number") {
-    return { score: clampScore(overall), label: "Thesis fit", rationale };
-  }
-
-  if (typeof overall === "string") {
-    return {
-      score: FIT_STATUS_SCORES[overall] ?? clampScore(output.overall.score),
-      label: overall.replace(/_/g, " "),
-      rationale,
-    };
-  }
-
-  if (isRecord(overall)) {
-    const score = typeof overall.score === "number" ? overall.score : undefined;
-    const status =
-      typeof overall.status === "string" ? overall.status : undefined;
-    const note = typeof overall.note === "string" ? overall.note : undefined;
-
-    return {
-      score: clampScore(
-        score ?? (status ? FIT_STATUS_SCORES[status] : output.overall.score),
-      ),
-      label: status ? status.replace(/_/g, " ") : "Thesis fit",
-      rationale: rationale ?? note,
-    };
-  }
-
-  return {
-    score: clampScore(output.overall.score),
-    label: "Thesis fit",
-    rationale,
-  };
+function confidenceLabel(c?: string | null): string {
+  if (!c) return "";
+  return `${c.charAt(0).toUpperCase()}${c.slice(1)} confidence`;
 }
 
-function getPrintableEvidenceSeeds(
-  output: ScreeningOutputV1,
-): ScreeningHandoffEvidenceV1[] {
-  const handoffSeeds = output.handoff?.evidenceSeeds;
-  if (handoffSeeds) {
-    const seen = new Set<string>();
-    return handoffSeeds.filter((seed) => {
-      if (seen.has(seed.lensKey)) return false;
-      seen.add(seed.lensKey);
-      return true;
-    });
-  }
+// ---------------------------------------------------------------------------
+// Sub-components (print-safe, no interactivity)
+// ---------------------------------------------------------------------------
 
-  const rows: ScreeningHandoffEvidenceV1[] = [];
-  for (const lens of output.lenses) {
-    const evidence = lens.evidence[0];
-    if (!evidence) continue;
-
-    rows.push({
-      lensKey: lens.key,
-      lensLabel: lensName(lens.key),
-      claim: evidence.claim,
-      source: evidence.source,
-      confidence: evidence.confidence,
-      lensScore: lens.score,
-      signal: lens.signal,
-    });
-  }
-
-  return rows;
-}
-
-function getDealbreakerFlags(
-  output: ScreeningOutputV1,
-  lenses: PrintableLens[],
-): string[] {
-  const issues = output.handoff?.openIssues ?? [];
-  if (issues.length > 0) {
-    return issues.map((issue) => issue.label || issue.summary).slice(0, 4);
-  }
-
-  if (output.overall.signal === "reject") {
-    const weakestLens = [...lenses].sort((a, b) => a.score - b.score)[0];
-    return weakestLens
-      ? [`${weakestLens.label} weakness: ${weakestLens.score}/100`]
-      : ["Screening signal recommends stopping before DD"];
-  }
-
-  return [];
-}
-
-function getVerdictReasoning(
-  output: ScreeningOutputV1,
-  lenses: PrintableLens[],
-): string {
-  const keyEvidence = getPrintableEvidenceSeeds(output)[0]?.claim;
-  const weakestLens = [...lenses].sort((a, b) => a.score - b.score)[0];
-
-  if (keyEvidence && weakestLens) {
-    return `Key evidence: ${keyEvidence} Main watchpoint: ${weakestLens.label.toLowerCase()} scored ${weakestLens.score}/100.`;
-  }
-
-  if (weakestLens?.rationale) return weakestLens.rationale;
-
-  return `Screening recommends ${nextActionLabel(output.overall.nextAction).toLowerCase()} based on the current ${output.overall.score}/100 score.`;
-}
-
-function scoreCircleStyle(color: string): React.CSSProperties {
-  return {
-    width: "86px",
-    height: "86px",
-    borderRadius: "999px",
-    border: `7px solid ${color}`,
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    boxSizing: "border-box",
-    background: "#FFFFFF",
-    boxShadow: "inset 0 0 0 1px #E2E8F0",
-  };
-}
-
-function ScoreCircle({
-  label,
-  score,
-  color,
-}: {
-  label: string;
-  score: number;
-  color: string;
-}) {
+function FitChipsPrint({ fit }: { fit: ThesisFitOutput }) {
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: "7px",
-      }}
-    >
-      <div style={scoreCircleStyle(color)}>
-        <span
-          style={{
-            fontFamily: "Instrument Serif, serif",
-            fontSize: "30px",
-            lineHeight: 1,
-            color: "#0A1017",
-          }}
-        >
-          {score}
-        </span>
-        <span style={{ fontSize: "8px", color: "#64748B" }}>/100</span>
-      </div>
-      <span
-        style={{
-          fontSize: "9px",
-          color: "#475569",
-          fontWeight: 700,
-          letterSpacing: "0.06em",
-          textTransform: "uppercase",
-        }}
-      >
-        {label}
+    <div className="flex flex-wrap items-center gap-1.5">
+      {(Object.keys(AXIS_CHIP_LABEL) as Array<keyof typeof AXIS_CHIP_LABEL>).map((axisKey) => {
+        const axis = fit[axisKey as keyof ThesisFitOutput] as FitAxis;
+        const Icon = STATUS_ICON[axis.status];
+        return (
+          <span
+            key={axisKey}
+            className={cn(
+              "inline-flex items-center gap-1 rounded-full bg-muted/40 px-2 py-0.5 text-xs",
+              STATUS_COLOR[axis.status],
+            )}
+          >
+            <Icon className="h-3 w-3" />
+            {AXIS_CHIP_LABEL[axisKey]}
+          </span>
+        );
+      })}
+      <span className="ml-1 text-xs font-medium text-muted-foreground">
+        {fit.overall}
       </span>
     </div>
   );
 }
 
-function LensRankList({
-  title,
-  lenses,
-}: {
-  title: string;
-  lenses: PrintableLens[];
-}) {
+function FitTablePrint({ fit }: { fit: ThesisFitOutput }) {
   return (
-    <div style={{ flex: 1 }}>
-      <h3
-        style={{
-          margin: "0 0 7px 0",
-          fontSize: "10px",
-          color: "#475569",
-          fontWeight: 700,
-          letterSpacing: "0.08em",
-          textTransform: "uppercase",
-        }}
-      >
-        {title}
-      </h3>
-      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-        {lenses.map((lens) => {
-          const lensTone = SIGNAL_TONES[lens.signal];
-          return (
-            <div
-              key={`${title}-${lens.key}`}
-              style={{
-                border: "1px solid #E2E8F0",
-                background: "#FFFAF7",
-                padding: "7px 9px",
-                display: "flex",
-                justifyContent: "space-between",
-                gap: "8px",
-              }}
-            >
-              <div style={{ minWidth: 0 }}>
-                <div
-                  style={{
-                    fontSize: "11px",
-                    fontWeight: 700,
-                    color: "#0A1017",
-                  }}
+    <div className="overflow-hidden rounded-md border border-border">
+      {FIT_AXES.map(([key, label]) => {
+        const axis = fit[key];
+        const Icon = STATUS_ICON[axis.status];
+        return (
+          <div
+            key={key}
+            className="flex items-start gap-3 border-b border-border px-3 py-2 last:border-b-0"
+          >
+            <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", STATUS_COLOR[axis.status])} />
+            <div className="flex-1 text-sm">
+              <div className="flex items-center gap-2">
+                <span className="font-medium">{label}</span>
+                <span
+                  className={cn(
+                    "text-[10px] font-medium uppercase tracking-wide",
+                    STATUS_COLOR[axis.status],
+                  )}
                 >
-                  {lens.label}
-                </div>
-                {lens.rationale ? (
-                  <div
-                    style={{
-                      marginTop: "2px",
-                      fontSize: "9px",
-                      lineHeight: 1.3,
-                      color: "#475569",
-                      display: "-webkit-box",
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: "vertical",
-                      overflow: "hidden",
-                    }}
-                  >
-                    {lens.rationale}
-                  </div>
-                ) : null}
+                  {axis.status}
+                </span>
               </div>
-              <div
-                style={{
-                  color: lensTone.fg,
-                  fontSize: "16px",
-                  fontWeight: 800,
-                }}
-              >
-                {lens.score}
-              </div>
+              {axis.note && (
+                <div className="text-xs text-muted-foreground">{axis.note}</div>
+              )}
             </div>
-          );
-        })}
+          </div>
+        );
+      })}
+      <div className="flex items-center justify-between bg-muted/40 px-3 py-2 text-sm">
+        <span className="font-medium">Overall fit</span>
+        <span className="font-semibold">{fit.overall} / 100</span>
       </div>
     </div>
   );
 }
+
+function EvidenceSourceLabel({ evidence }: { evidence: ScreeningEvidence }) {
+  const label =
+    evidence.sourceType === "deck_page" && evidence.pageNumber
+      ? `Pitch deck • page ${evidence.pageNumber}`
+      : evidence.sourceLabel ?? evidence.sourceRef ?? evidence.source ?? null;
+
+  if (!label) return null;
+  return <span className="text-[11px] text-muted-foreground">{label}</span>;
+}
+
+function LensWriteupPrint({ lens }: { lens: PrintLens }) {
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-3 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <ScoreRing score={lens.score} size="sm" showLabel={false} colorText />
+            <div>
+              <div className="text-sm font-semibold">{lens.label}</div>
+              {lens.signal && (
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                  {lens.signal}
+                </div>
+              )}
+            </div>
+          </div>
+          <span className="text-xl font-bold tabular-nums">{lens.score}</span>
+        </div>
+
+        {lens.rationale ? (
+          <p className="whitespace-pre-line text-sm leading-relaxed text-foreground/90">
+            {lens.rationale}
+          </p>
+        ) : (
+          <p className="text-sm italic text-muted-foreground">
+            No rationale recorded for this lens.
+          </p>
+        )}
+
+        {lens.detail && lens.detail.evidence.length > 0 && (
+          <div className="space-y-2 rounded-md border border-border/60 bg-muted/20 p-3">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Source-linked claims
+            </div>
+            <ul className="space-y-2">
+              {lens.detail.evidence.map((ev, idx) => (
+                <li key={`${lens.key}-ev-${idx}`} className="space-y-1">
+                  <span className="text-sm leading-relaxed text-foreground">
+                    {ev.claim}
+                  </span>
+                  <EvidenceSourceLabel evidence={ev} />
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function MissingMaterialsBanner({ materials }: { materials: string[] }) {
+  if (materials.length === 0) return null;
+  return (
+    <div className="print-section rounded-md border border-sky-300/60 bg-sky-50 px-4 py-3 text-xs text-sky-900">
+      <div className="flex items-center gap-1.5 font-medium">
+        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+        Missing materials
+      </div>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {materials.map((code) => (
+          <Badge
+            key={code}
+            variant="outline"
+            className="border-sky-400 bg-white text-[10px] text-sky-900"
+          >
+            {MISSING_MATERIAL_LABELS[code] ?? code}
+          </Badge>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function OpenIssuesPrint({ issues }: { issues: ScreeningHandoffIssueV1[] }) {
+  if (issues.length === 0) return null;
+  return (
+    <section className="flex flex-col gap-3">
+      <div className="flex items-center gap-2">
+        <CircleHelp className="h-5 w-5 text-muted-foreground" />
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Open questions
+        </h3>
+        <Badge variant="secondary">{issues.length} open</Badge>
+      </div>
+      <div className="space-y-3">
+        {issues.map((issue) => (
+          <Card key={issue.key}>
+            <CardContent className="space-y-2 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <span className="text-base font-medium">{issue.label}</span>
+                <Badge variant="outline" className="text-xs">
+                  {issue.source === "screening-output"
+                    ? "screening seed"
+                    : "triage decision"}
+                </Badge>
+              </div>
+              <p className="text-sm text-muted-foreground">{issue.summary}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
 
 export function PrintScreening({
   startup,
@@ -386,357 +347,131 @@ export function PrintScreening({
   ready,
   generatedBy,
 }: PrintScreeningProps) {
-  const tone = SIGNAL_TONES[output.overall.signal];
-  const lenses = getPrintableLenses(output);
-  const rankedLenses = [...lenses].sort((a, b) => b.score - a.score);
-  const topLenses = rankedLenses.slice(0, 3);
-  const bottomLenses = [...rankedLenses]
-    .reverse()
-    .filter((lens) => !topLenses.some((topLens) => topLens.key === lens.key))
-    .slice(0, 3);
-  const thesisFit = getThesisFitSummary(output);
-  const dealbreakers = getDealbreakerFlags(output, lenses);
-  const evidenceSeeds = getPrintableEvidenceSeeds(output).slice(0, 3);
-  const verdictReasoning = getVerdictReasoning(output, lenses);
+  const fit = parseThesisFit(output.thesisFit);
+  const lenses = buildLenses(output);
+  const verdictCfg = VERDICT_BADGE[output.overall.signal];
+  const overallAny = output.overall as unknown as Record<string, unknown>;
+  const triageRationale =
+    (typeof overallAny.triageRationale === "string" ? overallAny.triageRationale : null) ??
+    (typeof overallAny.reasoning === "string" ? overallAny.reasoning : null);
+  const openIssues = output.handoff?.openIssues ?? [];
+  const missingMaterials = output.overall.missingMaterials ?? [];
 
   return (
     <PrintLayout ready={ready}>
-      <section
-        style={{
-          fontFamily: "DM Sans, sans-serif",
-          color: "#0A1017",
-          padding: "0",
-          background: "#FFFFFF",
-          width: "100%",
-          maxWidth: "210mm",
-          minHeight: "267mm",
-          boxSizing: "border-box",
-          display: "flex",
-          flexDirection: "column",
-          gap: "15px",
-        }}
-      >
-        <header
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            borderBottom: "1px solid #D9E2EA",
-            paddingBottom: "11px",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <img
-              src={insideLineLogo}
-              alt="Inside Line"
-              style={{ width: "20px", height: "20px" }}
-            />
-            <span
-              style={{
-                fontFamily: "Instrument Serif, serif",
-                fontSize: "17px",
-                fontWeight: 400,
-                color: "#0A1017",
-              }}
-            >
-              Inside Line · Screening Report
+      {/* Page 1: Cover */}
+      <PrintCover
+        title="Screening Report"
+        startupName={startup.name}
+        stage={startup.stage}
+        generatedAt={new Date(output.generatedAt)}
+        subtitle={startup.description ?? undefined}
+        generatedBy={generatedBy}
+        score={output.overall.score}
+        logoUrl={startup.logoUrl ?? undefined}
+      />
+
+      {/* Page 2+: Content */}
+      <PrintPage>
+        <div className="flex flex-col gap-5">
+          {/* Verdict + Confidence */}
+          <div className="print-section flex items-center gap-3">
+            <Badge variant="secondary" className={verdictCfg.className}>
+              {verdictCfg.label}
+            </Badge>
+            {output.overall.confidence && (
+              <span className="text-xs text-muted-foreground">
+                {confidenceLabel(output.overall.confidence)}
+              </span>
+            )}
+            <span className="text-xs text-muted-foreground">
+              Score: {clamp(output.overall.score)} / 100
             </span>
           </div>
-          <span style={{ fontSize: "10px", color: "#64748B" }}>
-            {formatDate(output.generatedAt)}
-            {generatedBy ? ` · ${generatedBy}` : ""}
-          </span>
-        </header>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 205px",
-            gap: "22px",
-          }}
-        >
-          <div>
-            <div
-              style={{
-                display: "inline-flex",
-                padding: "5px 10px",
-                background: tone.bg,
-                color: tone.fg,
-                border: `1px solid ${tone.border}`,
-                fontSize: "10px",
-                fontWeight: 800,
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-              }}
-            >
-              {tone.label} · {nextActionLabel(output.overall.nextAction)}
-            </div>
-            <h1
-              style={{
-                fontFamily: "Instrument Serif, serif",
-                fontSize: "32px",
-                fontWeight: 400,
-                lineHeight: 1.04,
-                margin: "10px 0 5px 0",
-                color: "#0A1017",
-              }}
-            >
-              {startup.name}
-            </h1>
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: "7px",
-                fontSize: "11px",
-                color: "#475569",
-              }}
-            >
-              {startup.industry ? <span>{startup.industry}</span> : null}
-              {startup.stage ? (
-                <span>· {startup.stage.replace(/_/g, " ")}</span>
-              ) : null}
-              {startup.location ? <span>· {startup.location}</span> : null}
-            </div>
-            {startup.description ? (
-              <p
-                style={{
-                  margin: "9px 0 0 0",
-                  fontSize: "10.5px",
-                  lineHeight: 1.45,
-                  color: "#334155",
-                  display: "-webkit-box",
-                  WebkitLineClamp: 3,
-                  WebkitBoxOrient: "vertical",
-                  overflow: "hidden",
-                }}
-              >
-                {startup.description}
+          {/* Missing Materials */}
+          <MissingMaterialsBanner materials={missingMaterials} />
+
+          {/* Thesis Fit Summary */}
+          {fit?.rationale && fit.rationale.length > 0 && (
+            <section className="print-section flex flex-col gap-2 rounded-lg border border-primary/20 bg-primary/[0.04] p-4">
+              <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-primary">
+                <Sparkles className="h-3.5 w-3.5" />
+                Thesis fit summary
+              </h3>
+              <p className="text-sm leading-relaxed">{fit.rationale}</p>
+            </section>
+          )}
+
+          {/* Thesis Fit — Per Axis */}
+          <section className="print-section flex flex-col gap-2">
+            <h3 className="text-xs font-semibold uppercase text-muted-foreground">
+              Thesis fit — per axis
+            </h3>
+            {fit ? (
+              <>
+                <FitChipsPrint fit={fit} />
+                <FitTablePrint fit={fit} />
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Fit assessment not available.
               </p>
-            ) : null}
-          </div>
+            )}
+          </section>
 
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              gap: "12px",
-            }}
-          >
-            <ScoreCircle
-              label={confidenceLabel(output.overall.confidence)}
-              score={clampScore(output.overall.score)}
-              color={tone.border}
-            />
-            <ScoreCircle
-              label={thesisFit.label}
-              score={thesisFit.score}
-              color="#163F67"
-            />
-          </div>
-        </div>
-
-        <section
-          style={{
-            border: "1px solid #D9E2EA",
-            background: "#FFFAF7",
-            padding: "12px 14px",
-            display: "grid",
-            gridTemplateColumns: "1.25fr 0.75fr",
-            gap: "16px",
-          }}
-        >
-          <div>
-            <h2
-              style={{
-                margin: "0 0 5px 0",
-                fontSize: "10px",
-                fontWeight: 800,
-                color: "#163F67",
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-              }}
-            >
-              Verdict + reasoning
-            </h2>
-            <p
-              style={{
-                margin: 0,
-                fontSize: "11px",
-                lineHeight: 1.45,
-                color: "#334155",
-              }}
-            >
-              {verdictReasoning}
-            </p>
-            {thesisFit.rationale ? (
-              <p
-                style={{
-                  margin: "6px 0 0 0",
-                  fontSize: "10px",
-                  lineHeight: 1.35,
-                  color: "#475569",
-                }}
-              >
-                Thesis fit: {thesisFit.rationale}
-              </p>
-            ) : null}
-          </div>
-          <div>
-            <h2
-              style={{
-                margin: "0 0 5px 0",
-                fontSize: "10px",
-                fontWeight: 800,
-                color: "#163F67",
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-              }}
-            >
-              Handoff recommendation
-            </h2>
-            <p
-              style={{
-                margin: 0,
-                fontSize: "11px",
-                lineHeight: 1.4,
-                color: "#334155",
-              }}
-            >
-              {nextActionLabel(output.overall.nextAction)}
-              {output.overall.missingMaterials.length > 0
-                ? ` after collecting ${output.overall.missingMaterials.map((code) => MISSING_LABELS[code] ?? code).join(", ")}.`
-                : "."}
-            </p>
-          </div>
-        </section>
-
-        <section style={{ display: "flex", gap: "12px" }}>
-          <LensRankList title="Top 3 lenses" lenses={topLenses} />
-          <LensRankList title="Bottom 3 lenses" lenses={bottomLenses} />
-        </section>
-
-        <section
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: "12px",
-          }}
-        >
-          <div>
-            <h2
-              style={{
-                margin: "0 0 7px 0",
-                fontSize: "10px",
-                fontWeight: 800,
-                color: "#475569",
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-              }}
-            >
-              Dealbreaker flags
-            </h2>
-            <div
-              style={{ display: "flex", flexDirection: "column", gap: "6px" }}
-            >
-              {dealbreakers.length > 0 ? (
-                dealbreakers.map((flag) => (
-                  <div
-                    key={flag}
-                    style={{
-                      border: "1px solid #FCA5A5",
-                      background: "#FEF2F2",
-                      color: "#991B1B",
-                      padding: "7px 9px",
-                      fontSize: "10px",
-                      lineHeight: 1.35,
-                      fontWeight: 700,
-                    }}
-                  >
-                    {flag}
+          {/* Lens Write-ups */}
+          <section className="flex flex-col gap-2">
+            <h3 className="text-xs font-semibold uppercase text-muted-foreground">
+              Lens write-ups
+            </h3>
+            <div className="flex flex-col gap-2">
+              {lenses.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No lens results recorded yet.
+                </p>
+              ) : (
+                lenses.map((lens) => (
+                  <div key={lens.key} className="print-break-inside-avoid">
+                    <LensWriteupPrint lens={lens} />
                   </div>
                 ))
-              ) : (
-                <div
-                  style={{
-                    border: "1px solid #BBF7D0",
-                    background: "#F0FDF4",
-                    color: "#166534",
-                    padding: "7px 9px",
-                    fontSize: "10px",
-                    lineHeight: 1.35,
-                    fontWeight: 700,
-                  }}
-                >
-                  No hard dealbreaker surfaced in screening.
-                </div>
               )}
             </div>
-          </div>
+          </section>
 
-          <div>
-            <h2
-              style={{
-                margin: "0 0 7px 0",
-                fontSize: "10px",
-                fontWeight: 800,
-                color: "#475569",
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-              }}
-            >
-              Key evidence seeds
-            </h2>
-            <div
-              style={{ display: "flex", flexDirection: "column", gap: "6px" }}
-            >
-              {evidenceSeeds.map((evidence) => (
-                <div
-                  key={`${evidence.lensKey}-claim`}
-                  style={{
-                    borderLeft: "3px solid #163F67",
-                    padding: "0 0 0 8px",
-                    fontSize: "10px",
-                    lineHeight: 1.35,
-                    color: "#334155",
-                  }}
-                >
-                  <strong style={{ color: "#0A1017" }}>
-                    {evidence.lensLabel}:{" "}
-                  </strong>
-                  {evidence.claim}
-                  {evidence.source ? (
-                    <span style={{ color: "#94A3B8" }}>
-                      {" "}
-                      ({evidence.source})
-                    </span>
-                  ) : null}
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
+          {/* Open Questions */}
+          <OpenIssuesPrint issues={openIssues} />
 
-        <footer
-          style={{
-            marginTop: "auto",
-            paddingTop: "10px",
-            borderTop: "1px solid #D9E2EA",
-            fontSize: "9px",
-            color: "#94A3B8",
-            display: "flex",
-            justifyContent: "space-between",
-          }}
-        >
-          <span>
-            Screening output v{output.version} · pipeline run{" "}
-            {output.pipelineRunId ?? "—"}
-          </span>
-          <span>
-            This is a thin screening artifact. Not investment advice. Not DD.
-          </span>
-        </footer>
-      </section>
+          {/* Triage Rationale */}
+          {triageRationale && (
+            <section className="print-section flex flex-col gap-2">
+              <h3 className="text-xs font-semibold uppercase text-muted-foreground">
+                Triage rationale
+              </h3>
+              <Card>
+                <CardContent className="p-4 text-sm">
+                  {triageRationale}
+                </CardContent>
+              </Card>
+            </section>
+          )}
+
+          {/* Company Description */}
+          {startup.description && (
+            <section className="print-section flex flex-col gap-2">
+              <h3 className="text-xs font-semibold uppercase text-muted-foreground">
+                Company description
+              </h3>
+              <Card>
+                <CardContent className="p-4 text-sm leading-relaxed text-foreground/90">
+                  {startup.description}
+                </CardContent>
+              </Card>
+            </section>
+          )}
+        </div>
+      </PrintPage>
     </PrintLayout>
   );
 }

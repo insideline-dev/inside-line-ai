@@ -167,7 +167,7 @@ function ScreeningPage() {
     [sourceRows, overrides],
   );
 
-  const [showRejected, setShowRejected] = useState(false);
+  const [showRejected, setShowRejected] = useState(true);
 
   const { activeRows, rejectedRows, advancedRowIds } = useMemo(() => {
     // Screening tab shows only deals awaiting partner action.

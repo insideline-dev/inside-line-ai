@@ -273,7 +273,8 @@ export class ThesisService {
   async upsert(userId: string, dto: CreateThesis | UpdateThesis) {
     return this.drizzle.withRLS(userId, async (db) => {
       const existing = await this.findOne(userId);
-      const payload: Record<string, unknown> = { ...dto };
+      const { skipRematching: _, regenerateSummary: _rs, ...dtoFields } = dto as Record<string, unknown>;
+      const payload: Record<string, unknown> = { ...dtoFields };
 
       const shouldNormalizeGeography =
         Object.prototype.hasOwnProperty.call(dto, 'geographicFocus') ||
@@ -310,17 +311,14 @@ export class ThesisService {
         payload.thesisSummary = dto.thesisSummary;
         payload.thesisSummaryGeneratedAt = new Date();
         payload.thesisSummaryManuallyEdited = true;
-      } else if (existing?.thesisSummaryManuallyEdited) {
-        // Investor previously edited the summary manually — keep their text
-        // even when other thesis fields change. They can re-sync via the
-        // explicit regenerate action.
-        delete payload.thesisSummary;
-        delete payload.thesisSummaryGeneratedAt;
-      } else {
-        const thesisSummary =
-          await this.generateAiSummaryWithFallback(mergedThesis);
+      } else if (dto.regenerateSummary) {
+        const thesisSummary = await this.generateAiSummaryWithFallback(mergedThesis);
         payload.thesisSummary = thesisSummary;
         payload.thesisSummaryGeneratedAt = new Date();
+        payload.thesisSummaryManuallyEdited = false;
+      } else {
+        delete payload.thesisSummary;
+        delete payload.thesisSummaryGeneratedAt;
       }
 
       const dtoSentDealBreakers = Object.prototype.hasOwnProperty.call(
@@ -378,8 +376,7 @@ export class ThesisService {
         void this.dealTriggers.notifyThesisUpdated(userId);
       }
 
-      // Trigger re-matching for all approved startups when thesis is updated
-      if (existing && this.startupMatching) {
+      if (existing && this.startupMatching && !dto.skipRematching) {
         void this.triggerRematching(userId).catch((err: unknown) => {
           const msg = err instanceof Error ? err.message : String(err);
           this.logger.error(`Failed to trigger re-matching after thesis update for user ${userId}: ${msg}`);
@@ -470,17 +467,27 @@ export class ThesisService {
         const mustHaves = Array.isArray(thesis.mustHaveFeatures) ? (thesis.mustHaveFeatures as string[]).join(', ') : '';
         const dealBreakers = Array.isArray(thesis.dealBreakers) ? (thesis.dealBreakers as string[]).join(', ') : '';
 
+        const businessModels = Array.isArray(thesis.businessModels) ? (thesis.businessModels as string[]).join(', ') : '';
+        const antiPortfolio = typeof thesis.antiPortfolio === 'string' ? thesis.antiPortfolio : '';
+        const notes = typeof thesis.notes === 'string' ? thesis.notes : '';
+
         const prompt = [
-          `Generate a concise, professional investment thesis summary for this investor based on their criteria.`,
-          `Write it as a 2-3 sentence paragraph that captures their investment focus and preferences.`,
-          `\nCriteria:`,
+          `Generate a professional investment thesis summary for this fund based on all available data.`,
+          `Write exactly 2 paragraphs separated by a blank line:`,
+          `- Paragraph 1: Who the fund is, what sectors/industries they focus on, preferred stages, check size range, and geographic focus.`,
+          `- Paragraph 2: Their investment philosophy, what they look for in founders/companies, key differentiators, value-add, and any dealbreakers or strong preferences.`,
+          `Keep it natural and authoritative — written as if by the fund itself for an LP or co-investor audience. No bullet points. About 100-150 words total.`,
+          `\nStructured criteria:`,
           industries && `- Industries: ${industries}`,
           stages && `- Stages: ${stages}`,
           checkSize && `- Check size: ${checkSize}`,
           geography && `- Geography: ${geography}`,
+          businessModels && `- Business models: ${businessModels}`,
           narrative && `- Thesis narrative: ${narrative}`,
+          notes && `- Additional notes: ${notes}`,
           mustHaves && `- Must-haves: ${mustHaves}`,
           dealBreakers && `- Deal breakers: ${dealBreakers}`,
+          antiPortfolio && `- Anti-portfolio / what they avoid: ${antiPortfolio}`,
         ]
           .filter(Boolean)
           .join('\n');
@@ -488,7 +495,7 @@ export class ThesisService {
         const { text } = await generateText({
           model,
           prompt,
-          maxOutputTokens: 300,
+          maxOutputTokens: 500,
           temperature: 0.3,
         });
 

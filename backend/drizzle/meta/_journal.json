@@ -183,6 +183,13 @@
       "when": 1779199375604,
       "tag": "0025_known_beast",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1779656597319,
+      "tag": "0026_charming_pyro",
+      "breakpoints": true
     }
   ]
 }

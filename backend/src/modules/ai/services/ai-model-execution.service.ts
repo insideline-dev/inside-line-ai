@@ -33,6 +33,7 @@ type NormalizedGenerateTextResult<TOutput = unknown> = Pick<
   output: TOutput | undefined;
   experimental_output: TOutput | undefined;
   telemetry?: OpenAiResponseTelemetry;
+  usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
 };
 
 export interface ModelExecutionResolution {
@@ -122,6 +123,7 @@ export class AiModelExecutionService {
       output: response.output as TOutput | undefined,
       experimental_output: response.experimental_output as TOutput | undefined,
       sources: response.sources,
+      usage: response.usage,
     };
   }
 
@@ -200,11 +202,11 @@ export class AiModelExecutionService {
           "Search the public web with Brave Search when researching startups.",
         inputSchema: z.object({
           query: z.string().min(2),
-          count: z.number().int().min(1).max(10).optional(),
+          count: z.number().int().min(1).max(10).nullable(),
         }),
         execute: async ({ query, count }) => {
           braveUsage.calls += 1;
-          const result = await this.braveSearch.search(query, { count });
+          const result = await this.braveSearch.search(query, { count: count ?? undefined });
 
           return {
             query: result.query,

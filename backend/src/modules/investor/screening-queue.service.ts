@@ -13,7 +13,10 @@ import {
   type StartupProfileInput,
 } from "../ai/agents/thesis-fit";
 import { investorThesis } from "./entities/investor.schema";
-import { startup } from "../startup/entities/startup.schema";
+import {
+  ScreeningOverrideService,
+  type ScreeningOverrideAuditEntry,
+} from "./screening-override.service";
 
 export type Verdict = "review" | "advance" | "reject";
 
@@ -46,6 +49,8 @@ export interface ScreeningQueueRow {
   /** Country/region the company is based in. */
   location: string | null;
   verdict: Verdict;
+  originalVerdict: Verdict;
+  overrideHistory: ScreeningOverrideAuditEntry[];
   overallScore: number;
   fit: ScreeningDecisionThesisFit | null;
   lensScores: ScreeningQueueLensScore[];
@@ -157,6 +162,7 @@ export class ScreeningQueueService {
   constructor(
     private drizzle: DrizzleService,
     private thesisFit: ThesisFitService,
+    private screeningOverrideService: ScreeningOverrideService,
   ) {}
 
   /**
@@ -253,6 +259,9 @@ export class ScreeningQueueService {
     if (rows.length === 0) return [];
 
     const startupIds = rows.map((r) => r.startup_id);
+    const decisionIds = rows.map((r) => r.decision_id);
+    const overridesByDecisionId =
+      await this.screeningOverrideService.getOverridesForDecisionIds(decisionIds);
     const pipelineRunIds = rows
       .map((r) => r.pipeline_run_id)
       .filter((v): v is string => Boolean(v));
@@ -306,7 +315,10 @@ export class ScreeningQueueService {
 
     const out: ScreeningQueueRow[] = [];
     for (const r of rows) {
-      const verdict = isVerdict(r.classification) ? r.classification : "review";
+      const originalVerdict = isVerdict(r.classification) ? r.classification : "review";
+      const overrideHistory = overridesByDecisionId.get(r.decision_id) ?? [];
+      const latestOverride = overrideHistory[0];
+      const verdict = latestOverride?.newClassification ?? originalVerdict;
       const pairKey = `${r.startup_id}::${r.pipeline_run_id ?? ""}`;
       const lensMap = lensByPair.get(pairKey) ?? new Map();
       const lensScores: ScreeningQueueLensScore[] = (r.lens_snapshot ?? []).map(
@@ -373,6 +385,8 @@ export class ScreeningQueueService {
         fundingTarget: r.funding_target,
         location: r.startup_location,
         verdict,
+        originalVerdict,
+        overrideHistory,
         overallScore: r.overall_score,
         fit,
         lensScores,

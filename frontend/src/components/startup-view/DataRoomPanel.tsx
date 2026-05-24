@@ -61,6 +61,7 @@ export interface DataRoomPanelProps {
   role: "admin" | "investor" | "founder";
   allowUpload?: boolean;
   allowCategoryEdit?: boolean;
+  onUploadComplete?: () => void;
 }
 
 type ClassificationStatus = "pending" | "classifying" | "completed" | "failed";
@@ -559,6 +560,7 @@ export function DataRoomPanel({
   role,
   allowUpload = true,
   allowCategoryEdit = true,
+  onUploadComplete,
 }: DataRoomPanelProps) {
   const queryClient = useQueryClient();
 
@@ -577,6 +579,7 @@ export function DataRoomPanel({
     onSuccess: () => {
       toast.success("Document uploaded — classifying…");
       queryClient.invalidateQueries({ queryKey: ["data-room", startupId] });
+      onUploadComplete?.();
     },
     onError: (err) => {
       toast.error((err as Error).message || "Upload failed");
@@ -606,7 +609,7 @@ export function DataRoomPanel({
 
   const effectiveAllowUpload = useMemo(() => {
     if (!allowUpload) return false;
-    return role === "admin" || role === "founder";
+    return role === "admin" || role === "founder" || role === "investor";
   }, [allowUpload, role]);
 
   const effectiveAllowCategoryEdit = useMemo(() => {

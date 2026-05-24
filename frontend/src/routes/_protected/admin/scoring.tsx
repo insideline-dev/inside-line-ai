@@ -85,6 +85,41 @@ const SECTIONS: { id: SectionId; label: string; icon: typeof Users }[] = [
   { id: "exitPotential", label: "Exit Potential", icon: LogOut },
 ];
 
+const LENS_KEYS = ["teamLens", "marketLens", "tractionLens"] as const;
+type LensKey = (typeof LENS_KEYS)[number];
+
+const LENS_LABELS: Record<LensKey, string> = {
+  teamLens: "Team",
+  marketLens: "Market",
+  tractionLens: "Traction",
+};
+
+const LENS_ICONS: Record<LensKey, typeof Users> = {
+  teamLens: Users,
+  marketLens: Target,
+  tractionLens: TrendingUp,
+};
+
+const LENS_GROUPS: Record<LensKey, readonly SectionId[]> = {
+  teamLens: ["team", "competitiveAdvantage", "legal", "dealTerms", "exitPotential"],
+  marketLens: ["market", "product", "businessModel", "gtm"],
+  tractionLens: ["traction", "financials"],
+};
+
+function toLensWeights(weights: Record<string, number>): Record<LensKey, number> {
+  return {
+    teamLens: LENS_GROUPS.teamLens.reduce((sum, key) => sum + (weights[key] ?? 0), 0),
+    marketLens: LENS_GROUPS.marketLens.reduce((sum, key) => sum + (weights[key] ?? 0), 0),
+    tractionLens: LENS_GROUPS.tractionLens.reduce((sum, key) => sum + (weights[key] ?? 0), 0),
+  };
+}
+
+const CRITERION_TO_LENS: Record<SectionId, LensKey> = Object.fromEntries(
+  LENS_KEYS.flatMap((lensKey) =>
+    LENS_GROUPS[lensKey].map((criterionId) => [criterionId, lensKey])
+  )
+) as Record<SectionId, LensKey>;
+
 // ============================================================================
 // WeightEditor
 // ============================================================================
@@ -167,6 +202,68 @@ function WeightEditor({
       </Card>
 
       <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Screening Lens Weights</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            How the 3 screening lenses influence the overall screening score. Derived from the evaluation criteria below.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left text-sm font-medium text-muted-foreground px-4 py-3 w-[180px]">Section</th>
+                  <th className="text-left text-sm font-medium text-muted-foreground px-4 py-3 w-[100px]">Weight</th>
+                  <th className="text-left text-sm font-medium text-muted-foreground px-4 py-3">Rationale</th>
+                </tr>
+              </thead>
+              <tbody>
+                {LENS_KEYS.map((key) => {
+                  const lensWeights = toLensWeights(weights);
+                  const lensVal = lensWeights[key];
+                  const LensIcon = LENS_ICONS[key];
+                  const lensRationale = LENS_GROUPS[key]
+                    .map((ck) => rationale[ck] ?? "")
+                    .filter(Boolean)
+                    .join(" ");
+                  return (
+                    <tr key={key} className="border-b last:border-b-0">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <LensIcon className="w-4 h-4 text-muted-foreground shrink-0" />
+                          <span className="font-medium text-sm">{LENS_LABELS[key]}</span>
+                        </div>
+                        <Badge variant="outline" className="mt-1 ml-6 text-[10px] px-1.5 py-0 font-normal">
+                          {LENS_GROUPS[key].length} criteria
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1">
+                          <Badge variant="secondary" className="font-medium text-sm px-2.5 py-0.5">
+                            {lensVal}%
+                          </Badge>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-muted-foreground">
+                        {lensRationale || "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Evaluation Criteria Weights</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Fine-tune individual evaluation dimensions. These map to the 3 screening lenses above.
+          </p>
+        </CardHeader>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
@@ -192,6 +289,9 @@ function WeightEditor({
                         <Icon className="w-4 h-4 text-muted-foreground shrink-0" />
                         <span className="font-medium text-sm">{section.label}</span>
                       </div>
+                      <Badge variant="outline" className="mt-1 ml-6 text-[10px] px-1.5 py-0 font-normal">
+                        {LENS_LABELS[CRITERION_TO_LENS[section.id]]} lens
+                      </Badge>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-1">

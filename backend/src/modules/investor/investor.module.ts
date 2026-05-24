@@ -22,6 +22,7 @@ import { CalibrationProposalService } from './calibration-proposal.service';
 import { LensDeltaService } from './lens-delta.service';
 import { ScreeningQueueService } from './screening-queue.service';
 import { ScreeningCalibrationService } from './screening-calibration.service';
+import { ScreeningOverrideService } from './screening-override.service';
 import { DealbreakerParseService } from './dealbreaker-parse.service';
 import { DealTriggerProcessor } from './deal-trigger.processor';
 import {
@@ -57,6 +58,7 @@ import {
     LensDeltaService,
     ScreeningQueueService,
     ScreeningCalibrationService,
+    ScreeningOverrideService,
     DealbreakerParseService,
     DealTriggerProcessor,
   ],
@@ -74,6 +76,7 @@ import {
     CalibrationProposalService,
     LensDeltaService,
     ScreeningQueueService,
+    ScreeningOverrideService,
   ],
 })
 export class InvestorModule {}

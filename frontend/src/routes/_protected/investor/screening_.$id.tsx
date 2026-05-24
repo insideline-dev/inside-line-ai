@@ -1,22 +1,28 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { customFetch } from "@/api/client";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getStartupControllerGetOpenQuestionsQueryKey } from "@/api/generated/startups/startups";
 import { StageNav } from "@/components/investor/StageNav";
 import {
   ScreeningDetailBody,
   ScreeningDetailHeader,
 } from "@/components/investor/ScreeningDetail";
-import type { ScreeningRow } from "@/components/investor/screening-types";
+import { ScreeningVerdictOverrideDialog } from "@/components/investor/ScreeningVerdictOverrideDialog";
+import type { ScreeningRow, ScreeningVerdict } from "@/components/investor/screening-types";
 import type { InvestmentThesis } from "@/types/investor";
 import { findPortfolioConflicts } from "@/lib/screening/portfolio-conflicts";
 import type { Startup } from "@/types/startup";
 import { useScreeningOutput } from "@/lib/screening/useScreeningOutput";
 import { downloadScreening } from "@/lib/pdf/download";
+import { DataRoomPanel } from "@/components/startup-view/DataRoomPanel";
+import { AdminEditTab } from "@/components/startup-view/AdminEditTab";
+import { DealActivityTimeline } from "@/components/startup-view/DealActivityTimeline";
+import { useStartupRealtimeProgress } from "@/lib/startup/useStartupRealtimeProgress";
 
 function fetchScreeningQueue() {
   return customFetch<ScreeningRow[]>("/investor/screening");
@@ -54,6 +60,23 @@ function ScreeningDetailPage() {
 
   const row = useMemo(() => rows?.find((r) => r.id === id) ?? null, [rows, id]);
   const screeningOutput = useScreeningOutput(id);
+  const [activeTab, setActiveTab] = useState("screening");
+
+  const { progress } = useStartupRealtimeProgress(id, { pollMs: 2000 });
+  const screeningStatus = progress?.phases?.screening?.status;
+  const prevScreeningStatus = useRef(screeningStatus);
+  useEffect(() => {
+    if (
+      prevScreeningStatus.current &&
+      prevScreeningStatus.current !== "completed" &&
+      screeningStatus === "completed"
+    ) {
+      toast.success("Screening complete — results updated");
+      setActiveTab("screening");
+      queryClient.invalidateQueries({ refetchType: "all" });
+    }
+    prevScreeningStatus.current = screeningStatus;
+  }, [screeningStatus, queryClient, id]);
 
   const portfolioConflicts = useMemo(() => {
     if (!row || !thesis?.portfolioCompanies?.length) return [];
@@ -105,6 +128,45 @@ function ScreeningDetailPage() {
     onError: (err) =>
       toast.error("Pass failed", { description: (err as Error).message }),
   });
+
+  const overrideMutation = useMutation({
+    mutationFn: (input: {
+      targetClassification: ScreeningVerdict;
+      reason: string;
+      reasonCode?: string;
+    }) =>
+      customFetch(`/investor/screening/${id}/override`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    onSuccess: () => {
+      toast.success("Screening verdict override saved");
+      queryClient.invalidateQueries({ queryKey: ["investor", "screening"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "screening"] });
+    },
+    onError: (err) =>
+      toast.error("Override failed", { description: (err as Error).message }),
+  });
+
+  const rescreenMutation = useMutation({
+    mutationFn: (startupId: string) =>
+      customFetch<{ ok: boolean; note: string }>(
+        `/investor/screening/${startupId}/rescreen`,
+        { method: "POST" },
+      ),
+    onSuccess: (res) => {
+      toast.success("Re-screening queued", { description: res.note });
+      queryClient.invalidateQueries();
+    },
+    onError: (err) =>
+      toast.error("Re-screen failed", { description: (err as Error).message }),
+  });
+
+  const handleRescreen = useCallback(() => {
+    if (!row) return;
+    toast.info("Re-running screening with latest documents…");
+    rescreenMutation.mutate(row.id);
+  }, [row, rescreenMutation]);
 
   const handlePass = useCallback(() => {
     if (!row) return;
@@ -171,6 +233,16 @@ function ScreeningDetailPage() {
     );
   }
 
+  const startupLike = {
+    id: row.id,
+    name: row.companyName,
+    website: row.website ?? undefined,
+    description: row.description ?? undefined,
+    industry: row.industry ?? undefined,
+    stage: row.stage ?? undefined,
+    location: row.location ?? undefined,
+  } as unknown as Startup;
+
   return (
     <div className="flex flex-col gap-5">
       <StageNav />
@@ -181,6 +253,12 @@ function ScreeningDetailPage() {
         onAdvance={handleAdvance}
         busy={advanceMutation.isPending || passMutation.isPending}
         extraActions={
+          <>
+          <ScreeningVerdictOverrideDialog
+            currentVerdict={row.verdict}
+            isSubmitting={overrideMutation.isPending}
+            onSubmit={(input) => overrideMutation.mutate(input)}
+          />
           <Button
             variant="outline"
             onClick={handleDownloadScreening}
@@ -199,13 +277,43 @@ function ScreeningDetailPage() {
             )}
             Share PDF
           </Button>
+          </>
         }
       />
-      <ScreeningDetailBody
-        row={row}
-        portfolioConflicts={portfolioConflicts}
-        screeningOutput={screeningOutput.data}
-      />
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <TabsList className="flex h-auto w-full flex-wrap rounded-xl bg-muted/60 p-2">
+          <TabsTrigger value="screening" className="w-full sm:w-auto">Screening</TabsTrigger>
+          <TabsTrigger value="data-room" className="w-full sm:w-auto">Data Room</TabsTrigger>
+          <TabsTrigger value="edit" className="w-full sm:w-auto">Edit</TabsTrigger>
+          <TabsTrigger value="events" className="w-full sm:w-auto">Events</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="screening" className="mt-6">
+          <ScreeningDetailBody
+            row={row}
+            portfolioConflicts={portfolioConflicts}
+            screeningOutput={screeningOutput.data}
+          />
+        </TabsContent>
+
+        <TabsContent value="data-room" className="mt-6">
+          <DataRoomPanel
+            startupId={id}
+            role="investor"
+            allowUpload={true}
+            allowCategoryEdit={false}
+            onUploadComplete={handleRescreen}
+          />
+        </TabsContent>
+
+        <TabsContent value="edit" className="mt-6">
+          <AdminEditTab startup={startupLike} />
+        </TabsContent>
+
+        <TabsContent value="events" className="mt-6">
+          <DealActivityTimeline startupId={id} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

@@ -194,6 +194,7 @@ export const TriageDecideInputSchema = z.object({
    * burning DD attention on the deal.
    */
   thesisFitScore: z.number().int().min(0).max(100).nullable().optional(),
+  thesisFit: z.any().nullable().optional(),
   /**
    * Active lens versions at decision time (DS-E2-F1-S2). Empty object means
    * the caller didn't supply versions; the decision row falls back to `{}`
@@ -592,14 +593,12 @@ export function applyTriagePolicy(
       .filter((code) => code.length > 0),
   );
   if (dealbreakerReasonCodes.length > 0) {
-    // DS-E4-F3 — split structured-rule outcomes into hard reject vs soft
-    // require_override. Hard codes (including all F4-F1 boundary codes,
-    // F4-F2 portfolio conflicts, and structured rules with action=reject)
-    // short-circuit to REJECT. Only when ALL matched codes are
-    // require_override do we downgrade to REVIEW with the override codes
-    // surfaced — that's the partner-friendly "flag but don't kill" path.
+    const SOFT_CODES = new Set(["out_of_scope", "out_of_stage", "out_of_geo"]);
     const hardCodes = dealbreakerReasonCodes.filter(
-      (code) => !isRequireOverrideReasonCode(code),
+      (code) =>
+        !isRequireOverrideReasonCode(code) &&
+        !SOFT_CODES.has(code) &&
+        !code.startsWith("dealbreaker:"),
     );
     if (hardCodes.length > 0) {
       return {
@@ -810,6 +809,7 @@ export class ScreeningTriageService {
         lensSnapshot: snapshot,
         lensVersions: parsed.lensVersions ?? {},
         policyVersion: POLICY_VERSION,
+        thesisFit: parsed.thesisFit ?? null,
       })
       .returning();
 
@@ -986,11 +986,22 @@ export class ScreeningTriageService {
       .orderBy(desc(investorThesis.createdAt))
       .limit(1000);
 
-    const tagCodes = collectDealbreakerReasonCodes(startupSnapshot, rows);
+    const rawTagCodes = collectDealbreakerReasonCodes(startupSnapshot, rows);
 
     // DS-E4-F1 — structural thesis-boundary violations for the owner investor.
     const ownerThesis = await this.fetchOwnerThesisBoundary(startupSnapshot.userId);
     const boundaryCodes = collectThesisBoundaryViolations(startupSnapshot, ownerThesis);
+
+    // Filter out dealbreaker tags that overlap with the investor's own thesis
+    // industries — e.g. "Defense" in dealbreakers when thesis focuses on
+    // "Space infrastructure and defense-grade systems" is a config contradiction.
+    const ownerIndustries = ownerThesis?.industries ?? [];
+    const tagCodes = ownerIndustries.length > 0
+      ? rawTagCodes.filter((code) => {
+          const term = code.replace(DEALBREAKER_REASON_PREFIX, "");
+          return !fuzzyMatchesAny(ownerIndustries, term);
+        })
+      : rawTagCodes;
 
     // DS-E4-F2 — portfolio-conflict detection against the owner's portfolio.
     const portfolio = await this.fetchOwnerPortfolioCompanies(startupSnapshot.userId);

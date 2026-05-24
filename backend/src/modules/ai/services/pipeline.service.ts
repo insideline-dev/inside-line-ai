@@ -1987,14 +1987,62 @@ export class PipelineService {
     );
   }
 
+  /**
+   * Recognise every reason-code shape that means "do not auto-advance":
+   *  - thesis-boundary codes (DS-E4-F1)
+   *  - portfolio-conflict codes (DS-E4-F2)
+   *  - structured + narrative dealbreaker codes (DS-E4-F3/F4)
+   *  - thesis-fit-too-low short-circuit
+   * Soft `require_override` rule codes are intentionally NOT here — those
+   * downgrade the screening verdict to review on their own; this helper
+   * is for the post-screening gate, which keys on the classification
+   * being `advance`.
+   */
+  private isDealbreakerReasonCode(code: string): boolean {
+    if (
+      code === "out_of_stage" ||
+      code === "out_of_scope" ||
+      code === "out_of_geo" ||
+      code === "out_of_thesis_scope"
+    ) {
+      return true;
+    }
+    if (code.startsWith("portfolio_conflict:")) return true;
+    if (code.startsWith("dealbreaker:")) {
+      // Structured rules can be soft (require_override) — let those through.
+      return !code.endsWith(":require_override");
+    }
+    return false;
+  }
+
   private async applyScreeningGate(state: PipelineState): Promise<void> {
+    const isDealbreakerReasonCode = this.isDealbreakerReasonCode.bind(this);
     const screening = (await this.pipelineState.getPhaseResult(
       state.startupId,
       PipelinePhase.SCREENING,
     )) as ScreeningResult | null;
 
-    if (!screening?.classification || screening.classification === "advance") {
-      return;
+    // DS-E7 + DS-E2 user-intent fix (2026-05-24): screening is the gate
+    // for the DD pipeline. RESEARCH / EVALUATION / SYNTHESIS only run
+    // when EITHER:
+    //   (a) screening returned `advance` AND no dealbreaker reason codes
+    //       fired (boundary / portfolio / tag / structured), OR
+    //   (b) an investor has explicitly recorded an advance verdict in
+    //       `investor_deal_decisions` within the override window.
+    // The pre-2026-05-24 behavior was the opposite — DD ran by default
+    // and was only stopped on review/reject. That burned 11+ agents of
+    // compute on every fresh intake.
+    if (screening?.classification === "advance") {
+      const hasDealbreaker = (screening.reasonCodes ?? []).some(
+        (code) => isDealbreakerReasonCode(code),
+      );
+      if (!hasDealbreaker) {
+        // Clean advance → let the rest of the pipeline through.
+        return;
+      }
+      this.logger.log(
+        `[Pipeline] Screening returned advance for ${state.startupId} but dealbreaker codes present (${screening.reasonCodes?.join(", ")}); holding at SCREENING.`,
+      );
     }
 
     // Honor partner override: if an investor explicitly clicked ADVANCE
@@ -2026,7 +2074,7 @@ export class PipelineService {
       .limit(1);
     if (recentAdvance && new Date(recentAdvance.decidedAt) >= cutoff) {
       this.logger.log(
-        `[Pipeline] Investor advance override active for startup ${state.startupId} (decision ${recentAdvance.id}); honoring partner intent over auto-classification '${screening.classification}'.`,
+        `[Pipeline] Investor advance override active for startup ${state.startupId} (decision ${recentAdvance.id}); honoring partner intent over auto-classification '${screening?.classification ?? "(none)"}'.`,
       );
       // Patch the persisted screening_decision row so the queue + UI
       // reflect the override too.
@@ -2051,10 +2099,15 @@ export class PipelineService {
       return;
     }
 
-    const reasonCodes = screening.reasonCodes?.join(", ") || "screening_gate";
-    const reason = `Screening classified this deal as ${screening.classification}; downstream evaluation stopped (${reasonCodes}).`;
+    const verdict = screening?.classification ?? "(none)";
+    const reasonCodes = screening?.reasonCodes?.join(", ") || "screening_gate";
+    const reason = `DD held at screening (verdict=${verdict}, codes=${reasonCodes}). Click Advance to run RESEARCH / EVALUATION / SYNTHESIS.`;
 
-    for (const downstreamPhase of [PipelinePhase.RESEARCH, PipelinePhase.EVALUATION, PipelinePhase.SYNTHESIS]) {
+    for (const downstreamPhase of [
+      PipelinePhase.RESEARCH,
+      PipelinePhase.EVALUATION,
+      PipelinePhase.SYNTHESIS,
+    ]) {
       const currentStatus = (await this.pipelineState.get(state.startupId))?.phases[
         downstreamPhase
       ]?.status;
@@ -2080,6 +2133,7 @@ export class PipelineService {
       });
     }
 
+    if (!screening) return;
     const missingMaterials = this.normalizeScreeningMissingMaterials(
       screening.missingMaterials,
     );

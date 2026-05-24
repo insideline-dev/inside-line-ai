@@ -8,7 +8,17 @@ import { z } from "zod";
  * the picker can grow without a migration. The service validates that
  * tags are short and reasonable. Notes are optional but capped — the
  * intent is "30-second capture", not a memo.
+ *
+ * `primaryDriverLens` (optional) names the single lens the investor felt
+ * was the deciding factor — Team / Market / Traction. The service folds
+ * it into `reasonTags` as `primary_driver:<lens>` so the calibration loop
+ * keys on it without a separate column.
+ *
+ * `notes` doubles as the story's "1-line rationale".
  */
+export const PrimaryDriverLensSchema = z.enum(["team", "market", "traction"]);
+export type PrimaryDriverLens = z.infer<typeof PrimaryDriverLensSchema>;
+
 export const RecordDealDecisionSchema = z.object({
   verdict: z.enum(["advance", "pass", "hold"]),
   reasonTags: z
@@ -17,6 +27,7 @@ export const RecordDealDecisionSchema = z.object({
     .optional()
     .default([]),
   notes: z.string().max(500).optional(),
+  primaryDriverLens: PrimaryDriverLensSchema.optional(),
 });
 
 export type RecordDealDecision = z.infer<typeof RecordDealDecisionSchema>;

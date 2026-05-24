@@ -27,7 +27,28 @@ async function buildLens(opts: {
       MarketLens,
       {
         provide: AiModelExecutionService,
-        useValue: { generateText: opts.generateText },
+        useValue: {
+          generateText: opts.generateText,
+          // Market lens is research-capable (webSearchEnabled = true) so
+          // base-lens.agent routes through resolveForPrompt for tools.
+          // Tests don't need real provider config — return a minimal
+          // shape that lets the generateText call through.
+          resolveForPrompt: jest.fn().mockResolvedValue({
+            resolvedConfig: { provider: "openai", modelName: "gpt-test" },
+            generateTextOptions: {
+              model: {},
+              tools: undefined,
+              toolChoice: undefined,
+              providerOptions: undefined,
+            },
+            searchEnforcement: {
+              requiresProviderEvidence: false,
+              requiresBraveToolCall: false,
+            },
+            usage: { getBraveToolCallCount: () => 0 },
+            braveSearchFn: undefined,
+          }),
+        },
       },
       {
         provide: AiPromptService,

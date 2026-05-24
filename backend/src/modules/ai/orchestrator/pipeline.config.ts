@@ -78,12 +78,10 @@ export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
       queue: QUEUE_NAMES.AI_SCRAPING,
     },
     {
-      // Deal Screening gate — runs BEFORE research so rejected/review deals
-      // never enter the Due Diligence pipeline. Only "advance" proceeds.
       phase: PipelinePhase.SCREENING,
       dependsOn: [PipelinePhase.ENRICHMENT, PipelinePhase.SCRAPING],
       canRunParallelWith: [],
-      timeoutMs: 3 * 60 * 1000,
+      timeoutMs: 5 * 60 * 1000,
       maxRetries: 2,
       required: true,
       queue: QUEUE_NAMES.AI_SCREENING,

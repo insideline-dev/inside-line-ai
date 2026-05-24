@@ -172,4 +172,43 @@ describe("DealDecisionService", () => {
     expect(out).toEqual(PERSISTED_ROW);
     expect(db.orderBy).toHaveBeenCalled();
   });
+
+  // DS-E11-F1-S1 — primaryDriverLens folds into reasonTags as
+  // `primary_driver:<lens>` so the calibration loop sees a single tag stream.
+  it("record() folds primaryDriverLens into reasonTags", async () => {
+    const db = makeMockDb({
+      limit: jest.fn().mockResolvedValueOnce(STARTUP_FOUND_ROW),
+      returning: jest.fn().mockResolvedValueOnce([PERSISTED_ROW]),
+    });
+    const { service } = await build(db);
+
+    await service.record(INVESTOR_ID, STARTUP_ID, {
+      verdict: "pass",
+      reasonTags: ["pricing"],
+      primaryDriverLens: "team",
+    } as never);
+
+    expect(db.values).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reasonTags: expect.arrayContaining(["pricing", "primary_driver:team"]),
+      }),
+    );
+  });
+
+  it("record() doesn't double-fold when caller already passed primary_driver:* in reasonTags", async () => {
+    const db = makeMockDb({
+      limit: jest.fn().mockResolvedValueOnce(STARTUP_FOUND_ROW),
+      returning: jest.fn().mockResolvedValueOnce([PERSISTED_ROW]),
+    });
+    const { service } = await build(db);
+
+    await service.record(INVESTOR_ID, STARTUP_ID, {
+      verdict: "pass",
+      reasonTags: ["pricing", "primary_driver:traction"],
+      primaryDriverLens: "traction",
+    } as never);
+
+    const insertedTags = (db.values as jest.Mock).mock.calls[0][0].reasonTags;
+    expect(insertedTags.filter((t: string) => t === "primary_driver:traction").length).toBe(1);
+  });
 });

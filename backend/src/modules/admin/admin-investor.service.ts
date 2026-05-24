@@ -135,6 +135,8 @@ export class AdminInvestorService {
   async recomputeCalibrationSummary(
     userId: string,
   ): Promise<RecomputeCalibrationResponse> {
-    return this.calibrationRecompute.enqueueRecompute(userId);
+    // DS-E11-F4-S1 — admin-initiated trigger bypasses the
+    // MIN_OUTCOME_EVENTS_FOR_AUTO_RECOMPUTE gate.
+    return this.calibrationRecompute.enqueueRecompute(userId, { force: true });
   }
 }

@@ -19,6 +19,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { StartupHeader } from "@/components/startup-view/StartupHeader";
+import { StageNav } from "@/components/investor/StageNav";
 import { AdminSummaryTab } from "@/components/startup-view/AdminSummaryTab";
 import { AdminReviewSidebar } from "@/components/startup-view/AdminReviewSidebar";
 import { TeamTabContent } from "@/components/startup-view/TeamTabContent";
@@ -595,6 +596,7 @@ function AdminReviewPage() {
   if (isLoading) {
     return (
       <div className="space-y-6">
+        <StageNav surface="admin" />
         <Skeleton className="h-12 w-64" />
         <Skeleton className="h-[400px] w-full" />
       </div>
@@ -603,11 +605,14 @@ function AdminReviewPage() {
 
   if (!startup) {
     return (
-      <div className="flex flex-col items-center justify-center h-96 space-y-4">
-        <p className="text-muted-foreground">Startup not found</p>
-        <Button asChild>
-          <Link to="/admin">Back to Dashboard</Link>
-        </Button>
+      <div className="space-y-6">
+        <StageNav surface="admin" />
+        <div className="flex flex-col items-center justify-center h-96 space-y-4">
+          <p className="text-muted-foreground">Startup not found</p>
+          <Button asChild>
+            <Link to="/admin">Back to Dashboard</Link>
+          </Button>
+        </div>
       </div>
     );
   }
@@ -696,6 +701,7 @@ function AdminReviewPage() {
 
   return (
     <div className="space-y-6">
+      <StageNav surface="admin" />
       <StartupHeader
         startup={startup}
         backLink={backLink}

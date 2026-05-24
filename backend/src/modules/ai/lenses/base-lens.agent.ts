@@ -1,6 +1,9 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { z } from "zod";
+import type { generateText } from "ai";
+
+type GenerateTextCall = Parameters<typeof generateText>[0];
 import {
   LensInputSchema,
   type LensInput,
@@ -75,6 +78,19 @@ export abstract class BaseLensAgent<TOutput extends LensOutput> {
   /** Argument shape for the Vercel AI SDK tool wrapper. */
   readonly inputSchema = LensInputSchema;
 
+  /**
+   * When true, the lens runs through `modelExec.resolveForPrompt` with
+   * `enableWebSearch + enableBraveSearch` on, so the underlying agent gets
+   * provider web-search + Brave tools. Used by the market lens (which does
+   * its own scoped research since RESEARCH no longer runs before screening).
+   * Default false to keep team/traction fast + tooling-free. Implemented as
+   * a method (not a field initializer) so subclass overrides don't clash
+   * with parameter-property field semantics under useDefineForClassFields.
+   */
+  protected webSearchEnabled(): boolean {
+    return false;
+  }
+
   constructor(
     protected readonly modelExec: AiModelExecutionService,
     protected readonly prompts: AiPromptService,
@@ -139,13 +155,34 @@ export abstract class BaseLensAgent<TOutput extends LensOutput> {
         variables,
       );
 
-      const model = this.resolveModel(modelId);
+      // When web-search is enabled (currently: market lens), route through
+      // `resolveForPrompt` so the model gets provider web-search + Brave
+      // tools wired up. Otherwise stay on the fast tooling-free path.
+      let toolOptions: Partial<Parameters<typeof this.modelExec.generateText>[0]> = {};
+      let model: GenerateTextCall["model"];
+      if (this.webSearchEnabled()) {
+        const resolved = await this.modelExec.resolveForPrompt({
+          key: this.promptKey,
+          enableWebSearch: true,
+          enableBraveSearch: true,
+        });
+        model = resolved.generateTextOptions.model;
+        toolOptions = {
+          tools: resolved.generateTextOptions.tools,
+          toolChoice: resolved.generateTextOptions.toolChoice,
+          providerOptions: resolved.generateTextOptions.providerOptions,
+        };
+      } else {
+        model = this.resolveModel(modelId);
+      }
+
       const { output } = await this.modelExec.generateText<TOutput>({
         model,
         system,
         prompt: userPrompt,
         schema: this.outputSchema,
         temperature: 0.2,
+        ...toolOptions,
       });
 
       if (!output) {

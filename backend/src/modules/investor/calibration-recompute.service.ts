@@ -1,5 +1,5 @@
 import { Injectable, Logger, NotFoundException } from "@nestjs/common";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { DrizzleService } from "../../database";
 import { QueueService } from "../../queue/queue.service";
 import { QUEUE_NAMES } from "../../queue/queue.config";
@@ -15,6 +15,7 @@ import {
 import {
   CALIBRATION_RECOMPUTE_DEDUPE_WINDOW_MS,
   CALIBRATION_RECOMPUTE_JOB,
+  MIN_OUTCOME_EVENTS_FOR_AUTO_RECOMPUTE,
   type CalibrationRecomputeJobPayload,
 } from "./calibration-recompute.constants";
 
@@ -30,8 +31,14 @@ export interface CalibrationSnapshotResponse {
 
 export interface RecomputeCalibrationResponse {
   investorId: string;
-  jobId: string;
-  status: "queued" | "in_progress";
+  /** Null when status === "skipped" (auto-trigger gated by threshold). */
+  jobId: string | null;
+  /**
+   * `skipped` returned only from auto-triggers that don't yet meet the
+   * MIN_OUTCOME_EVENTS_FOR_AUTO_RECOMPUTE bar. Manual admin triggers
+   * pass `force: true` and never see this status.
+   */
+  status: "queued" | "in_progress" | "skipped";
   dedupedToExistingJob: boolean;
 }
 
@@ -92,8 +99,29 @@ export class CalibrationRecomputeService {
    * — if a queued/running job already exists for the investor OR one
    * completed inside the window, returns the existing job id.
    */
-  async enqueueRecompute(investorId: string): Promise<RecomputeCalibrationResponse> {
+  async enqueueRecompute(
+    investorId: string,
+    options?: { force?: boolean },
+  ): Promise<RecomputeCalibrationResponse> {
     await this.assertInvestorExists(investorId);
+
+    // DS-E11-F4-S1 — auto-triggers (e.g. after a close/pass decision) wait
+    // until the investor has accumulated MIN_OUTCOME_EVENTS_FOR_AUTO_RECOMPUTE
+    // outcomes; manual admin triggers pass `force: true` to bypass this gate.
+    if (!options?.force) {
+      const eligible = await this.hasMinOutcomeEvents(investorId);
+      if (!eligible) {
+        this.logger.log(
+          `Skipping auto-recompute for ${investorId} — below MIN_OUTCOME_EVENTS_FOR_AUTO_RECOMPUTE threshold`,
+        );
+        return {
+          investorId,
+          jobId: null,
+          status: "skipped",
+          dedupedToExistingJob: false,
+        };
+      }
+    }
 
     const now = new Date();
     const [existing] = await this.drizzle.db
@@ -173,6 +201,20 @@ export class CalibrationRecomputeService {
       status: "queued",
       dedupedToExistingJob: false,
     };
+  }
+
+  /**
+   * DS-E11-F4-S1 — auto-trigger eligibility check. Returns true when the
+   * investor has accumulated >= MIN_OUTCOME_EVENTS_FOR_AUTO_RECOMPUTE
+   * close/pass/advance decisions. Manual admin triggers bypass this with
+   * `enqueueRecompute(investorId, { force: true })`.
+   */
+  private async hasMinOutcomeEvents(investorId: string): Promise<boolean> {
+    const [row] = await this.drizzle.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(investorDealDecision)
+      .where(eq(investorDealDecision.investorId, investorId));
+    return (row?.count ?? 0) >= MIN_OUTCOME_EVENTS_FOR_AUTO_RECOMPUTE;
   }
 
   /**

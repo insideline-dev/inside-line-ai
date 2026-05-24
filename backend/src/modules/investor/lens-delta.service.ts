@@ -43,6 +43,13 @@ interface LensDeltaSummaryRow {
 export const LENS_DELTA_DEAL_WINDOW = 50;
 
 /**
+ * DS-E11-F2 — only persist DD ↔ Screening deltas whose absolute magnitude
+ * meets this point threshold. Smaller deltas are noise (model variance,
+ * rounding); only material disagreements should feed the calibration loop.
+ */
+export const MATERIAL_DELTA_THRESHOLD_POINTS = 15;
+
+/**
  * Pure aggregator — separately testable from any I/O. Filters to the
  * latest (startupId, lensKey) by computedAt, optionally caps to the
  * most recent `dealWindow` startups, then averages by lens.
@@ -250,6 +257,12 @@ export class LensDeltaService {
       if (dd === undefined || !screening) continue;
 
       const delta = dd - screening.score;
+      // DS-E11-F2 — drop sub-threshold deltas. The calibration loop only
+      // wants material disagreements (|Δ| >= MATERIAL_DELTA_THRESHOLD_POINTS).
+      if (Math.abs(delta) < MATERIAL_DELTA_THRESHOLD_POINTS) {
+        continue;
+      }
+
       const [row] = await this.drizzle.db
         .insert(screeningDdLensDelta)
         .values({

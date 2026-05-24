@@ -17,6 +17,13 @@ export const CALIBRATION_RECOMPUTE_FAILED_EVENT =
  */
 export const CALIBRATION_RECOMPUTE_DEDUPE_WINDOW_MS = 10_000;
 
+/**
+ * DS-E11-F4-S1 — minimum outcome-event count before the auto-trigger (from
+ * `DealDecisionService.record`) will enqueue a recompute. Manual admin
+ * triggers pass `{ force: true }` to bypass this gate.
+ */
+export const MIN_OUTCOME_EVENTS_FOR_AUTO_RECOMPUTE = 10;
+
 export interface CalibrationRecomputeJobPayload {
   investorId: string;
 }

@@ -1,8 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
-import { Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { Injectable, Logger, NotFoundException, Optional } from "@nestjs/common";
 import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { DrizzleService } from "../../database";
 import { NotificationGateway } from "../../notification/notification.gateway";
+import { ScoringPreferencesService } from "./scoring-preferences.service";
 import { user, UserRole } from "../../auth/entities/auth.schema";
 import {
   investorEvent,
@@ -196,6 +197,7 @@ export class CalibrationProposalService {
   constructor(
     private readonly drizzle: DrizzleService,
     private readonly notifications: NotificationGateway,
+    @Optional() private readonly scoringPrefs?: ScoringPreferencesService,
   ) {}
 
   /**
@@ -294,7 +296,26 @@ export class CalibrationProposalService {
       );
     }
 
-    const decisionPayload: CalibrationProposalDecisionPayload = { proposalId };
+    // DS-E11-F3-S1 — apply the suggested delta to the investor's live
+    // per-stage scoring preferences BEFORE recording the approval event,
+    // so a failure here doesn't leave us with an "approved but not
+    // applied" event in the log. The pending→approved status transition
+    // guards re-runs (second approve call fails the status check above).
+    let appliedAuditCount = 0;
+    if (this.scoringPrefs && proposal.suggestedDelta.lensAdjustments.length > 0) {
+      const audit = await this.scoringPrefs.applyScreeningLensAdjustments(
+        investorUserId,
+        proposal.suggestedDelta.lensAdjustments,
+      );
+      appliedAuditCount = audit.length;
+    }
+
+    const decisionPayload: CalibrationProposalDecisionPayload & {
+      appliedStages?: number;
+    } = { proposalId };
+    if (appliedAuditCount > 0) {
+      decisionPayload.appliedStages = appliedAuditCount;
+    }
     const row = await this.insertEvent(
       investorUserId,
       "calibration_proposal_approved",
@@ -302,7 +323,7 @@ export class CalibrationProposalService {
     );
 
     this.logger.log(
-      `Calibration proposal approved investor=${investorUserId} proposal=${proposalId}`,
+      `Calibration proposal approved investor=${investorUserId} proposal=${proposalId} appliedStages=${appliedAuditCount}`,
     );
 
     return {

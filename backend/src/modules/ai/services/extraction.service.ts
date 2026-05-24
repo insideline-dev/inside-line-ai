@@ -18,11 +18,25 @@ import { PdfTextExtractorService } from "./pdf-text-extractor.service";
 import { ExcelTextExtractorService } from "./excel-text-extractor.service";
 import { PptxTextExtractorService } from "./pptx-text-extractor.service";
 
+/** Per-document cap (chars) for the structured supportingDocTexts array. */
+const SUPPORTING_DOC_TEXT_PER_DOC_CHARS = 5000;
+/** Max number of structured supportingDocTexts entries persisted on the result. */
+const SUPPORTING_DOC_TEXT_MAX_ENTRIES = 6;
+
+type SupportingDocPerDoc = {
+  fileName: string;
+  contentType: string;
+  category: import("../interfaces/document-classification.interface").DocumentCategory | null;
+  text: string;
+  truncated: boolean;
+};
+
 type SupportingDocumentExtraction = {
   combinedText: string;
   candidateCount: number;
   parsedCount: number;
   warnings: string[];
+  perDoc: SupportingDocPerDoc[];
 };
 
 @Injectable()
@@ -154,6 +168,7 @@ export class ExtractionService {
           "startup-context",
           0,
           warnings,
+          supportingDocs.perDoc,
         );
         this.logger.log(
           `[Extraction] Completed extraction phase for startup ${startupId} | source=startup-context | pageCount=0 | warnings=${fallbackResult.warnings?.length ?? 0}`,
@@ -171,6 +186,7 @@ export class ExtractionService {
         "startup-context",
         0,
         warnings,
+        supportingDocs.perDoc,
       );
       this.logger.log(
         `[Extraction] Completed extraction phase for startup ${startupId} | source=startup-context | pageCount=0 | warnings=${fallbackResult.warnings?.length ?? 0}`,
@@ -265,6 +281,7 @@ export class ExtractionService {
           "startup-context",
           0,
           warnings,
+          supportingDocs.perDoc,
         );
         this.logger.log(
           `[Extraction] Completed extraction phase for startup ${startupId} | source=startup-context | pageCount=0 | warnings=${fallbackResult.warnings?.length ?? 0}`,
@@ -279,6 +296,7 @@ export class ExtractionService {
         "startup-context",
         0,
         warnings,
+        supportingDocs.perDoc,
       );
       this.logger.log(
         `[Extraction] Completed extraction phase for startup ${startupId} | source=startup-context | pageCount=0 | warnings=${fallbackResult.warnings?.length ?? 0}`,
@@ -574,6 +592,7 @@ export class ExtractionService {
       source,
       pageCount,
       warnings,
+      supportingDocs.perDoc,
     );
 
     // Extract structured deck data (non-fatal — KPI enrichment, not pipeline-critical)
@@ -625,6 +644,7 @@ export class ExtractionService {
     source: NonNullable<ExtractionResult["source"]>,
     pageCount: number,
     warnings: string[],
+    supportingDocTexts: SupportingDocPerDoc[] = [],
   ): ExtractionResult {
     const founderNames =
       aiFields.founderNames && aiFields.founderNames.length > 0
@@ -673,6 +693,7 @@ export class ExtractionService {
       source,
       pageCount: pageCount > 0 ? pageCount : undefined,
       warnings: [...new Set(warnings)].filter(Boolean),
+      supportingDocTexts,
     });
   }
 
@@ -1177,6 +1198,7 @@ export class ExtractionService {
         candidateCount: 0,
         parsedCount: 0,
         warnings: [],
+        perDoc: [],
       };
     }
 
@@ -1192,6 +1214,7 @@ export class ExtractionService {
 
     const warnings: string[] = [];
     const textBlocks: string[] = [];
+    const perDoc: SupportingDocPerDoc[] = [];
     for (const file of candidates) {
       try {
         const extractedText = await this.extractTextFromSupportingFile(file);
@@ -1207,6 +1230,24 @@ export class ExtractionService {
             extractedText,
           ].join("\n"),
         );
+
+        if (perDoc.length < SUPPORTING_DOC_TEXT_MAX_ENTRIES) {
+          const trimmed = extractedText.length > SUPPORTING_DOC_TEXT_PER_DOC_CHARS
+            ? extractedText.slice(0, SUPPORTING_DOC_TEXT_PER_DOC_CHARS)
+            : extractedText;
+          // The DB column type for `startup.files` is narrower than the
+          // classified shape — category is added at runtime by the
+          // classification phase but the jsonb type signature doesn't
+          // include it. Read via a widened view.
+          const classified = file as StartupFileReference;
+          perDoc.push({
+            fileName: file.name,
+            contentType: file.type ?? "",
+            category: classified.category ?? null,
+            text: trimmed,
+            truncated: extractedText.length > SUPPORTING_DOC_TEXT_PER_DOC_CHARS,
+          });
+        }
       } catch (error) {
         const message = this.asMessage(error);
         warnings.push(`Failed to process supporting file "${file.name}": ${message}`);
@@ -1231,6 +1272,7 @@ export class ExtractionService {
       candidateCount: candidates.length,
       parsedCount: textBlocks.length,
       warnings,
+      perDoc,
     };
   }
 

@@ -11,6 +11,7 @@ import { ContractsModule } from "./contracts/contracts.module";
 import { ScreeningTriageModule } from "./screening/triage";
 import { DdModule } from "../dd/dd.module";
 import { ScreeningCascadeService } from "./screening/cascade.service";
+import { LensContentRouterService } from "./screening/lens-content-router.service";
 import { AiProviderService } from "./providers/ai-provider.service";
 import {
   BusinessModelEvaluationAgent,
@@ -183,6 +184,7 @@ import { OpenAiTextGenerationService } from "./services/openai-text-generation.s
     ResearchProcessor,
     ScreeningProcessor,
     ScreeningCascadeService,
+    LensContentRouterService,
     EvaluationProcessor,
     SynthesisProcessor,
     MatchingProcessor,

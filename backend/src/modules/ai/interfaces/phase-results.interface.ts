@@ -76,6 +76,21 @@ export interface StartupFormContext {
   productScreenshots?: string[];
 }
 
+/**
+ * Per-document text excerpt cached during EXTRACTION so downstream phases
+ * (screening lenses, DD evaluation) can read classified non-deck documents
+ * (financials, cap_table, team_hr, legal, etc.) without re-fetching them.
+ * Text is capped at `SupportingDocText.text.length` and `truncated=true`
+ * marks an excerpt that was longer than the cap.
+ */
+export interface SupportingDocText {
+  fileName: string;
+  contentType: string;
+  category: DocumentCategory | null;
+  text: string;
+  truncated: boolean;
+}
+
 export interface ExtractionResult {
   companyName: string;
   description?: string;
@@ -93,6 +108,13 @@ export interface ExtractionResult {
   pageCount?: number;
   warnings?: string[];
   deckStructuredData?: import("../schemas/deck-structured-data.schema").DeckStructuredData;
+  /**
+   * Cached text excerpts for non-deck classified documents (financials,
+   * cap_table, team_hr, legal, market_research, business_plan,
+   * technical_product). Populated in {@link ExtractionService} so screening
+   * lenses can route the right docs into the right lens without re-parsing.
+   */
+  supportingDocTexts?: SupportingDocText[];
 }
 
 export interface WebsiteScrapedData {

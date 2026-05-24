@@ -57,12 +57,24 @@ function statusBadge(status: BulkUploadRowStatus) {
 
 interface Props {
   triggerLabel?: string;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  hideTrigger?: boolean;
 }
 
 export function BulkUploadStartupsDialog({
   triggerLabel = "Bulk Upload",
+  open: controlledOpen,
+  onOpenChange,
+  hideTrigger,
 }: Props = {}) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const setOpen = (next: boolean) => {
+    if (!isControlled) setInternalOpen(next);
+    onOpenChange?.(next);
+  };
   const [selected, setSelected] = useState<File | null>(null);
   const [summary, setSummary] = useState<BulkUploadSummary | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -167,12 +179,14 @@ export function BulkUploadStartupsDialog({
         if (!next) reset();
       }}
     >
-      <DialogTrigger asChild>
-        <Button size="sm" variant="outline">
-          <UploadCloud className="w-4 h-4 mr-2" />
-          {triggerLabel}
-        </Button>
-      </DialogTrigger>
+      {!hideTrigger && (
+        <DialogTrigger asChild>
+          <Button size="sm" variant="outline">
+            <UploadCloud className="w-4 h-4 mr-2" />
+            {triggerLabel}
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent
         className="max-w-3xl max-h-[90vh] overflow-y-auto"
         data-testid="bulk-upload-dialog"

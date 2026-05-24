@@ -12,8 +12,6 @@ import type { AdminControllerGetAllStartupsStatus } from "@/api/generated/model"
 import { Clock, Sparkles, CheckCircle, XCircle, Users, Target, Building2, Eye } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { QuickAddStartupDialog } from "./-components/QuickAddStartupDialog";
-import { BulkUploadStartupsDialog } from "./-components/BulkUploadStartupsDialog";
 import { StageNav } from "@/components/investor/StageNav";
 
 export const Route = createFileRoute("/_protected/admin/")({
@@ -304,10 +302,6 @@ function AdminDashboard() {
         <div>
           <h1 className="text-2xl font-bold">Due Diligence</h1>
           <p className="text-muted-foreground">Review and manage startup submissions</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <BulkUploadStartupsDialog />
-          <QuickAddStartupDialog />
         </div>
       </div>
 

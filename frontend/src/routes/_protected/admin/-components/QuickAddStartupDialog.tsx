@@ -38,8 +38,24 @@ const formSchema = z.object({
 
 type FormValues = z.infer<typeof formSchema>;
 
-export function QuickAddStartupDialog() {
-  const [open, setOpen] = useState(false);
+interface QuickAddStartupDialogProps {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  hideTrigger?: boolean;
+}
+
+export function QuickAddStartupDialog({
+  open: controlledOpen,
+  onOpenChange,
+  hideTrigger,
+}: QuickAddStartupDialogProps = {}) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const setOpen = (next: boolean) => {
+    if (!isControlled) setInternalOpen(next);
+    onOpenChange?.(next);
+  };
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
@@ -122,12 +138,14 @@ export function QuickAddStartupDialog() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button size="sm">
-          <Zap className="w-4 h-4 mr-2" />
-          Quick Add
-        </Button>
-      </DialogTrigger>
+      {!hideTrigger && (
+        <DialogTrigger asChild>
+          <Button size="sm">
+            <Zap className="w-4 h-4 mr-2" />
+            Quick Add
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Quick Add Startup</DialogTitle>

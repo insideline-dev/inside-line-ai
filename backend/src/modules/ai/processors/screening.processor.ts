@@ -44,6 +44,10 @@ import {
 const LENS_RUN_CONCURRENCY = 3;
 import { ScreeningOutputService } from "../contracts/screening-output";
 import { ScreeningTriageService } from "../screening/triage";
+import {
+  LensContentRouterService,
+  type LensKey,
+} from "../screening/lens-content-router.service";
 import { PipelineStateService } from "../services/pipeline-state.service";
 import { PipelineService } from "../services/pipeline.service";
 import { runPipelinePhase } from "./run-phase.util";
@@ -106,6 +110,7 @@ export class ScreeningProcessor
     private dealEvents: DealEventService,
     private investorMatching: InvestorMatchingService,
     private openQuestions: OpenQuestionService,
+    private lensContentRouter: LensContentRouterService,
   ) {
     const redisUrl = config.get<string>("REDIS_URL", "redis://localhost:6379");
     const queuePrefix = config.get<string>("QUEUE_PREFIX");
@@ -253,7 +258,14 @@ export class ScreeningProcessor
         const lens = this.lenses[idx];
         await emit(lens.key, "started");
         try {
-          const r = await lens.run(ctx);
+          // DS-E2-F1-S3 — route the scoped document / enrichment / scraping
+          // content for THIS lens. Falls back to the base `ctx` (no extra
+          // blocks) if the router fails — lens.run handles empty blocks.
+          const scopedCtx = await this.buildLensInputForKey(
+            lens.key as LensKey,
+            ctx,
+          );
+          const r = await lens.run(scopedCtx);
           out[lens.key] = r;
           await emit(
             lens.key,
@@ -712,7 +724,39 @@ export class ScreeningProcessor
       contextNotes,
       investorThesis,
       teamMembers,
+      // DS-E2-F1-S3 — scoped content blocks are populated per-lens by
+      // `buildLensInputForKey`; base context leaves them empty.
+      deckSectionsBlock: "",
+      deckExcerptBlock: "",
+      enrichmentBlock: "",
+      scrapedBlock: "",
+      supportingDocsBlock: "",
+      teamProfilesBlock: "",
     };
+  }
+
+  /**
+   * DS-E2-F1-S3 — merge the lens-scoped content bundle into the base
+   * `LensInput`. If the router throws (no pipeline state yet, Redis miss,
+   * etc.) we degrade gracefully: the lens still runs on the base context
+   * with empty document blocks, just like the pre-S3 behavior.
+   */
+  private async buildLensInputForKey(
+    lensKey: LensKey,
+    base: LensInput,
+  ): Promise<LensInput> {
+    try {
+      const bundle = await this.lensContentRouter.buildForLens(
+        lensKey,
+        base.startupId,
+      );
+      return { ...base, ...bundle };
+    } catch (err) {
+      this.logger.warn(
+        `Lens content routing failed for ${lensKey}/${base.startupId}: ${(err as Error).message}`,
+      );
+      return base;
+    }
   }
 
   private async formatThesisForLens(userId: string | null): Promise<string> {

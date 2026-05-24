@@ -110,6 +110,17 @@ export abstract class BaseLensAgent<TOutput extends LensOutput> {
       contextNotes: ctx.contextNotes,
       investorThesis: ctx.investorThesis || "(no thesis on file)",
       teamMembers: ctx.teamMembers || "(no team roster provided)",
+      // DS-E2-F1-S3 — lens-scoped content blocks routed in by
+      // `LensContentRouterService`. Each block is empty string when no
+      // content of that kind is available; the prompt template renders the
+      // empty section quietly. V3 prompts reference these variables; V2
+      // and V1 ignore them.
+      deckSectionsBlock: ctx.deckSectionsBlock ?? "",
+      deckExcerptBlock: ctx.deckExcerptBlock ?? "",
+      enrichmentBlock: ctx.enrichmentBlock ?? "",
+      scrapedBlock: ctx.scrapedBlock ?? "",
+      supportingDocsBlock: ctx.supportingDocsBlock ?? "",
+      teamProfilesBlock: ctx.teamProfilesBlock ?? "",
     };
   }
 

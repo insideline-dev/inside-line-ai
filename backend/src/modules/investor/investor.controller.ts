@@ -35,7 +35,6 @@ import { ScreeningCalibrationService } from './screening-calibration.service';
 import { ScreeningOverrideService } from './screening-override.service';
 import { OverrideScreeningVerdictDto } from './dto/override-screening-verdict.dto';
 import { PipelineService } from '../ai/services/pipeline.service';
-import { PipelineStateService } from '../ai/services/pipeline-state.service';
 import { screeningDecision } from '../ai/entities/screening-decision.schema';
 import { PipelinePhase } from '../ai/interfaces/pipeline.interface';
 import { desc, eq } from 'drizzle-orm';
@@ -94,7 +93,6 @@ export class InvestorController {
     private screeningCalibrationService: ScreeningCalibrationService,
     private screeningOverrideService: ScreeningOverrideService,
     private pipelineCoreService: PipelineService,
-    private pipelineState: PipelineStateService,
     private drizzle: DrizzleService,
   ) {}
 
@@ -409,92 +407,29 @@ export class InvestorController {
       notes,
     });
 
-    // 3. Re-run from EVALUATION when possible (cheapest path — reuses
-    //    cached extraction/enrichment/scraping/research/screening), and
-    //    fall back to a full pipeline restart when the state isn't usable
-    //    (no live state, expired, or upstream phase results missing —
-    //    e.g. a previous run was cancelled mid-flight). The gate override
-    //    (applyScreeningGate, investor_deal_decision check) ensures that
-    //    even in the fresh-restart path, the new screening verdict won't
-    //    overrule the partner's ADVANCE intent.
-    // Cheap pre-check: rerun-from-eval only works if extraction +
-    // scraping + research phase results are still in pipelineState (the
-    // evaluation service requires all three). If any is missing — e.g.
-    // a previous run was cancelled mid-way — skip straight to the full
-    // pipeline path so eval doesn't bomb post-queue with an unhelpful
-    // 500.
-    const upstreamReady = await (async () => {
-      try {
-        const [extraction, scraping, research] = await Promise.all([
-          this.pipelineState.getPhaseResult(startupId, PipelinePhase.EXTRACTION),
-          this.pipelineState.getPhaseResult(startupId, PipelinePhase.SCRAPING),
-          this.pipelineState.getPhaseResult(startupId, PipelinePhase.RESEARCH),
-        ]);
-        return Boolean(extraction && scraping && research);
-      } catch {
-        return false;
-      }
-    })();
-
-    let path: 'rerun_from_eval' | 'fresh_full_pipeline' = upstreamReady
-      ? 'rerun_from_eval'
-      : 'fresh_full_pipeline';
-    const tryRerun = async (): Promise<void> => {
+    // 3. Continue the pipeline from RESEARCH (first DD phase). RESEARCH
+    //    depends on SCREENING which is already completed, so the chain
+    //    fires: RESEARCH → EVALUATION → SYNTHESIS. Never fall back to
+    //    startPipeline() — that re-runs SCREENING and overwrites the
+    //    advance verdict.
+    try {
       await this.pipelineCoreService.rerunFromPhase(
         startupId,
-        PipelinePhase.EVALUATION,
+        PipelinePhase.RESEARCH,
       );
-    };
-    const tryFreshFull = async (): Promise<void> => {
-      await this.pipelineCoreService.startPipeline(startupId, user.id, {
-        skipExtraction: true,
-      });
-      path = 'fresh_full_pipeline';
-    };
-
-    if (path === 'rerun_from_eval') {
-      try {
-        await tryRerun();
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        const isStateMissing = /not found/i.test(message);
-        if (!isStateMissing) {
-          throw new NotFoundException(
-            `Could not start DD from screening — ${message}`,
-          );
-        }
-        try {
-          await tryFreshFull();
-        } catch (fallbackErr) {
-          const fbMsg =
-            fallbackErr instanceof Error
-              ? fallbackErr.message
-              : String(fallbackErr);
-          throw new NotFoundException(
-            `Could not start DD from screening — ${fbMsg}`,
-          );
-        }
-      }
-    } else {
-      try {
-        await tryFreshFull();
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        throw new NotFoundException(
-          `Could not start DD from screening — ${message}`,
-        );
-      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new NotFoundException(
+        `Could not start DD from screening — ${message}`,
+      );
     }
 
     return {
       ok: true,
       startupId,
       verdict: 'advance' as const,
-      path,
-      note:
-        path === 'rerun_from_eval'
-          ? 'Evaluation + synthesis queued; deal will move to DD when complete.'
-          : 'No prior pipeline state — full pipeline restarted; deal will move to DD when complete.',
+      path: 'rerun_from_research' as const,
+      note: 'Research + evaluation + synthesis queued; deal will move to DD when complete.',
     };
   }
 

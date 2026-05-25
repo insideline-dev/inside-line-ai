@@ -13,7 +13,6 @@ import { isVerdict } from "./screening-queue.service";
 import { CalibrationRecomputeService } from "./calibration-recompute.service";
 import { OpenQuestionService } from "../dd/open-question.service";
 import { PipelineService } from "../ai/services/pipeline.service";
-import { PipelineStateService } from "../ai/services/pipeline-state.service";
 import { PipelinePhase } from "../ai/interfaces/pipeline.interface";
 
 export interface ScreeningOverrideActor {
@@ -52,7 +51,6 @@ export class ScreeningOverrideService {
     private calibrationRecompute: CalibrationRecomputeService,
     private openQuestions: OpenQuestionService,
     private pipelineService: PipelineService,
-    private pipelineState: PipelineStateService,
   ) {}
 
   async createOverride(input: ScreeningOverrideInput): Promise<ScreeningOverrideAuditEntry> {
@@ -131,37 +129,12 @@ export class ScreeningOverrideService {
   }
 
   /**
-   * Trigger DD pipeline (evaluation → synthesis) after an advance override.
-   * Tries rerunFromPhase(EVALUATION) first; falls back to full pipeline.
+   * Trigger DD pipeline (research → evaluation → synthesis) after an advance override.
+   * Starts from RESEARCH which depends on SCREENING (already completed).
+   * Never falls back to startPipeline — that would re-run screening.
    */
-  private async triggerDdPipeline(startupId: string, actorId: string): Promise<void> {
-    const upstreamReady = await (async () => {
-      try {
-        const [extraction, scraping, research] = await Promise.all([
-          this.pipelineState.getPhaseResult(startupId, PipelinePhase.EXTRACTION),
-          this.pipelineState.getPhaseResult(startupId, PipelinePhase.SCRAPING),
-          this.pipelineState.getPhaseResult(startupId, PipelinePhase.RESEARCH),
-        ]);
-        return Boolean(extraction && scraping && research);
-      } catch {
-        return false;
-      }
-    })();
-
-    if (upstreamReady) {
-      try {
-        await this.pipelineService.rerunFromPhase(startupId, PipelinePhase.EVALUATION);
-        return;
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        if (!/not found/i.test(message)) throw err;
-        // State missing — fall through to fresh pipeline
-      }
-    }
-
-    await this.pipelineService.startPipeline(startupId, actorId, {
-      skipExtraction: true,
-    });
+  private async triggerDdPipeline(startupId: string, _actorId: string): Promise<void> {
+    await this.pipelineService.rerunFromPhase(startupId, PipelinePhase.RESEARCH);
   }
 
   async getOverridesForDecisionIds(

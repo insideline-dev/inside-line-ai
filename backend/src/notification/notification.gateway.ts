@@ -124,7 +124,10 @@ function parseCookies(raw: string): Record<string, string> {
 
 @WebSocketGateway({
   cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    origin: [
+      process.env.FRONTEND_URL || 'http://localhost:3030',
+      ...(process.env.CORS_ALLOWED_ORIGINS?.split(',').map(o => o.trim()) ?? []),
+    ].filter(Boolean),
     credentials: true,
   },
   namespace: '/notifications',

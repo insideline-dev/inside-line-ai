@@ -151,54 +151,8 @@ export function DealCard({ startupId, className, startup: startupProp }: DealCar
   });
   const thesis = unwrap<InvestmentThesis>(thesisRes.data) ?? null;
 
-  const isLoading =
-    !startupProp && (ownStartupRes.isLoading || approvedStartupRes.isLoading);
-
-  if (isLoading) {
-    return <DealCardSkeleton className={className} />;
-  }
-
-  if (!startup) {
-    return (
-      <Card className={cn("border-dashed", className)}>
-        <CardContent className="flex items-center gap-3 p-4 text-sm text-muted-foreground">
-          <AlertCircle className="h-4 w-4" />
-          Startup unavailable
-        </CardContent>
-      </Card>
-    );
-  }
-
-  const stage = formatStage(startup.stage);
-  const sector = startup.sectorIndustryGroup ?? startup.industry ?? null;
-  const lensTiles = buildLensTiles(decision);
-  const dealbreakers = evaluateDealbreakers(startup, thesis);
-  const hasHardDealbreaker = hasHardViolation(dealbreakers);
-  // DS-E4-F2-S1 — surface portfolio conflicts before the partner advances.
-  const portfolioConflicts = findPortfolioConflicts(startup, thesis);
-  // DS-E7-F4-S1 — REVIEW hold visibility: show what DD would lack.
-  const missingMaterials = screeningOutput.data?.overall.missingMaterials ?? [];
-  const why =
-    decision && decision.reasonCodes.length > 0
-      ? summarizeReasonCodes(decision.reasonCodes)
-      : decision
-        ? "No flags raised"
-        : null;
-
   // DS-E10-F4-S1 — share-safe 1-page screening PDF.
   const [isDownloadingScreening, setIsDownloadingScreening] = useState(false);
-  const handleDownloadScreening = async () => {
-    if (!screeningOutput.data || isDownloadingScreening) return;
-    setIsDownloadingScreening(true);
-    try {
-      await downloadScreening({ startup });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Download failed";
-      toast.error("Couldn't generate PDF", { description: message });
-    } finally {
-      setIsDownloadingScreening(false);
-    }
-  };
 
   // DS-E11-F1-S1 — 30-second close/pass capture. The investor's verdict
   // becomes the seed data for the calibration loop.
@@ -234,6 +188,53 @@ export function DealCard({ startupId, className, startup: startupProp }: DealCar
       },
     },
   });
+
+  const isLoading =
+    !startupProp && (ownStartupRes.isLoading || approvedStartupRes.isLoading);
+
+  if (isLoading) {
+    return <DealCardSkeleton className={className} />;
+  }
+
+  if (!startup) {
+    return (
+      <Card className={cn("border-dashed", className)}>
+        <CardContent className="flex items-center gap-3 p-4 text-sm text-muted-foreground">
+          <AlertCircle className="h-4 w-4" />
+          Startup unavailable
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const stage = formatStage(startup.stage);
+  const sector = startup.sectorIndustryGroup ?? startup.industry ?? null;
+  const lensTiles = buildLensTiles(decision);
+  const dealbreakers = evaluateDealbreakers(startup, thesis);
+  const hasHardDealbreaker = hasHardViolation(dealbreakers);
+  // DS-E4-F2-S1 — surface portfolio conflicts before the partner advances.
+  const portfolioConflicts = findPortfolioConflicts(startup, thesis);
+  // DS-E7-F4-S1 — REVIEW hold visibility: show what DD would lack.
+  const missingMaterials = screeningOutput.data?.overall.missingMaterials ?? [];
+  const why =
+    decision && decision.reasonCodes.length > 0
+      ? summarizeReasonCodes(decision.reasonCodes)
+      : decision
+        ? "No flags raised"
+        : null;
+
+  const handleDownloadScreening = async () => {
+    if (!startup || !screeningOutput.data || isDownloadingScreening) return;
+    setIsDownloadingScreening(true);
+    try {
+      await downloadScreening({ startup });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Download failed";
+      toast.error("Couldn't generate PDF", { description: message });
+    } finally {
+      setIsDownloadingScreening(false);
+    }
+  };
 
   return (
     <Card

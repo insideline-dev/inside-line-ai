@@ -13,13 +13,9 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
-// pdfjs worker is shipped by react-pdf's bundled pdfjs-dist. Resolve via
-// import.meta.url so Vite serves it as a static asset.
-pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-  "pdfjs-dist/build/pdf.worker.min.mjs",
-  import.meta.url,
-).toString();
+pdfjs.GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl;
 
 interface ScreeningPitchDeckViewerProps {
   url: string | null;

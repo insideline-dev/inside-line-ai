@@ -56,6 +56,7 @@ import {
   PipelineState,
   PipelineStatus,
 } from "../interfaces/pipeline.interface";
+import { DUE_DILIGENCE_PHASES } from "../orchestrator/pipeline.config";
 import { ErrorRecoveryService } from "../orchestrator/error-recovery.service";
 import { PhaseTransitionService } from "../orchestrator/phase-transition.service";
 import { ProgressTrackerService } from "../orchestrator/progress-tracker.service";
@@ -2115,16 +2116,9 @@ export class PipelineService {
 
     const verdict = screening?.classification ?? "(none)";
     const reasonCodes = screening?.reasonCodes?.join(", ") || "screening_gate";
-    const reason = `DD held at screening (verdict=${verdict}, codes=${reasonCodes}). Click Advance to run RESEARCH / EVALUATION / SYNTHESIS.`;
+    const reason = `Due Diligence held at screening gate (verdict=${verdict}, codes=${reasonCodes}). Click Advance to start Due Diligence.`;
 
-    // RESEARCH is now downstream of SCREENING too (pipeline.config.ts) —
-    // include it in the skip-list so the deep-research phase doesn't
-    // auto-fire on every intake.
-    for (const downstreamPhase of [
-      PipelinePhase.RESEARCH,
-      PipelinePhase.EVALUATION,
-      PipelinePhase.SYNTHESIS,
-    ]) {
+    for (const downstreamPhase of DUE_DILIGENCE_PHASES) {
       const currentStatus = (await this.pipelineState.get(state.startupId))?.phases[
         downstreamPhase
       ]?.status;

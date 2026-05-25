@@ -222,15 +222,38 @@ export class InvestorOnboardingProcessor implements OnModuleInit {
     await this.drizzle.withRLS(userId, async (db) => {
       const now = new Date();
 
+      const [existing] = await db
+        .select()
+        .from(investorThesis)
+        .where(eq(investorThesis.userId, userId))
+        .limit(1);
+
+      const updateSet: Record<string, unknown> = {
+        thesisSummary: draft.thesisSummary,
+        thesisSummaryGeneratedAt: now,
+        portfolioCompanies: draft.portfolioCompanies,
+        portfolioGeneratedAt: now,
+        updatedAt: now,
+      };
+
+      // Only populate industries/stages/checkSize if they were empty or LLM-sourced.
+      // This prevents a rescan from nuking manual edits.
+      if (!existing?.industries?.length && draft.industries?.length) {
+        updateSet.industries = draft.industries;
+      }
+      if (!existing?.stages?.length && draft.stages?.length) {
+        updateSet.stages = draft.stages;
+      }
+      if (existing?.checkSizeMin == null && draft.checkSizeMin != null) {
+        updateSet.checkSizeMin = draft.checkSizeMin;
+      }
+      if (existing?.checkSizeMax == null && draft.checkSizeMax != null) {
+        updateSet.checkSizeMax = draft.checkSizeMax;
+      }
+
       await db
         .update(investorThesis)
-        .set({
-          thesisSummary: draft.thesisSummary,
-          thesisSummaryGeneratedAt: now,
-          portfolioCompanies: draft.portfolioCompanies,
-          portfolioGeneratedAt: now,
-          updatedAt: now,
-        })
+        .set(updateSet)
         .where(eq(investorThesis.userId, userId));
 
       if (faviconUrl) {

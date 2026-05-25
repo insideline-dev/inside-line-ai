@@ -5,6 +5,7 @@
  * Inside Line API Documentation
  * OpenAPI spec version: 2.0
  */
+import type { AdminControllerGetAllStartupsExcludePreScreening } from './adminControllerGetAllStartupsExcludePreScreening';
 import type { AdminControllerGetAllStartupsStage } from './adminControllerGetAllStartupsStage';
 import type { AdminControllerGetAllStartupsStatus } from './adminControllerGetAllStartupsStatus';
 
@@ -23,4 +24,5 @@ status?: AdminControllerGetAllStartupsStatus;
 industry?: string;
 stage?: AdminControllerGetAllStartupsStage;
 search?: string;
+excludePreScreening?: AdminControllerGetAllStartupsExcludePreScreening;
 };

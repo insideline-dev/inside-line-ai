@@ -31,7 +31,7 @@ import { startup, StartupStatus } from '../startup/entities/startup.schema';
 import { StartupMatchingPipelineService } from '../ai/services/startup-matching-pipeline.service';
 import { AiProviderService } from '../ai/providers/ai-provider.service';
 import { ModelPurpose } from '../ai/interfaces/pipeline.interface';
-import { generateText } from 'ai';
+import { generateText, Output } from 'ai';
 import { buildThesisSummary } from './thesis-summary.util';
 import { InvestorOnboardingService } from './onboarding/investor-onboarding.service';
 import {
@@ -40,6 +40,11 @@ import {
 } from './structured-dealbreaker';
 
 const THESIS_SUMMARY_BATCH_SIZE = 10;
+const MAX_GENERATED_STRUCTURED_DEALBREAKERS = 8;
+const MAX_GENERATED_STRUCTURED_DEALBREAKER_CANDIDATES = 16;
+const STRUCTURED_DEALBREAKER_GENERATION_SCHEMA = StructuredDealbreakerRuleListSchema.max(
+  MAX_GENERATED_STRUCTURED_DEALBREAKER_CANDIDATES,
+).transform((rules) => ({ rules }));
 
 @Injectable()
 export class ThesisService {
@@ -129,6 +134,95 @@ export class ThesisService {
     });
   }
 
+  async generateStructuredDealbreakers(
+    userId: string,
+    narrative: string,
+  ): Promise<StructuredDealbreakerRule[]> {
+    const trimmed = narrative.trim();
+    if (trimmed.length < 12) return [];
+    if (!this.aiProviders) {
+      this.logger.warn(
+        `Structured dealbreaker generation requested without AI providers configured for user ${userId}`,
+      );
+      return [];
+    }
+
+    const model = 'gpt-5.4-mini';
+    const prompt = [
+      'You convert an investor anti-portfolio narrative into structured dealbreaker rules.',
+      'Return only explicit exclusions that the investor clearly stated.',
+      'Prefer omission over guessing. Do not add adjacent concepts, synonyms, or broader categories unless they are explicitly named.',
+      'Only use these fields: industry, stage, geography, raiseType, fundingTarget, valuation, teamSize.',
+      'Use string-list rules when the narrative names categories like sectors, stages, geographies, or raise types.',
+      'Use numeric rules only when the narrative explicitly gives a threshold or exact number.',
+      'Default action to reject unless the investor clearly implies a softer rule, in which case use require_override.',
+      'Write short professional labels that read well in a UI.',
+      `Return at most ${MAX_GENERATED_STRUCTURED_DEALBREAKERS} rules.`,
+      '',
+      'Investor anti-portfolio narrative:',
+      trimmed,
+    ].join('\n');
+
+    try {
+      const { output } = await generateText({
+        model: this.aiProviders.resolveModel(model),
+        prompt,
+        temperature: 0.1,
+        maxOutputTokens: 900,
+        output: Output.object({ schema: STRUCTURED_DEALBREAKER_GENERATION_SCHEMA }),
+      });
+
+      const generated = output?.rules ?? [];
+      return this.normalizeGeneratedStructuredDealbreakers(generated);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(
+        `Structured dealbreaker generation failed for user ${userId}: ${msg}`,
+      );
+      return [];
+    }
+  }
+
+  private normalizeGeneratedStructuredDealbreakers(
+    rules: StructuredDealbreakerRule[],
+  ): StructuredDealbreakerRule[] {
+    const validated = StructuredDealbreakerRuleListSchema.safeParse(
+      rules.slice(0, MAX_GENERATED_STRUCTURED_DEALBREAKER_CANDIDATES),
+    );
+    if (!validated.success) return [];
+
+    const deduped = new Map<string, StructuredDealbreakerRule>();
+    for (const rule of validated.data) {
+      const normalized = 'values' in rule
+        ? {
+            ...rule,
+            values: Array.from(
+              new Set(rule.values.map((value) => value.trim()).filter(Boolean)),
+            ),
+          }
+        : rule;
+
+      if ('values' in normalized && normalized.values.length === 0) {
+        continue;
+      }
+
+      const key = JSON.stringify({
+        field: normalized.field,
+        operator: normalized.operator,
+        action: normalized.action,
+        value: 'values' in normalized ? [...normalized.values].sort() : normalized.value,
+      });
+      if (!deduped.has(key)) {
+        deduped.set(key, normalized);
+      }
+      if (deduped.size >= MAX_GENERATED_STRUCTURED_DEALBREAKERS) {
+        break;
+      }
+    }
+
+    return Array.from(deduped.values());
+  }
+
   private async recordDealbreakerChange(
     db: PostgresJsDatabase<typeof schema>,
     userId: string,
@@ -179,7 +273,8 @@ export class ThesisService {
   async upsert(userId: string, dto: CreateThesis | UpdateThesis) {
     return this.drizzle.withRLS(userId, async (db) => {
       const existing = await this.findOne(userId);
-      const payload: Record<string, unknown> = { ...dto };
+      const { skipRematching: _, regenerateSummary: _rs, ...dtoFields } = dto as Record<string, unknown>;
+      const payload: Record<string, unknown> = { ...dtoFields };
 
       const shouldNormalizeGeography =
         Object.prototype.hasOwnProperty.call(dto, 'geographicFocus') ||
@@ -216,17 +311,14 @@ export class ThesisService {
         payload.thesisSummary = dto.thesisSummary;
         payload.thesisSummaryGeneratedAt = new Date();
         payload.thesisSummaryManuallyEdited = true;
-      } else if (existing?.thesisSummaryManuallyEdited) {
-        // Investor previously edited the summary manually — keep their text
-        // even when other thesis fields change. They can re-sync via the
-        // explicit regenerate action.
-        delete payload.thesisSummary;
-        delete payload.thesisSummaryGeneratedAt;
-      } else {
-        const thesisSummary =
-          await this.generateAiSummaryWithFallback(mergedThesis);
+      } else if (dto.regenerateSummary) {
+        const thesisSummary = await this.generateAiSummaryWithFallback(mergedThesis);
         payload.thesisSummary = thesisSummary;
         payload.thesisSummaryGeneratedAt = new Date();
+        payload.thesisSummaryManuallyEdited = false;
+      } else {
+        delete payload.thesisSummary;
+        delete payload.thesisSummaryGeneratedAt;
       }
 
       const dtoSentDealBreakers = Object.prototype.hasOwnProperty.call(
@@ -284,8 +376,7 @@ export class ThesisService {
         void this.dealTriggers.notifyThesisUpdated(userId);
       }
 
-      // Trigger re-matching for all approved startups when thesis is updated
-      if (existing && this.startupMatching) {
+      if (existing && this.startupMatching && !dto.skipRematching) {
         void this.triggerRematching(userId).catch((err: unknown) => {
           const msg = err instanceof Error ? err.message : String(err);
           this.logger.error(`Failed to trigger re-matching after thesis update for user ${userId}: ${msg}`);
@@ -376,17 +467,27 @@ export class ThesisService {
         const mustHaves = Array.isArray(thesis.mustHaveFeatures) ? (thesis.mustHaveFeatures as string[]).join(', ') : '';
         const dealBreakers = Array.isArray(thesis.dealBreakers) ? (thesis.dealBreakers as string[]).join(', ') : '';
 
+        const businessModels = Array.isArray(thesis.businessModels) ? (thesis.businessModels as string[]).join(', ') : '';
+        const antiPortfolio = typeof thesis.antiPortfolio === 'string' ? thesis.antiPortfolio : '';
+        const notes = typeof thesis.notes === 'string' ? thesis.notes : '';
+
         const prompt = [
-          `Generate a concise, professional investment thesis summary for this investor based on their criteria.`,
-          `Write it as a 2-3 sentence paragraph that captures their investment focus and preferences.`,
-          `\nCriteria:`,
+          `Generate a professional investment thesis summary for this fund based on all available data.`,
+          `Write exactly 2 paragraphs separated by a blank line:`,
+          `- Paragraph 1: Who the fund is, what sectors/industries they focus on, preferred stages, check size range, and geographic focus.`,
+          `- Paragraph 2: Their investment philosophy, what they look for in founders/companies, key differentiators, value-add, and any dealbreakers or strong preferences.`,
+          `Keep it natural and authoritative — written as if by the fund itself for an LP or co-investor audience. No bullet points. About 100-150 words total.`,
+          `\nStructured criteria:`,
           industries && `- Industries: ${industries}`,
           stages && `- Stages: ${stages}`,
           checkSize && `- Check size: ${checkSize}`,
           geography && `- Geography: ${geography}`,
+          businessModels && `- Business models: ${businessModels}`,
           narrative && `- Thesis narrative: ${narrative}`,
+          notes && `- Additional notes: ${notes}`,
           mustHaves && `- Must-haves: ${mustHaves}`,
           dealBreakers && `- Deal breakers: ${dealBreakers}`,
+          antiPortfolio && `- Anti-portfolio / what they avoid: ${antiPortfolio}`,
         ]
           .filter(Boolean)
           .join('\n');
@@ -394,7 +495,7 @@ export class ThesisService {
         const { text } = await generateText({
           model,
           prompt,
-          maxOutputTokens: 300,
+          maxOutputTokens: 500,
           temperature: 0.3,
         });
 

@@ -45,14 +45,9 @@ async function bootstrap() {
   // Cookie parser for JWT in cookies
   app.use(cookieParser());
 
-  // CORS
-  const frontendUrl = configService.get("FRONTEND_URL", { infer: true });
-  const isDev =
-    configService.get("NODE_ENV", { infer: true }) === "development";
+  // CORS — allow all origins with credentials
   app.enableCors({
-    origin: isDev
-      ? [frontendUrl, "http://localhost:3030", "http://127.0.0.1:3030"]
-      : frontendUrl,
+    origin: true,
     credentials: true,
   });
 

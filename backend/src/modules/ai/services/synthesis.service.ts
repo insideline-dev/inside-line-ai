@@ -88,7 +88,7 @@ export class SynthesisService {
   async runDetailed(startupId: string, callbacks?: SynthesisProgressCallbacks): Promise<SynthesisRunDetails> {
     this.logger.log(`[Synthesis] Starting synthesis run | Startup: ${startupId}`);
 
-    const { extraction, research, evaluation, scraping } =
+    const { extraction, research, evaluation, scraping, screening } =
       await this.loadPhaseResults(startupId);
 
     const sectionScores = this.computeSectionScores(evaluation);
@@ -104,6 +104,7 @@ export class SynthesisService {
     const memoResult = await this.memoSynthesisAgent.runDetailed({
       extraction, scraping, research, evaluation,
       stageWeights: normalizedWeights as unknown as Record<string, number>,
+      screening,
     });
 
     const memoOutput = memoResult.usedFallback
@@ -134,6 +135,7 @@ export class SynthesisService {
       extraction, scraping, research, evaluation,
       stageWeights: normalizedWeights as unknown as Record<string, number>,
       memoOutput,
+      screening,
     });
 
     const reportOutput = reportResult.usedFallback
@@ -227,11 +229,12 @@ export class SynthesisService {
   }
 
   private async loadPhaseResults(startupId: string) {
-    const [extraction, research, scraping, evaluation] = await Promise.all([
+    const [extraction, research, scraping, evaluation, screening] = await Promise.all([
       this.pipelineState.getPhaseResult(startupId, PipelinePhase.EXTRACTION),
       this.pipelineState.getPhaseResult(startupId, PipelinePhase.RESEARCH),
       this.pipelineState.getPhaseResult(startupId, PipelinePhase.SCRAPING),
       this.pipelineState.getPhaseResult(startupId, PipelinePhase.EVALUATION),
+      this.pipelineState.getPhaseResult(startupId, PipelinePhase.SCREENING),
     ]);
 
     if (!extraction || !scraping || !research || !evaluation) {
@@ -245,6 +248,7 @@ export class SynthesisService {
       research,
       scraping,
       evaluation,
+      screening,
     };
   }
 

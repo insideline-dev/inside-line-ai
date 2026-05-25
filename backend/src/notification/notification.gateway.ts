@@ -124,7 +124,7 @@ function parseCookies(raw: string): Record<string, string> {
 
 @WebSocketGateway({
   cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    origin: true,
     credentials: true,
   },
   namespace: '/notifications',

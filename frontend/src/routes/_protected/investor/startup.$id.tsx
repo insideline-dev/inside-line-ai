@@ -41,6 +41,7 @@ import {
   FinancialsTabContent,
   DataRoomPanel,
 } from "@/components/startup-view";
+import { DealActivityTimeline } from "@/components/startup-view/DealActivityTimeline";
 import { useToast } from "@/hooks/use-toast";
 import type { Startup } from "@/types/startup";
 import type { Evaluation } from "@/types/evaluation";
@@ -58,7 +59,8 @@ type InvestorStartupTab =
   | "team"
   | "financials"
   | "competitors"
-  | "data-room";
+  | "data-room"
+  | "events";
 
 function unwrapApiResponse<T>(payload: unknown): T {
   if (
@@ -272,6 +274,7 @@ function InvestorStartupDetailPage() {
               <TabsTrigger value="financials" className="w-full sm:w-auto">Financials</TabsTrigger>
               <TabsTrigger value="competitors" className="w-full sm:w-auto">Competitors</TabsTrigger>
               <TabsTrigger value="data-room" className="w-full sm:w-auto">Data Room</TabsTrigger>
+              <TabsTrigger value="events" className="w-full sm:w-auto">Events</TabsTrigger>
             </>
           )}
         </TabsList>
@@ -346,6 +349,10 @@ function InvestorStartupDetailPage() {
                 allowUpload={false}
                 allowCategoryEdit={false}
               />
+            </TabsContent>
+
+            <TabsContent value="events" className="mt-6">
+              <DealActivityTimeline startupId={id} />
             </TabsContent>
 
           </>

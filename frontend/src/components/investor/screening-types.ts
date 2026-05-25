@@ -11,6 +11,19 @@ export interface LensScore {
   rationale?: string;
 }
 
+export interface ScreeningOverrideAuditEntry {
+  id: string;
+  screeningDecisionId: string;
+  startupId: string;
+  actorUserId: string;
+  actorRole: string;
+  previousClassification: ScreeningVerdict;
+  newClassification: ScreeningVerdict;
+  reason: string;
+  reasonCode: string | null;
+  createdAt: string;
+}
+
 export interface ScreeningRow {
   id: string;
   companyName: string;
@@ -23,6 +36,8 @@ export interface ScreeningRow {
   fundingTarget: number | null;
   location: string | null;
   verdict: ScreeningVerdict;
+  originalVerdict?: ScreeningVerdict;
+  overrideHistory?: ScreeningOverrideAuditEntry[];
   overallScore: number;
   fit: ThesisFitOutput | null;
   lensScores: LensScore[];

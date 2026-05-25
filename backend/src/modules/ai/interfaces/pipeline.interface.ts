@@ -14,10 +14,15 @@ export enum PipelinePhase {
   EXTRACTION = "extraction",
   ENRICHMENT = "enrichment",
   SCRAPING = "scraping",
-  RESEARCH = "research",
   SCREENING = "screening",
+  RESEARCH = "research",
   EVALUATION = "evaluation",
   SYNTHESIS = "synthesis",
+}
+
+export enum PipelineStage {
+  DEAL_SCREENING = "deal_screening",
+  DUE_DILIGENCE = "due_diligence",
 }
 
 export enum PhaseStatus {

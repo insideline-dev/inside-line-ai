@@ -4,7 +4,7 @@ import {
   NotFoundException,
   ForbiddenException,
 } from "@nestjs/common";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray, notInArray } from "drizzle-orm";
 import { DrizzleService } from "../../database";
 import type { ScreeningHandoffIssue } from "../ai/contracts/screening-output/v1.schema";
 import {
@@ -30,8 +30,29 @@ export class OpenQuestionService {
     issues: readonly ScreeningHandoffIssue[],
   ): Promise<{ seeded: number; updated: number }> {
     if (issues.length === 0) {
+      await this.drizzle.db
+        .delete(ddOpenQuestion)
+        .where(
+          and(
+            eq(ddOpenQuestion.startupId, startupId),
+            eq(ddOpenQuestion.seedSource, "screening_seed"),
+            eq(ddOpenQuestion.status, "open"),
+          ),
+        );
       return { seeded: 0, updated: 0 };
     }
+
+    const freshKeys = issues.map((i) => i.key);
+    await this.drizzle.db
+      .delete(ddOpenQuestion)
+      .where(
+        and(
+          eq(ddOpenQuestion.startupId, startupId),
+          eq(ddOpenQuestion.seedSource, "screening_seed"),
+          eq(ddOpenQuestion.status, "open"),
+          notInArray(ddOpenQuestion.key, freshKeys),
+        ),
+      );
 
     let seeded = 0;
     let updated = 0;
@@ -82,6 +103,32 @@ export class OpenQuestionService {
       `Seeded open questions for startup=${startupId}: ${seeded} new, ${updated} updated`,
     );
     return { seeded, updated };
+  }
+
+  async dismissTriageDecisionQuestions(startupId: string): Promise<number> {
+    const result = await this.drizzle.db
+      .update(ddOpenQuestion)
+      .set({
+        status: "dismissed" as const,
+        resolvedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(ddOpenQuestion.startupId, startupId),
+          eq(ddOpenQuestion.seedSource, "screening_seed"),
+          eq(ddOpenQuestion.screeningSource, "triage-decision"),
+          eq(ddOpenQuestion.status, "open"),
+        ),
+      )
+      .returning();
+
+    if (result.length > 0) {
+      this.logger.debug(
+        `Dismissed ${result.length} triage-decision open questions for startup=${startupId}`,
+      );
+    }
+    return result.length;
   }
 
   async listForStartup(

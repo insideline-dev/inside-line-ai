@@ -93,6 +93,7 @@ const adminStartupSearchSchema = z.object({
       "data-room",
       "edit",
       "raw",
+      "events",
     ])
     .optional(),
   from: z.enum(["data-room"]).optional(),
@@ -105,6 +106,7 @@ export const Route = createFileRoute("/_protected/admin/startup/$id")({
 
 import type { Startup } from "@/types/startup";
 import type { Evaluation } from "@/types/evaluation";
+import { DealActivityTimeline } from "@/components/startup-view/DealActivityTimeline";
 
 interface StartupDetail extends Startup {
   evaluation?: Evaluation;
@@ -137,7 +139,8 @@ type AdminStartupTab =
   | "recommendations"
   | "data-room"
   | "edit"
-  | "raw";
+  | "raw"
+  | "events";
 
 const TERMINAL_PIPELINE_STATUSES = new Set(["completed", "failed", "cancelled"]);
 
@@ -843,17 +846,19 @@ function AdminReviewPage() {
                 <TabsTrigger value="competitors" className="w-full sm:w-auto">Competitors</TabsTrigger>
                 <TabsTrigger value="sources" className="w-full sm:w-auto">Sources</TabsTrigger>
                 <TabsTrigger value="recommendations" className="w-full sm:w-auto">Recommendations</TabsTrigger>
-                <TabsTrigger value="data-room" className="w-full sm:w-auto">Data Room</TabsTrigger>
-                <TabsTrigger value="edit" className="w-full sm:w-auto">Edit</TabsTrigger>
                 <TabsTrigger value="raw" className="w-full sm:w-auto">Raw</TabsTrigger>
               </>
             )}
+            <TabsTrigger value="data-room" className="w-full sm:w-auto">Data Room</TabsTrigger>
+            <TabsTrigger value="edit" className="w-full sm:w-auto">Edit</TabsTrigger>
+            <TabsTrigger value="events" className="w-full sm:w-auto">Events</TabsTrigger>
           </TabsList>
 
           <TabsContent value="pipeline-live" className="mt-6">
             <AdminPipelineLivePanel
               startupId={startup.id}
               startupStatus={startup.status}
+              phaseFilter={["research", "evaluation", "synthesis"]}
               onRetryAgent={handleLiveAgentRetry}
               trackedRetry={trackedRetry}
               onClearTrackedRetry={() => setTrackedRetry(null)}
@@ -943,14 +948,6 @@ function AdminReviewPage() {
                 <FounderRecommendationsTab evaluation={evaluation} />
               </TabsContent>
 
-              <TabsContent value="data-room" className="mt-6">
-                <DataRoomPanel startupId={id} role="admin" />
-              </TabsContent>
-
-              <TabsContent value="edit" className="mt-6">
-                <AdminEditTab startup={startup} />
-              </TabsContent>
-
               <TabsContent value="raw" className="mt-6">
                 <Card>
                   <CardContent className="p-0">
@@ -962,6 +959,18 @@ function AdminReviewPage() {
               </TabsContent>
             </>
           )}
+
+          <TabsContent value="data-room" className="mt-6">
+            <DataRoomPanel startupId={id} role="admin" />
+          </TabsContent>
+
+          <TabsContent value="edit" className="mt-6">
+            <AdminEditTab startup={startup} />
+          </TabsContent>
+
+          <TabsContent value="events" className="mt-6">
+            <DealActivityTimeline startupId={id} />
+          </TabsContent>
         </Tabs>
 
         <AdminReviewSidebar

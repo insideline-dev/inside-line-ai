@@ -70,7 +70,8 @@ export const envSchema = z.object({
   JWT_REFRESH_EXPIRES: z.string().default("30d"),
   // App URLs
   APP_URL: z.string().url().default("http://localhost:8080"),
-  FRONTEND_URL: z.string().url().default("http://localhost:3030"),
+  FRONTEND_URL: z.string().default("http://localhost:3030"),
+  CORS_ALLOWED_ORIGINS: z.string().optional(),
   PUPPETEER_EXECUTABLE_PATH: z.string().optional(),
 
   // Feature Flags

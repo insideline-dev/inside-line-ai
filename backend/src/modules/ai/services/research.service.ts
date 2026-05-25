@@ -122,6 +122,10 @@ export class ResearchService {
       startupId,
       PipelinePhase.ENRICHMENT,
     );
+    const screening = await this.pipelineState.getPhaseResult(
+      startupId,
+      PipelinePhase.SCREENING,
+    );
 
     if (!extraction || !scraping) {
       throw new Error("Research requires extraction and scraping results");
@@ -153,6 +157,9 @@ export class ResearchService {
       enrichment: enrichment ?? undefined,
       researchParameters,
       orchestratorGuidance,
+      screeningObservations: screening?.lenses
+        ?.filter((l) => !l.usedFallback && !l.error)
+        .map((l) => ({ lensKey: l.key, rationale: l.rationale })),
     };
     const nodeConfigs = await this.loadNodeConfigs();
     const currentResult = options?.agentKey

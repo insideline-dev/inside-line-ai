@@ -50,6 +50,8 @@ import {
 } from "../screening/lens-content-router.service";
 import { PipelineStateService } from "../services/pipeline-state.service";
 import { PipelineService } from "../services/pipeline.service";
+import { PipelineAgentTraceService } from "../services/pipeline-agent-trace.service";
+import { ThesisFitService, type InvestorThesisInput, type StartupProfileInput } from "../agents/thesis-fit";
 import { runPipelinePhase } from "./run-phase.util";
 
 /**
@@ -111,6 +113,8 @@ export class ScreeningProcessor
     private investorMatching: InvestorMatchingService,
     private openQuestions: OpenQuestionService,
     private lensContentRouter: LensContentRouterService,
+    private pipelineAgentTrace: PipelineAgentTraceService,
+    private thesisFitService: ThesisFitService,
   ) {
     const redisUrl = config.get<string>("REDIS_URL", "redis://localhost:6379");
     const queuePrefix = config.get<string>("QUEUE_PREFIX");
@@ -273,6 +277,11 @@ export class ScreeningProcessor
             r.usedFallback,
             r.error,
           );
+          if (progress) {
+            this.recordLensTrace(progress, r).catch((e) =>
+              this.logger.warn(`Lens trace persist failed (${lens.key}): ${(e as Error).message}`),
+            );
+          }
         } catch (err) {
           this.logger.error(
             `Lens ${lens.key} threw outside its fallback: ${(err as Error).message}`,
@@ -319,22 +328,11 @@ export class ScreeningProcessor
           sourceType: "deck_page" | "public_url" | "enrichment_call" | "research_source" | "internal_trace";
           sourceLabel: string;
           sourceRef: string;
-          url?: string;
-          pageNumber?: number;
         }
       >;
       try {
         normalizedEvidence = result.output.evidence.map((item) => {
           const link = normalizeLensEvidenceLink(item.source);
-          const url =
-            link.url ?? (item.url === null ? undefined : item.url);
-          const pageNumber =
-            link.pageNumber ??
-            (item.pageNumber === null ? undefined : item.pageNumber);
-          const quote =
-            item.quote === null || item.quote === undefined
-              ? undefined
-              : item.quote;
           return {
             claim: item.claim,
             source: item.source.trim(),
@@ -342,9 +340,9 @@ export class ScreeningProcessor
             sourceType: link.sourceType,
             sourceLabel: link.sourceLabel,
             sourceRef: link.sourceRef,
-            url,
-            pageNumber,
-            quote,
+            url: link.url ?? item.url ?? null,
+            pageNumber: link.pageNumber ?? item.pageNumber ?? null,
+            quote: item.quote ?? null,
           };
         });
       } catch (err) {
@@ -441,7 +439,8 @@ export class ScreeningProcessor
           projectEvidence(r.output.evidence),
         ]),
       );
-      const thesisFitScore = await this.maxThesisFitScore(startupId);
+      const thesisFit = await this.computeThesisFit(startupId);
+      const thesisFitScore = thesisFit?.overall ?? null;
       const decision = await this.screeningTriage.decide({
         startupId,
         pipelineRunId,
@@ -452,8 +451,7 @@ export class ScreeningProcessor
           evidence: evidenceByKey.get(key),
         })),
         thesisFitScore,
-        // DS-E2-F1-S2 — persist the active lens versions alongside the
-        // decision so historical replays know which lens code paths ran.
+        thesisFit: thesisFit ?? null,
         lensVersions,
       });
       triageDecision = {
@@ -630,6 +628,103 @@ export class ScreeningProcessor
       .orderBy(desc(startupMatch.thesisFitScore))
       .limit(1);
     return rows[0]?.score ?? null;
+  }
+
+  private async recordLensTrace(
+    progress: { userId: string; pipelineRunId: string; startupId: string },
+    result: LensRunResult<LensOutput>,
+  ): Promise<void> {
+    await this.pipelineAgentTrace.recordRun({
+      startupId: progress.startupId,
+      pipelineRunId: progress.pipelineRunId,
+      phase: PipelinePhase.SCREENING,
+      agentKey: `lens_${result.key}`,
+      traceKind: "ai_agent",
+      status: result.usedFallback ? "fallback" : "completed",
+      attempt: 1,
+      retryCount: 0,
+      usedFallback: result.usedFallback,
+      systemPrompt: result.systemPrompt,
+      inputPrompt: result.userPrompt,
+      outputJson: result.output,
+      error: result.error,
+      meta: {
+        modelId: result.modelId,
+        promptKey: result.promptKey,
+        lensVersion: result.lensVersion,
+        promptVersion: result.promptVersion,
+        latencyMs: result.latencyMs,
+        ...(result.usage ? {
+          openaiTelemetry: {
+            provider: "openai",
+            model: result.modelId,
+            usage: {
+              inputTokens: result.usage.inputTokens ?? 0,
+              outputTokens: result.usage.outputTokens ?? 0,
+              totalTokens: (result.usage.inputTokens ?? 0) + (result.usage.outputTokens ?? 0),
+            },
+          },
+        } : {}),
+      },
+    });
+  }
+
+  private async computeThesisFit(startupId: string) {
+    try {
+      const [s] = await this.drizzle.db
+        .select({
+          name: startup.name,
+          industry: startup.industry,
+          sectorIndustry: startup.sectorIndustry,
+          stage: startup.stage,
+          location: startup.location,
+          fundingTarget: startup.fundingTarget,
+          userId: startup.userId,
+        })
+        .from(startup)
+        .where(eq(startup.id, startupId))
+        .limit(1);
+      if (!s?.userId) return null;
+
+      const [t] = await this.drizzle.db
+        .select()
+        .from(investorThesis)
+        .where(eq(investorThesis.userId, s.userId))
+        .limit(1);
+      if (!t) return null;
+
+      const thesisInput: InvestorThesisInput = {
+        industries: t.industries,
+        stages: t.stages,
+        checkSizeMin: t.checkSizeMin,
+        checkSizeMax: t.checkSizeMax,
+        geographicFocus: t.geographicFocus,
+        businessModels: t.businessModels,
+        mustHaveFeatures: t.mustHaveFeatures,
+        dealBreakers: t.dealBreakers,
+        thesisNarrative: t.thesisNarrative,
+      };
+      const startupInput: StartupProfileInput = {
+        companyName: s.name,
+        industry: s.sectorIndustry ?? s.industry,
+        stage: s.stage,
+        geography: s.location,
+        checkContext: s.fundingTarget ? `Raising $${s.fundingTarget.toLocaleString()}` : null,
+        classification: null,
+        additionalSignals: null,
+      };
+
+      const result = await this.thesisFitService.assess(thesisInput, startupInput);
+      this.logger.log(
+        `[ScreeningProcessor] ThesisFit for ${startupId}: ${result.overall}/100 (geo=${result.geography.status}, stage=${result.stage.status}, sector=${result.sector.status}, check=${result.checkSize.status})`,
+      );
+      return result;
+    } catch (err) {
+      this.logger.warn(
+        `[ScreeningProcessor] ThesisFit failed for ${startupId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return null;
+    }
   }
 
   private async hasActiveInvestorThesis(): Promise<boolean> {

@@ -13,14 +13,6 @@ import { startupMatch, type MatchStatus } from './entities/investor.schema';
 import { DealEventService } from '../startup/deal-event.service';
 import { GetMatchesQuery, UpdateMatchStatus } from './dto';
 
-const DEFAULT_SCORING_WEIGHTS = {
-  marketWeight: 20,
-  teamWeight: 20,
-  productWeight: 20,
-  tractionWeight: 20,
-  financialsWeight: 20,
-} as const;
-
 @Injectable()
 export class MatchService {
   private readonly logger = new Logger(MatchService.name);
@@ -246,35 +238,6 @@ export class MatchService {
     });
   }
 
-  calculateOverallScore(match: {
-    marketScore: number | null;
-    teamScore: number | null;
-    productScore: number | null;
-    tractionScore: number | null;
-    financialsScore: number | null;
-  }, weights: {
-    marketWeight: number;
-    teamWeight: number;
-    productWeight: number;
-    tractionWeight: number;
-    financialsWeight: number;
-  }): number {
-    const marketScore = match.marketScore ?? 0;
-    const teamScore = match.teamScore ?? 0;
-    const productScore = match.productScore ?? 0;
-    const tractionScore = match.tractionScore ?? 0;
-    const financialsScore = match.financialsScore ?? 0;
-
-    return Math.round(
-      (marketScore * weights.marketWeight +
-        teamScore * weights.teamWeight +
-        productScore * weights.productWeight +
-        tractionScore * weights.tractionWeight +
-        financialsScore * weights.financialsWeight) /
-        100,
-    );
-  }
-
   async regenerateMatches(investorId: string) {
     const approvedStartups = await this.drizzle.db
       .select({ id: startup.id })
@@ -294,6 +257,14 @@ export class MatchService {
             requireApproved: true,
           });
           queued += 1;
+          if (this.dealEvents) {
+            void this.dealEvents.record({
+              startupId: id,
+              actorUserId: investorId,
+              type: "thesis.regenerated",
+              payload: { source: "auto" },
+            });
+          }
         } catch (error) {
           failed += 1;
           const message = error instanceof Error ? error.message : String(error);
@@ -313,110 +284,5 @@ export class MatchService {
       queued,
       failed,
     };
-  }
-
-  async createOrUpdate(
-    investorId: string,
-    startupId: string,
-    scores: {
-      marketScore?: number;
-      teamScore?: number;
-      productScore?: number;
-      tractionScore?: number;
-      financialsScore?: number;
-      matchReason?: string;
-      thesisFitScore?: number;
-      fitRationale?: string;
-      thesisFitFallback?: boolean;
-    },
-  ) {
-    return this.drizzle.withRLS(investorId, async (db) => {
-      const weights = DEFAULT_SCORING_WEIGHTS;
-      const overallScore = this.calculateOverallScore(
-        {
-          marketScore: scores.marketScore ?? null,
-          teamScore: scores.teamScore ?? null,
-          productScore: scores.productScore ?? null,
-          tractionScore: scores.tractionScore ?? null,
-          financialsScore: scores.financialsScore ?? null,
-        },
-        weights,
-      );
-
-      const [existing] = await db
-        .select()
-        .from(startupMatch)
-        .where(
-          and(
-            eq(startupMatch.investorId, investorId),
-            eq(startupMatch.startupId, startupId),
-          ),
-        )
-        .limit(1);
-
-      const thesisFields = {
-        thesisFitScore: scores.thesisFitScore,
-        fitRationale: scores.fitRationale,
-        thesisFitFallback: scores.thesisFitFallback,
-      };
-
-      if (existing) {
-        const [updated] = await db
-          .update(startupMatch)
-          .set({
-            marketScore: scores.marketScore,
-            teamScore: scores.teamScore,
-            productScore: scores.productScore,
-            tractionScore: scores.tractionScore,
-            financialsScore: scores.financialsScore,
-            matchReason: scores.matchReason,
-            overallScore,
-            thesisFitScore:
-              thesisFields.thesisFitScore === undefined
-                ? existing.thesisFitScore
-                : thesisFields.thesisFitScore,
-            fitRationale:
-              thesisFields.fitRationale === undefined
-                ? existing.fitRationale
-                : thesisFields.fitRationale,
-            thesisFitFallback:
-              thesisFields.thesisFitFallback === undefined
-                ? existing.thesisFitFallback
-                : thesisFields.thesisFitFallback,
-            updatedAt: new Date(),
-          })
-          .where(
-            and(
-              eq(startupMatch.investorId, investorId),
-              eq(startupMatch.startupId, startupId),
-            ),
-          )
-          .returning();
-
-        this.logger.log(`Updated match ${investorId}/${startupId}`);
-        return updated;
-      }
-
-      const [created] = await db
-        .insert(startupMatch)
-        .values({
-          investorId,
-          startupId,
-          marketScore: scores.marketScore,
-          teamScore: scores.teamScore,
-          productScore: scores.productScore,
-          tractionScore: scores.tractionScore,
-          financialsScore: scores.financialsScore,
-          matchReason: scores.matchReason,
-          overallScore,
-          thesisFitScore: thesisFields.thesisFitScore,
-          fitRationale: thesisFields.fitRationale,
-          thesisFitFallback: thesisFields.thesisFitFallback,
-        })
-        .returning();
-
-      this.logger.log(`Created match ${investorId}/${startupId}`);
-      return created;
-    });
   }
 }

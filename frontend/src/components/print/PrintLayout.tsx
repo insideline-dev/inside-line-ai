@@ -100,9 +100,12 @@ interface PrintCoverProps {
   generatedBy?: string | null;
   score?: number;
   logoUrl?: string;
+  verdict?: string;
+  verdictClassName?: string;
+  fitScore?: number;
 }
 
-export function PrintCover({ title, startupName, stage, generatedAt, subtitle, generatedBy, score, logoUrl }: PrintCoverProps) {
+export function PrintCover({ title, startupName, stage, generatedAt, subtitle, generatedBy, score, logoUrl, verdict, verdictClassName, fitScore }: PrintCoverProps) {
   const date = (generatedAt ?? new Date()).toLocaleDateString("en-US", {
     year: "numeric",
     month: "long",
@@ -136,6 +139,23 @@ export function PrintCover({ title, startupName, stage, generatedAt, subtitle, g
                 <span className="print-cover__score-caption">Overall score</span>
                 <div className="print-cover__score print-cover__score--hero">
                   <span className="print-cover__score-value">{Math.round(score)}</span>
+                  <span className="print-cover__score-scale">/100</span>
+                </div>
+              </div>
+            ) : null}
+            {verdict ? (
+              <div className="print-cover__score-card">
+                <span className="print-cover__score-caption">Verdict</span>
+                <span className={`inline-block rounded px-2.5 py-1 text-sm font-bold ${verdictClassName ?? ""}`}>
+                  {verdict}
+                </span>
+              </div>
+            ) : null}
+            {typeof fitScore === "number" ? (
+              <div className="print-cover__score-card">
+                <span className="print-cover__score-caption">Thesis fit</span>
+                <div className="print-cover__score">
+                  <span className="print-cover__score-value">{Math.round(fitScore)}</span>
                   <span className="print-cover__score-scale">/100</span>
                 </div>
               </div>

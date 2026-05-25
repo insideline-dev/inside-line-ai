@@ -7,6 +7,11 @@ import {
 } from "./phase-results.interface";
 import type { ResearchParameters } from "./research-parameters.interface";
 
+export interface ScreeningPriorObservation {
+  lensKey: string;
+  rationale: string;
+}
+
 export type ResearchAgentKey = "team" | "market" | "product" | "news" | "competitor";
 
 export type EvaluationAgentKey =
@@ -28,6 +33,7 @@ export interface ResearchPipelineInput {
   enrichment?: EnrichmentResult;
   researchParameters?: ResearchParameters;
   orchestratorGuidance?: string;
+  screeningObservations?: ScreeningPriorObservation[];
 }
 
 export interface EvaluationPipelineInput {
@@ -43,6 +49,7 @@ export interface EvaluationPipelineInput {
     path?: string;
   }>;
   edgeDrivenInputFallbackUsed?: boolean;
+  screeningObservations?: ScreeningPriorObservation[];
 }
 
 export interface ResearchAgentConfig<TOutput> {

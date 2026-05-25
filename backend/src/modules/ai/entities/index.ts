@@ -6,3 +6,4 @@ export * from "./pipeline-flow-config.schema";
 export * from "./ai-model-override.schema";
 export * from "./lens-result.schema";
 export * from "./screening-decision.schema";
+export * from "./screening-decision-override.schema";

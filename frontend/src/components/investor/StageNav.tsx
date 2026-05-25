@@ -2,6 +2,7 @@ import { Link, useLocation } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { customFetch } from "@/api/client";
+import { useAdminControllerGetStats } from "@/api/generated/admin/admin";
 import { useInvestorControllerGetPipeline } from "@/api/generated/investor/investor";
 import { cn } from "@/lib/utils";
 
@@ -68,6 +69,14 @@ interface PipelineLike {
   stats?: { total?: number; inFlight?: number };
 }
 
+interface AdminStatsLike {
+  startups?: {
+    total?: number;
+    ddCount?: number;
+    byStatus?: Record<string, number | undefined>;
+  };
+}
+
 function unwrap<T>(payload: unknown): T | null {
   if (
     payload &&
@@ -80,24 +89,25 @@ function unwrap<T>(payload: unknown): T | null {
 }
 
 function useAutoCounts(surface: "investor" | "admin", overrides: StageCounts) {
-  // Screening: count REVIEW-verdict rows. Shared key with the screening
-  // page so a single fetch serves both.
-  const screeningEnabled =
-    surface === "investor" && overrides.screening === undefined;
   const screeningQ = useQuery({
-    queryKey: ["investor", "screening"],
+    queryKey: [surface, "screening"],
     queryFn: () =>
-      customFetch<Array<{ verdict?: string }>>("/investor/screening"),
+      customFetch<Array<{ verdict?: string }>>(`/${surface}/screening`),
     staleTime: 30_000,
-    enabled: screeningEnabled,
+    enabled: overrides.screening === undefined,
   });
 
-  // DD: investor pipeline stats.total (active deals). Reuses the Orval hook
-  // so it shares cache with the DD home page.
   const pipelineQ = useInvestorControllerGetPipeline({
     query: {
       staleTime: 30_000,
       enabled: surface === "investor" && overrides.dd === undefined,
+    },
+  });
+
+  const adminStatsQ = useAdminControllerGetStats({
+    query: {
+      staleTime: 30_000,
+      enabled: surface === "admin" && overrides.dd === undefined,
     },
   });
 
@@ -110,6 +120,8 @@ function useAutoCounts(surface: "investor" | "admin", overrides: StageCounts) {
   });
 
   const pipeline = unwrap<PipelineLike>(pipelineQ.data);
+  const adminStats = unwrap<AdminStatsLike>(adminStatsQ.data);
+  const adminDdCount = adminStats?.startups?.ddCount ?? adminStats?.startups?.total;
 
   return {
     screening:
@@ -119,7 +131,11 @@ function useAutoCounts(surface: "investor" | "admin", overrides: StageCounts) {
         : undefined),
     dd:
       overrides.dd ??
-      (pipeline?.stats?.total !== undefined ? pipeline.stats.total : undefined),
+      (surface === "admin"
+        ? adminDdCount
+        : pipeline?.stats?.total !== undefined
+          ? pipeline.stats.total
+          : undefined),
     contracting: overrides.contracting ?? 0,
     portfolio:
       overrides.portfolio ??
@@ -160,17 +176,15 @@ export function StageNav({
             data-testid={`stage-nav-${stage.key}`}
           >
             {stage.label}
-            {typeof count === "number" && (
-              <Badge
-                variant="secondary"
-                className={cn(
-                  "h-5 px-1.5 text-xs",
-                  count === 0 && !active && "opacity-60",
-                )}
-              >
-                {count}
-              </Badge>
-            )}
+            <Badge
+              variant="secondary"
+              className={cn(
+                "h-5 px-1.5 text-xs",
+                (count ?? 0) === 0 && !active && "opacity-60",
+              )}
+            >
+              {count ?? 0}
+            </Badge>
           </Link>
         );
       })}

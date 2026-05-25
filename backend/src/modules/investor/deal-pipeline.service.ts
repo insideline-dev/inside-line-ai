@@ -53,15 +53,17 @@ export class DealPipelineService {
     ) as Record<MatchStatus, typeof matches>;
 
     // In-flight DD: startups the investor owns that are post-advance and
-    // not yet visible in the match list. Two cases:
-    //   - status ANALYZING + screening verdict='advance': DD pipeline is
-    //     running right now (eval/synthesis in flight).
-    //   - status PENDING_REVIEW + investor recorded a verdict='advance'
-    //     decision: DD pipeline finished, deal is awaiting admin approval
-    //     before it gets matched against the investor base.
-    // Both cases would otherwise leave the deal invisible to the partner
-    // who clicked ADVANCE — it leaves Screening but doesn't yet appear in
-    // the match list. Surfacing them here closes the sync loop.
+    // not yet visible in the match list. Only shows startups whose LATEST
+    // screening decision is 'advance' — startups still in screening or
+    // whose latest verdict is review/reject are excluded.
+    const latestScreeningIsAdvance = sql`(
+      SELECT ${screeningDecision.classification}
+      FROM ${screeningDecision}
+      WHERE ${screeningDecision.startupId} = ${startup.id}
+      ORDER BY ${screeningDecision.createdAt} DESC
+      LIMIT 1
+    ) = 'advance'`;
+
     const inFlightRows = await this.drizzle.db
       .select({
         startupId: startup.id,
@@ -72,13 +74,8 @@ export class DealPipelineService {
         startupDescription: startup.description,
         startupStatus: startup.status,
         createdAt: startup.createdAt,
-        verdict: screeningDecision.classification,
       })
       .from(startup)
-      .innerJoin(
-        screeningDecision,
-        eq(screeningDecision.startupId, startup.id),
-      )
       .leftJoin(
         investorDealDecision,
         and(
@@ -93,7 +90,7 @@ export class DealPipelineService {
           or(
             and(
               eq(startup.status, StartupStatus.ANALYZING),
-              eq(screeningDecision.classification, 'advance'),
+              latestScreeningIsAdvance,
             ),
             and(
               eq(startup.status, StartupStatus.PENDING_REVIEW),

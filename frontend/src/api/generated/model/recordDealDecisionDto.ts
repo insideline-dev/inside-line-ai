@@ -5,6 +5,7 @@
  * Inside Line API Documentation
  * OpenAPI spec version: 2.0
  */
+import type { RecordDealDecisionDtoPrimaryDriverLens } from './recordDealDecisionDtoPrimaryDriverLens';
 import type { RecordDealDecisionDtoVerdict } from './recordDealDecisionDtoVerdict';
 
 export interface RecordDealDecisionDto {
@@ -13,4 +14,5 @@ export interface RecordDealDecisionDto {
   reasonTags?: string[];
   /** @maxLength 500 */
   notes?: string;
+  primaryDriverLens?: RecordDealDecisionDtoPrimaryDriverLens;
 }

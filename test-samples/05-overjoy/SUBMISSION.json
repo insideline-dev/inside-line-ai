@@ -1,0 +1,18 @@
+{
+  "name": "Overjoy",
+  "tagline": "AI-powered wholesale CRM for consumer brands",
+  "website": "https://overjoy.ai/",
+  "industry": "ecommerce_platforms",
+  "stage": "seed",
+  "fundingTarget": 500000,
+  "location": "SF, CA",
+  "contactName": "Karim Nassereddine",
+  "contactEmail": "karim.nassereddine@gmail.com",
+  "teamSize": 1,
+  "description": "AI-powered wholesale CRM/operating system for modern consumer brands. Identifies and prioritizes retail buyers, generates and automates email outreach, tracks samples, and manages wholesale accounts with Shopify and Faire integrations.",
+  "files": [
+    "Overjoy_deck.pdf",
+    "Overjoy_memo.pdf"
+  ],
+  "originalScore": 70.8
+}

@@ -1,0 +1,17 @@
+{
+  "name": "Parasail",
+  "tagline": "Fast, cost-efficient AI inference network",
+  "website": "https://parasail.io/",
+  "industry": "cloud_infrastructure",
+  "stage": "series_a",
+  "fundingTarget": 20000000,
+  "location": "NY, USA",
+  "contactName": "Test User",
+  "contactEmail": "test@gmail.com",
+  "teamSize": 1,
+  "description": "Serverless AI pipelines for vision: deploy, scale, and tune vision workflows declaratively. Orchestrates routing and caching across global GPU infrastructure to optimize for cost, latency, and geography. No vendor lock-in.",
+  "files": [
+    "Parasail_deck.pdf"
+  ],
+  "originalScore": 74.7
+}

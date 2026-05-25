@@ -25,18 +25,7 @@ export const LENS_FALLBACK_RATIONALE_PREFIX = "Lens unavailable";
 /** Result wrapper returned by `BaseLensAgent.run()`. */
 export interface LensRunResult<TOutput extends LensOutput> {
   key: string;
-  /**
-   * Lens-class version (DS-E2-F1-S2). Always a stringified positive integer
-   * (e.g. `"1"`, `"2"`). Persisted on `startup_lens_result.lens_version` so
-   * historical decisions stay replayable when the active version flips.
-   */
   lensVersion: string;
-  /**
-   * Prompt revision that produced this output (DS-E2-F1-S2). Mirrors the
-   * `version` carried on the resolved prompt catalog entry. Persisted on
-   * `startup_lens_result.prompt_version` so prompt rewrites can ship behind
-   * a config flip without losing historical traceability.
-   */
   promptVersion: string;
   output: TOutput;
   modelId: string;
@@ -44,6 +33,9 @@ export interface LensRunResult<TOutput extends LensOutput> {
   latencyMs: number;
   usedFallback: boolean;
   error?: string;
+  systemPrompt?: string;
+  userPrompt?: string;
+  usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
 }
 
 /**
@@ -152,19 +144,22 @@ export abstract class BaseLensAgent<TOutput extends LensOutput> {
     // inside the try block; default to lensVersion for the fallback path so
     // the persisted row is never missing a value.
     let promptVersion = lensVersion;
+    let system = "";
+    let renderedUserPrompt = "";
 
     try {
       const resolved = await this.prompts.resolve({ key: this.promptKey });
       promptVersion = resolved.version ?? lensVersion;
       const variables = this.buildVariables(ctx);
-      const system = this.prompts.renderTemplate(
+      system = this.prompts.renderTemplate(
         resolved.systemPrompt,
         variables,
       );
-      const userPrompt = this.prompts.renderTemplate(
+      renderedUserPrompt = this.prompts.renderTemplate(
         resolved.userPrompt,
         variables,
       );
+      const userPrompt = renderedUserPrompt;
 
       // When web-search is enabled (currently: market lens), route through
       // `resolveForPrompt` so the model gets provider web-search + Brave
@@ -187,7 +182,7 @@ export abstract class BaseLensAgent<TOutput extends LensOutput> {
         model = this.resolveModel(modelId);
       }
 
-      const { output } = await this.modelExec.generateText<TOutput>({
+      const { output, usage } = await this.modelExec.generateText<TOutput>({
         model,
         system,
         prompt: userPrompt,
@@ -213,6 +208,9 @@ export abstract class BaseLensAgent<TOutput extends LensOutput> {
         promptKey: this.promptKey,
         latencyMs: Date.now() - startedAt,
         usedFallback: false,
+        systemPrompt: system,
+        userPrompt: renderedUserPrompt,
+        usage,
       };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -229,6 +227,8 @@ export abstract class BaseLensAgent<TOutput extends LensOutput> {
         latencyMs: Date.now() - startedAt,
         usedFallback: true,
         error: message,
+        systemPrompt: system,
+        userPrompt: renderedUserPrompt,
       };
     }
   }

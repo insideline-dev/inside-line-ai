@@ -93,6 +93,8 @@ const ACTIVITY_FILTERS: { value: ActivityFilter; label: string }[] = [
   { value: "events", label: "Events" },
 ];
 
+const DS_PHASES = new Set(["classification", "extraction", "enrichment", "scraping", "screening"]);
+
 const PHASE_LABELS: Record<string, string> = {
   classification: "Classification",
   extraction: "Extraction",
@@ -1596,96 +1598,109 @@ export function AdminPipelineLivePanel({
           </div>
         )}
 
-        <ScreeningSummaryCard startupId={startupId} progress={progress} />
+        {!phaseFilter && (!phaseAllowSet || phaseAllowSet.has("screening")) && (
+          <ScreeningSummaryCard startupId={startupId} progress={progress} />
+        )}
 
-        <div className="space-y-1.5">
-          <h3 className="text-sm font-semibold">Stages</h3>
-          <div className="rounded-lg border divide-y">
-            {phaseEntries.map((entry) => {
-              const runningAgents = Object.entries(entry.data.agents ?? {})
-                .filter(([k, a]) => a.status === "running" && !PHASE_STEP_AGENT_KEYS.has(k));
-              const hasSignals = entry.failedAgentCount > 0 || entry.fallbackAgentCount > 0 || entry.retriedAgentCount > 0 || entry.retryingAgentCount > 0;
-              return (
-                <div key={entry.phase} className={cn("px-3 py-2.5", SURFACE_TONE_CLASS[entry.tone])}>
-                  <div className="flex items-center gap-2">
-                    {statusIcon(entry.data.status)}
-                    <span className="text-sm font-medium">{formatLabel(entry.phase)}</span>
-                    {entry.agentCount > 0 && (
-                      <span className="text-xs text-muted-foreground tabular-nums">{entry.agentCount} agents</span>
-                    )}
-                    <div className="ml-auto flex items-center gap-1.5">
-                      {entry.totalOpenAiCostUsd > 0 && (
-                        <Badge variant="outline" className="h-5 px-1.5 text-[10px] border-border bg-muted/50 text-muted-foreground">
-                          OpenAI {formatUsd(entry.totalOpenAiCostUsd)}
+        <div className="space-y-3">
+          {([
+            { label: "Deal Screening", filter: (e: { phase: string }) => DS_PHASES.has(e.phase) },
+            { label: "Due Diligence", filter: (e: { phase: string }) => !DS_PHASES.has(e.phase) },
+          ] as const).map((group) => {
+            const groupEntries = phaseEntries.filter(group.filter);
+            if (groupEntries.length === 0) return null;
+            return (
+            <div key={group.label} className="space-y-1.5">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group.label}</h3>
+              <div className="rounded-lg border divide-y">
+              {groupEntries.map((entry) => {
+                const runningAgents = Object.entries(entry.data.agents ?? {})
+                  .filter(([k, a]) => a.status === "running" && !PHASE_STEP_AGENT_KEYS.has(k));
+                const hasSignals = entry.failedAgentCount > 0 || entry.fallbackAgentCount > 0 || entry.retriedAgentCount > 0 || entry.retryingAgentCount > 0;
+                return (
+                  <div key={entry.phase} className={cn("px-3 py-2.5", SURFACE_TONE_CLASS[entry.tone])}>
+                    <div className="flex items-center gap-2">
+                      {statusIcon(entry.data.status)}
+                      <span className="text-sm font-medium">{formatLabel(entry.phase)}</span>
+                      {entry.agentCount > 0 && (
+                        <span className="text-xs text-muted-foreground tabular-nums">{entry.agentCount} agents</span>
+                      )}
+                      <div className="ml-auto flex items-center gap-1.5">
+                        {entry.totalOpenAiCostUsd > 0 && (
+                          <Badge variant="outline" className="h-5 px-1.5 text-[10px] border-border bg-muted/50 text-muted-foreground">
+                            OpenAI {formatUsd(entry.totalOpenAiCostUsd)}
+                          </Badge>
+                        )}
+                        {hasSignals && (
+                          <>
+                            {entry.retryingAgentCount > 0 && (
+                              <Badge variant="outline" className="h-5 px-1.5 text-[10px] bg-sky-500/10 text-sky-700 border-sky-500/30 dark:text-sky-300">
+                                retrying {entry.retryingAgentCount}
+                              </Badge>
+                            )}
+                            {entry.failedAgentCount > 0 && (
+                              <Badge variant="outline" className="h-5 px-1.5 text-[10px] bg-destructive/10 text-destructive border-destructive/30">
+                                failed {entry.failedAgentCount}
+                              </Badge>
+                            )}
+                            {entry.fallbackAgentCount > 0 && (
+                              <Badge variant="outline" className="h-5 px-1.5 text-[10px] bg-amber-500/10 text-amber-700 border-amber-500/30 dark:text-amber-300">
+                                fallback {entry.fallbackAgentCount}
+                              </Badge>
+                            )}
+                            {entry.retriedAgentCount > 0 && (
+                              <Badge variant="outline" className={cn("h-5 px-1.5 text-[10px]", RETRIED_BADGE_CLASS)}>
+                                retried {entry.retriedAgentCount}
+                              </Badge>
+                            )}
+                          </>
+                        )}
+                        <Badge variant="outline" className={cn("h-5 px-1.5 text-[10px]", statusClass(entry.data.status))}>
+                          {entry.data.status}
                         </Badge>
-                      )}
-                      {hasSignals && (
-                        <>
-                          {entry.retryingAgentCount > 0 && (
-                            <Badge variant="outline" className="h-5 px-1.5 text-[10px] bg-sky-500/10 text-sky-700 border-sky-500/30 dark:text-sky-300">
-                              retrying {entry.retryingAgentCount}
-                            </Badge>
-                          )}
-                          {entry.failedAgentCount > 0 && (
-                            <Badge variant="outline" className="h-5 px-1.5 text-[10px] bg-destructive/10 text-destructive border-destructive/30">
-                              failed {entry.failedAgentCount}
-                            </Badge>
-                          )}
-                          {entry.fallbackAgentCount > 0 && (
-                            <Badge variant="outline" className="h-5 px-1.5 text-[10px] bg-amber-500/10 text-amber-700 border-amber-500/30 dark:text-amber-300">
-                              fallback {entry.fallbackAgentCount}
-                            </Badge>
-                          )}
-                          {entry.retriedAgentCount > 0 && (
-                            <Badge variant="outline" className={cn("h-5 px-1.5 text-[10px]", RETRIED_BADGE_CLASS)}>
-                              retried {entry.retriedAgentCount}
-                            </Badge>
-                          )}
-                        </>
-                      )}
-                      <Badge variant="outline" className={cn("h-5 px-1.5 text-[10px]", statusClass(entry.data.status))}>
-                        {entry.data.status}
-                      </Badge>
+                      </div>
                     </div>
+
+                    {runningAgents.length > 0 && (
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {runningAgents.map(([agentKey, agent]) => (
+                          <span key={agentKey} className="inline-flex items-center gap-1 text-xs text-sky-700 dark:text-sky-300">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            {formatLabel(agent.key ?? agentKey)}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    <DataFlowBadges phase={entry.phase} agents={entry.data.agents} />
+
+                    {entry.phase === "scraping" && entry.data.status === "completed" && (() => {
+                      const website = (progress?.phaseResults?.scraping as Record<string, unknown>)?.website as
+                        | { url: string; title: string; fullText?: string; subpages?: Array<{ url: string; title: string; content: string }> }
+                        | undefined;
+                      if (!website?.subpages?.length) return null;
+                      return (
+                        <ScrapeLogTable
+                          websiteUrl={website.url}
+                          homepageTitle={website.title}
+                          fullText={website.fullText ?? ""}
+                          subpages={website.subpages}
+                        />
+                      );
+                    })()}
+
+                    {entry.data.error && (
+                      <p className={cn("mt-1.5 text-xs truncate", entry.data.status === "failed" ? "text-destructive" : "text-amber-700 dark:text-amber-300")}>
+                        {entry.data.error}
+                      </p>
+                    )}
                   </div>
-
-                  {runningAgents.length > 0 && (
-                    <div className="mt-1.5 flex flex-wrap gap-1.5">
-                      {runningAgents.map(([agentKey, agent]) => (
-                        <span key={agentKey} className="inline-flex items-center gap-1 text-xs text-sky-700 dark:text-sky-300">
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                          {formatLabel(agent.key ?? agentKey)}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  <DataFlowBadges phase={entry.phase} agents={entry.data.agents} />
-
-                  {entry.phase === "scraping" && entry.data.status === "completed" && (() => {
-                    const website = (progress?.phaseResults?.scraping as Record<string, unknown>)?.website as
-                      | { url: string; title: string; fullText?: string; subpages?: Array<{ url: string; title: string; content: string }> }
-                      | undefined;
-                    if (!website?.subpages?.length) return null;
-                    return (
-                      <ScrapeLogTable
-                        websiteUrl={website.url}
-                        homepageTitle={website.title}
-                        fullText={website.fullText ?? ""}
-                        subpages={website.subpages}
-                      />
-                    );
-                  })()}
-
-                  {entry.data.error && (
-                    <p className={cn("mt-1.5 text-xs truncate", entry.data.status === "failed" ? "text-destructive" : "text-amber-700 dark:text-amber-300")}>
-                      {entry.data.error}
-                    </p>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+              </div>
+            </div>
+          );
+          })}
         </div>
 
         <details className="group">
@@ -1760,37 +1775,45 @@ export function AdminPipelineLivePanel({
                     <div
                       key={item.id}
                       className={cn(
-                        "rounded-md border px-2.5 py-2",
+                        "overflow-hidden rounded-md border px-2.5 py-2",
                         SURFACE_TONE_CLASS[item.tone],
                         isTrace && "cursor-pointer",
                         isTrackedAgent && "ring-1 ring-primary/50",
                       )}
                       onClick={isTrace && item.trace ? () => setSelectedTrace(item.trace!) : undefined}
                     >
-                      <div className="flex items-center gap-2">
-                        <div className="flex min-w-0 flex-1 items-center gap-2">
-                          {isEvent ? eventIcon(item.event!.event) : statusIcon(displayStatus)}
-                          <span className="truncate text-sm font-medium">{item.name}</span>
-                          <Badge variant="outline" className="shrink-0 border-border bg-muted/50 text-[10px] text-muted-foreground">
-                            {formatLabel(item.phase)}
-                          </Badge>
-                          {item.kind !== "agent" && (
-                            <Badge variant="outline" className="shrink-0 border-border bg-muted/50 text-[10px] text-muted-foreground">
-                              {item.kind === "event" ? "event" : item.kind === "ai_trace" ? "trace" : "step"}
-                            </Badge>
-                          )}
-                          {traceOperation && (
-                            <Badge variant="outline" className="shrink-0 border-border bg-muted/50 text-[10px] text-muted-foreground">
-                              {traceOperation}
-                            </Badge>
-                          )}
-                          {item.runtimeSummary && (
-                            <Badge variant="outline" className="shrink-0 border-border bg-muted/50 text-[10px] text-muted-foreground">
-                              {item.runtimeSummary}
-                            </Badge>
-                          )}
+                      <div className="flex items-start gap-2">
+                        <div className="flex min-w-0 flex-1 gap-2">
+                          <div className="mt-0.5 shrink-0">
+                            {isEvent ? eventIcon(item.event!.event) : statusIcon(displayStatus)}
+                          </div>
+                          <div className="min-w-0 flex-1 space-y-1">
+                            <div className="flex min-w-0 items-center gap-2">
+                              <span className="truncate text-sm font-medium">{item.name}</span>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <Badge variant="outline" className="shrink-0 border-border bg-muted/50 text-[10px] text-muted-foreground">
+                                {formatLabel(item.phase)}
+                              </Badge>
+                              {item.kind !== "agent" && (
+                                <Badge variant="outline" className="shrink-0 border-border bg-muted/50 text-[10px] text-muted-foreground">
+                                  {item.kind === "event" ? "event" : item.kind === "ai_trace" ? "trace" : "step"}
+                                </Badge>
+                              )}
+                              {traceOperation && (
+                                <Badge variant="outline" className="shrink-0 border-border bg-muted/50 text-[10px] text-muted-foreground">
+                                  {traceOperation}
+                                </Badge>
+                              )}
+                              {item.runtimeSummary && (
+                                <Badge variant="outline" className="shrink-0 border-border bg-muted/50 text-[10px] text-muted-foreground">
+                                  {item.runtimeSummary}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                        <div className="flex shrink-0 items-center gap-2">
+                        <div className="flex shrink-0 items-center gap-2 self-start pt-0.5">
                           {isTrace && (
                             <button
                               type="button"
@@ -1815,7 +1838,7 @@ export function AdminPipelineLivePanel({
 
                       {item.error && (
                         <p className={cn(
-                          "mt-1 truncate text-xs",
+                          "mt-1 line-clamp-2 break-all text-xs",
                           item.tone === "danger"
                             ? "text-destructive"
                             : item.tone === "warning"
@@ -1827,7 +1850,7 @@ export function AdminPipelineLivePanel({
                       )}
 
                       {item.diagnostic && (
-                        <p className="mt-1 truncate text-[11px] text-muted-foreground">
+                        <p className="mt-1 line-clamp-2 break-all text-[11px] text-muted-foreground">
                           {item.diagnostic}
                         </p>
                       )}

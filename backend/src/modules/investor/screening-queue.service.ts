@@ -13,7 +13,10 @@ import {
   type StartupProfileInput,
 } from "../ai/agents/thesis-fit";
 import { investorThesis } from "./entities/investor.schema";
-import { startup } from "../startup/entities/startup.schema";
+import {
+  ScreeningOverrideService,
+  type ScreeningOverrideAuditEntry,
+} from "./screening-override.service";
 
 export type Verdict = "review" | "advance" | "reject";
 
@@ -46,6 +49,8 @@ export interface ScreeningQueueRow {
   /** Country/region the company is based in. */
   location: string | null;
   verdict: Verdict;
+  originalVerdict: Verdict;
+  overrideHistory: ScreeningOverrideAuditEntry[];
   overallScore: number;
   fit: ScreeningDecisionThesisFit | null;
   lensScores: ScreeningQueueLensScore[];
@@ -102,6 +107,28 @@ const BOUNDARY_CODE_LABELS: Record<string, string> = {
   out_of_geo: "Geography is outside this investor's thesis",
 };
 
+export function shouldHideByInvestorThresholds(
+  input: {
+    overallScore: number;
+    fit: ScreeningDecisionThesisFit | null;
+  },
+  thresholds: {
+    minThesisFitScore: number | null;
+    minStartupScore: number | null;
+  } | null,
+): boolean {
+  if (!thresholds) return false;
+  const belowThesisFit =
+    thresholds.minThesisFitScore !== null &&
+    input.fit?.overall !== undefined &&
+    input.fit.overall < thresholds.minThesisFitScore;
+  const belowStartupScore =
+    thresholds.minStartupScore !== null &&
+    input.overallScore < thresholds.minStartupScore;
+
+  return belowThesisFit || belowStartupScore;
+}
+
 export function dealbreakerNoteFromReasonCodes(codes: string[]): string | null {
   // Only surface genuine thesis dealbreakers/exclusions — not lens evaluation
   // outcomes (lens.*.reject). Lens results are surfaced in the lens write-up
@@ -135,6 +162,7 @@ export class ScreeningQueueService {
   constructor(
     private drizzle: DrizzleService,
     private thesisFit: ThesisFitService,
+    private screeningOverrideService: ScreeningOverrideService,
   ) {}
 
   /**
@@ -231,6 +259,9 @@ export class ScreeningQueueService {
     if (rows.length === 0) return [];
 
     const startupIds = rows.map((r) => r.startup_id);
+    const decisionIds = rows.map((r) => r.decision_id);
+    const overridesByDecisionId =
+      await this.screeningOverrideService.getOverridesForDecisionIds(decisionIds);
     const pipelineRunIds = rows
       .map((r) => r.pipeline_run_id)
       .filter((v): v is string => Boolean(v));
@@ -284,7 +315,10 @@ export class ScreeningQueueService {
 
     const out: ScreeningQueueRow[] = [];
     for (const r of rows) {
-      const verdict = isVerdict(r.classification) ? r.classification : "review";
+      const originalVerdict = isVerdict(r.classification) ? r.classification : "review";
+      const overrideHistory = overridesByDecisionId.get(r.decision_id) ?? [];
+      const latestOverride = overrideHistory[0];
+      const verdict = latestOverride?.newClassification ?? originalVerdict;
       const pairKey = `${r.startup_id}::${r.pipeline_run_id ?? ""}`;
       const lensMap = lensByPair.get(pairKey) ?? new Map();
       const lensScores: ScreeningQueueLensScore[] = (r.lens_snapshot ?? []).map(
@@ -324,6 +358,21 @@ export class ScreeningQueueService {
         }
       }
 
+      if (
+        !options?.allStartups &&
+        shouldHideByInvestorThresholds(
+          { overallScore: r.overall_score, fit },
+          thesisRow
+            ? {
+                minThesisFitScore: thesisRow.minThesisFitScore,
+                minStartupScore: thesisRow.minStartupScore,
+              }
+            : null,
+        )
+      ) {
+        continue;
+      }
+
       out.push({
         id: r.startup_id,
         companyName: r.startup_name,
@@ -336,6 +385,8 @@ export class ScreeningQueueService {
         fundingTarget: r.funding_target,
         location: r.startup_location,
         verdict,
+        originalVerdict,
+        overrideHistory,
         overallScore: r.overall_score,
         fit,
         lensScores,
@@ -345,7 +396,7 @@ export class ScreeningQueueService {
           r.submitted_at instanceof Date
             ? r.submitted_at.toISOString()
             : String(r.submitted_at),
-        dealbreakerNote: dealbreakerNoteFromReasonCodes(reasonCodes),
+        dealbreakerNote: verdict === "reject" ? dealbreakerNoteFromReasonCodes(reasonCodes) : null,
       });
     }
     return out;

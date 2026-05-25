@@ -8,7 +8,6 @@ import { AnalysisService } from './analysis.service';
 import { PercentileRankService } from './percentile-rank.service';
 import {
   ScoringProcessor,
-  // MatchingProcessor is deprecated — use modules/ai/processors/matching.processor.ts instead
   PdfProcessor,
   MarketAnalysisProcessor,
 } from './processors';
@@ -25,7 +24,6 @@ import {
     AnalysisService,
     PercentileRankService,
     ScoringProcessor,
-    // MatchingProcessor removed — legacy, replaced by AI matching processor in ai.module.ts
     PdfProcessor,
     MarketAnalysisProcessor,
   ],

@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, Inbox, Loader2 } from "lucide-react";
@@ -6,6 +6,8 @@ import { toast } from "sonner";
 import { customFetch } from "@/api/client";
 import { StageNav } from "@/components/investor/StageNav";
 import { ScreeningDealCard } from "@/components/investor/ScreeningDealCard";
+import { ScreeningAdvanceDialog } from "@/components/investor/ScreeningAdvanceDialog";
+import { ScreeningPassDialog } from "@/components/investor/ScreeningPassDialog";
 import type {
   LensScore,
   ScreeningVerdict,
@@ -81,6 +83,7 @@ function mapBackendRow(row: BackendScreeningRow): ScreeningRow {
 
 function ScreeningPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { data: backendRows, isLoading, error } = useQuery({
     queryKey: ["investor", "screening"],
     queryFn: fetchScreeningQueue,
@@ -103,31 +106,36 @@ function ScreeningPage() {
   };
 
   const advanceMutation = useMutation({
-    mutationFn: (startupId: string) =>
+    mutationFn: ({ startupId, reasonTags, notes }: { startupId: string; reasonTags?: string[]; notes?: string }) =>
       customFetch<{ ok: boolean; startupId: string; verdict: "advance"; note: string }>(
         `/investor/screening/${startupId}/advance`,
-        { method: "POST" },
+        { method: "POST", body: JSON.stringify({ reasonTags, notes }) },
       ),
     onSuccess: (res) => {
       toast.success("Advanced to Due Diligence", { description: res.note });
       invalidateStageQueries();
+      void navigate({ to: "/investor" });
     },
-    onError: (err) =>
-      toast.error("Advance failed", { description: (err as Error).message }),
+    onError: (err, variables) => {
+      setRows((prev) => prev.map((r) => r.id === variables.startupId ? { ...r, verdict: "review" } : r));
+      toast.error("Advance failed", { description: (err as Error).message });
+    },
   });
 
   const passMutation = useMutation({
-    mutationFn: (startupId: string) =>
+    mutationFn: ({ startupId, reasonTags, notes }: { startupId: string; reasonTags?: string[]; notes?: string }) =>
       customFetch<{ ok: boolean; startupId: string; verdict: "reject" }>(
         `/investor/screening/${startupId}/pass`,
-        { method: "POST" },
+        { method: "POST", body: JSON.stringify({ reasonTags, notes }) },
       ),
     onSuccess: () => {
       toast.success("Marked as passed — moved to rejected archive.");
       invalidateStageQueries();
     },
-    onError: (err) =>
-      toast.error("Pass failed", { description: (err as Error).message }),
+    onError: (err, variables) => {
+      setRows((prev) => prev.map((r) => r.id === variables.startupId ? { ...r, verdict: "review", dealbreakerNote: null } : r));
+      toast.error("Pass failed", { description: (err as Error).message });
+    },
   });
 
   // Pessimistic local mirror so PASS/ADVANCE update the row immediately.
@@ -167,7 +175,9 @@ function ScreeningPage() {
     [sourceRows, overrides],
   );
 
-  const [showRejected, setShowRejected] = useState(false);
+  const [advancingId, setAdvancingId] = useState<string | null>(null);
+  const [passingId, setPassingId] = useState<string | null>(null);
+  const [showRejected, setShowRejected] = useState(true);
 
   const { activeRows, rejectedRows, advancedRowIds } = useMemo(() => {
     // Screening tab shows only deals awaiting partner action.
@@ -186,26 +196,16 @@ function ScreeningPage() {
 
   const handlePass = useCallback(
     (id: string) => {
-      // Optimistic local update; the mutation invalidates the query on
-      // success so the server state replaces it.
-      setRows((prev) =>
-        prev.map((r) =>
-          r.id === id ? { ...r, verdict: "reject", dealbreakerNote: "Passed by investor" } : r,
-        ),
-      );
-      passMutation.mutate(id);
+      setPassingId(id);
     },
-    [passMutation, setRows],
+    [],
   );
 
   const handleAdvance = useCallback(
     (id: string) => {
-      setRows((prev) =>
-        prev.map((r) => (r.id === id ? { ...r, verdict: "advance" } : r)),
-      );
-      advanceMutation.mutate(id);
+      setAdvancingId(id);
     },
-    [advanceMutation, setRows],
+    [],
   );
 
   return (
@@ -300,6 +300,30 @@ function ScreeningPage() {
           Failed to load screening queue: {(error as Error).message}
         </div>
       )}
+
+      <ScreeningAdvanceDialog
+        open={advancingId !== null}
+        onOpenChange={(open) => { if (!open) setAdvancingId(null); }}
+        isSubmitting={advanceMutation.isPending}
+        onSubmit={(input) => {
+          if (!advancingId) return;
+          setRows((prev) => prev.map((r) => (r.id === advancingId ? { ...r, verdict: "advance" } : r)));
+          advanceMutation.mutate({ startupId: advancingId, reasonTags: input.reasonTags, notes: input.notes });
+          setAdvancingId(null);
+        }}
+      />
+
+      <ScreeningPassDialog
+        open={passingId !== null}
+        onOpenChange={(open) => { if (!open) setPassingId(null); }}
+        isSubmitting={passMutation.isPending}
+        onSubmit={(input) => {
+          if (!passingId) return;
+          setRows((prev) => prev.map((r) => (r.id === passingId ? { ...r, verdict: "reject", dealbreakerNote: "Passed by investor" } : r)));
+          passMutation.mutate({ startupId: passingId, reasonTags: input.reasonTags, notes: input.notes });
+          setPassingId(null);
+        }}
+      />
     </div>
   );
 }

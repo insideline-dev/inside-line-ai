@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -55,6 +55,7 @@ import {
 import { OnboardingWebsiteForm } from "@/components/investor/OnboardingWebsiteForm";
 import { ThesisGeneratingBanner } from "@/components/investor/ThesisGeneratingBanner";
 import { ThesisSummaryCard } from "@/components/investor/ThesisSummaryCard";
+import { PortfolioFromWebsiteCard } from "@/components/investor/PortfolioFromWebsiteCard";
 import { DealbreakersEditor } from "@/components/investor/DealbreakersEditor";
 import { StructuredRulesEditor } from "@/components/investor/StructuredRulesEditor";
 import { useSubmitOnboardingWebsite } from "@/lib/investor/useSubmitOnboardingWebsite";
@@ -182,7 +183,7 @@ function InvestorThesisPage() {
         ? t.geographicFocus.filter((value): value is string => typeof value === "string")
         : [];
 
-      setFormData({
+      const next: ThesisFormData = {
         stages: Array.isArray(t.stages)
           ? t.stages.filter((value): value is string => typeof value === "string")
           : [],
@@ -214,9 +215,24 @@ function InvestorThesisPage() {
         dealBreakers: Array.isArray(t.dealBreakers)
           ? t.dealBreakers.filter((v): v is string => typeof v === "string")
           : [],
-      });
+      };
+      setFormData(next);
+      baselineRef.current = JSON.stringify(next);
+      baselineWebsiteRef.current = next.website.trim();
     }
   }, [thesis, taxonomyNodes]);
+
+  const baselineRef = useRef<string | null>(null);
+  const baselineWebsiteRef = useRef<string>("");
+
+  const isDirty = useMemo(() => {
+    if (!baselineRef.current) return false;
+    return JSON.stringify(formData) !== baselineRef.current;
+  }, [formData]);
+
+  const websiteChanged = useMemo(() => {
+    return formData.website.trim() !== baselineWebsiteRef.current;
+  }, [formData.website]);
 
   useEffect(() => {
     if (!formData.geographicFocusNodes.length || taxonomyNodes.length === 0) {
@@ -353,11 +369,23 @@ function InvestorThesisPage() {
     },
   });
 
+  const [showRematchDialog, setShowRematchDialog] = useState(false);
+  const pendingSaveOpts = useRef<{ rematch: boolean; rescan: boolean }>({ rematch: false, rescan: false });
+
   const { mutate: saveThesis, isPending: isSaving } = useInvestorControllerCreateOrUpdateThesis({
     mutation: {
       onSuccess: () => {
         toast.success("Thesis saved successfully");
+        baselineRef.current = JSON.stringify(formData);
+        baselineWebsiteRef.current = formData.website.trim();
         queryClient.invalidateQueries({ queryKey: getInvestorControllerGetThesisQueryKey() });
+        const { rematch, rescan } = pendingSaveOpts.current;
+        if (rescan) {
+          toast("Re-scanning your fund website in the background", { description: "We'll update your portfolio and thesis summary when done." });
+        }
+        if (rematch) {
+          toast("Re-calculating thesis fit scores in the background", { description: "Match scores will update shortly for all your startups." });
+        }
       },
       onError: (error) => {
         toast.error("Failed to save thesis", { description: (error as Error).message });
@@ -420,25 +448,19 @@ function InvestorThesisPage() {
   };
 
   const handleSave = () => {
-    saveThesis({
-      data: buildThesisSavePayload(formData),
-    });
+    setShowRematchDialog(true);
   };
 
-  const handleCancelNarrative = () => {
-    if (thesis) {
-      setFormData((prev) => ({
-        ...prev,
-        thesisNarrative:
-          typeof thesis.thesisNarrative === "string"
-            ? thesis.thesisNarrative
-            : typeof thesis.notes === "string"
-              ? thesis.notes
-              : "",
-        antiPortfolio:
-          typeof thesis.antiPortfolio === "string" ? thesis.antiPortfolio : "",
-      }));
-    }
+  const handleConfirmSave = (opts: { rematch: boolean; rescan: boolean }) => {
+    setShowRematchDialog(false);
+    pendingSaveOpts.current = opts;
+    saveThesis({
+      data: {
+        ...buildThesisSavePayload(formData),
+        skipRematching: !opts.rematch,
+        regenerateSummary: opts.rematch,
+      },
+    });
   };
 
   const renderGeographyNode = (node: GeographyNode, depth = 0) => (
@@ -502,27 +524,22 @@ function InvestorThesisPage() {
   }
 
   return (
+  <>
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold">Investment Thesis</h1>
           <p className="text-muted-foreground">Configure your investment preferences</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            className="gap-2"
-            onClick={() => setIsRescanOpen(true)}
-            disabled={isThesisGenerating}
-          >
-            <Globe className="h-4 w-4" />
-            Re-scan my website
-          </Button>
-          <Button className="gap-2" onClick={handleSave} disabled={isSaving}>
-            {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            Save Changes
-          </Button>
-        </div>
+        <Button
+          variant="outline"
+          className="gap-2"
+          onClick={() => setIsRescanOpen(true)}
+          disabled={isThesisGenerating}
+        >
+          <Globe className="h-4 w-4" />
+          Re-scan my website
+        </Button>
       </div>
 
       {isThesisGenerating ? (
@@ -563,6 +580,12 @@ function InvestorThesisPage() {
           isSaving={isSaving}
         />
       )}
+
+      {Array.isArray(thesis?.portfolioCompanies) && thesis.portfolioCompanies.length > 0 ? (
+        <PortfolioFromWebsiteCard
+          companies={thesis.portfolioCompanies as { name: string; description: string; websiteUrl?: string }[]}
+        />
+      ) : null}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
@@ -875,22 +898,64 @@ function InvestorThesisPage() {
             />
 
             {/* DS-E4-F3-S1 — structured (field, operator, value, action) rules. */}
-            <StructuredRulesEditor />
+            <StructuredRulesEditor exclusionNarrative={formData.antiPortfolio} />
 
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={handleCancelNarrative}>
-                Cancel
-              </Button>
-              <Button onClick={handleSave} disabled={isSaving} className="gap-2">
-                {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                Save Thesis
-              </Button>
-            </div>
           </CardContent>
         </Card>
       </div>
         </>
       )}
+
+      <Dialog open={showRematchDialog} onOpenChange={setShowRematchDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Save thesis changes</DialogTitle>
+            <DialogDescription>
+              {websiteChanged
+                ? "Your fund website has changed. Choose what to do after saving."
+                : "Would you like to re-calculate thesis fit scores for your matched startups?"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2 pt-2">
+            <Button
+              variant="outline"
+              className="justify-start"
+              onClick={() => handleConfirmSave({ rematch: false, rescan: false })}
+            >
+              Just save
+            </Button>
+            {websiteChanged && (
+              <Button
+                variant="outline"
+                className="justify-start"
+                onClick={() => handleConfirmSave({ rematch: false, rescan: true })}
+              >
+                Save & re-scan website
+              </Button>
+            )}
+            <Button
+              className="justify-start"
+              onClick={() => handleConfirmSave({ rematch: true, rescan: websiteChanged })}
+            >
+              {websiteChanged ? "Save, re-scan & re-match" : "Save & re-match startups"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {isDirty && <div className="h-14" />}
     </div>
+
+    {isDirty && (
+      <div className="fixed bottom-0 right-0 left-[var(--sidebar-width)] z-40 border-t bg-background/95 backdrop-blur-sm">
+        <div className="px-6 py-3">
+          <Button size="sm" className="gap-2" onClick={handleSave} disabled={isSaving}>
+            {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Save Changes
+          </Button>
+        </div>
+      </div>
+    )}
+  </>
   );
 }

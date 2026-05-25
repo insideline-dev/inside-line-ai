@@ -201,7 +201,7 @@ function AdminDashboard() {
   });
 
   const { data: startupsResponse, isLoading: isLoadingStartups } = useAdminControllerGetAllStartups(
-    { limit: PAGE_SIZE, page, ...(statusFilter ? { status: statusFilter } : {}) },
+    { limit: PAGE_SIZE, page, excludePreScreening: "true", ...(statusFilter ? { status: statusFilter } : {}) },
     {
       query: {
         staleTime: 30_000,

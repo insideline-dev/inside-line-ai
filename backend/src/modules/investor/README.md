@@ -44,9 +44,7 @@ All endpoints require authentication and investor/admin role.
 - `findOne(investorId, startupId)` - Single match details
 - `toggleSaved(investorId, startupId)` - Toggle saved flag
 - `updateViewedAt(investorId, startupId)` - Track view timestamp
-- `calculateOverallScore(match, weights)` - Weighted average
-- `regenerateMatches(investorId)` - Queue match recalculation
-- `createOrUpdate(investorId, startupId, scores)` - Upsert match
+- `regenerateMatches(investorId)` - Queue AI match recalculation
 
 ## DTOs
 
@@ -89,16 +87,7 @@ All endpoints require authentication and investor/admin role.
 ## Business Logic
 
 ### Scoring Algorithm
-When investor updates weights, the overall score is recalculated:
-```typescript
-overallScore = (
-  (marketScore * marketWeight) +
-  (teamScore * teamWeight) +
-  (productScore * productWeight) +
-  (tractionScore * tractionWeight) +
-  (financialsScore * financialsWeight)
-) / 100
-```
+When investor updates weights, matching is regenerated through the AI matching pipeline, which applies stage-specific investor scoring preferences via `ScoreComputationService`.
 
 ### Match Regeneration
 Triggered when:
@@ -106,16 +95,7 @@ Triggered when:
 - Investor updates weights → queue `regenerate-matches` job
 
 ### Default Weights
-If investor hasn't customized scoring weights:
-```typescript
-{
-  marketWeight: 20,
-  teamWeight: 20,
-  productWeight: 20,
-  tractionWeight: 20,
-  financialsWeight: 20
-}
-```
+If investor hasn't customized scoring weights, stage defaults from `stageScoringWeight` are used.
 
 ## Security
 
@@ -148,8 +128,8 @@ bun test src/modules/investor/tests/
 
 ## Integration Points
 
-### Called by AnalysisService
-- `MatchService.createOrUpdate()` - Creates/updates match after startup analysis
+### Called by AI Matching Pipeline
+- `MatchService.regenerateMatches()` queues recalculation through the active AI matching pipeline.
 
 ### Calls QueueService
 - Queues `regenerate-matches` job when thesis/weights change

@@ -12,6 +12,7 @@ import type {
   ExtractionResult,
   ResearchResult,
   ScrapingResult,
+  ScreeningResult,
 } from "../../interfaces/phase-results.interface";
 import { AiProviderService } from "../../providers/ai-provider.service";
 import { MemoSynthesisOutputOpenAiSchema } from "../../schemas/memo-synthesis-openai.schema";
@@ -49,6 +50,7 @@ export interface MemoSynthesisInput {
   research: ResearchResult;
   evaluation: EvaluationResult;
   stageWeights: Record<string, number>;
+  screening?: ScreeningResult | null;
 }
 
 export interface MemoSynthesisOutput {
@@ -478,7 +480,7 @@ export class MemoSynthesisAgent {
   }
 
   buildPromptVariables(input: MemoSynthesisInput): Record<string, string> {
-    return {
+    const vars: Record<string, string> = {
       companyName: input.extraction.companyName || "Unknown",
       stage: input.extraction.stage || "Unknown",
       sector: input.extraction.industry || "Unknown",
@@ -488,6 +490,12 @@ export class MemoSynthesisAgent {
       evaluationData: this.buildEvaluationData(input),
       evaluationRecommendations: this.buildEvaluationRecommendations(input),
     };
+    if (input.screening?.lenses?.length) {
+      vars.screeningContext = input.screening.lenses
+        .map((l) => `[${l.key}] signal=${l.signal} score=${l.score} — ${l.rationale}`)
+        .join("\n\n");
+    }
+    return vars;
   }
 
   private buildEvaluationData(input: MemoSynthesisInput): string {

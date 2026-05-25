@@ -205,76 +205,6 @@ describe('MatchService', () => {
     });
   });
 
-  describe('calculateOverallScore', () => {
-    it('should calculate weighted average correctly', () => {
-      const match = {
-        marketScore: 90,
-        teamScore: 85,
-        productScore: 80,
-        tractionScore: 75,
-        financialsScore: 85,
-      };
-
-      const weights = {
-        marketWeight: 30,
-        teamWeight: 25,
-        productWeight: 20,
-        tractionWeight: 15,
-        financialsWeight: 10,
-      };
-
-      const result = service.calculateOverallScore(match, weights);
-
-      // (90*30 + 85*25 + 80*20 + 75*15 + 85*10) / 100 = 83.75 -> 84
-      expect(result).toBe(84);
-    });
-
-    it('should handle null scores as 0', () => {
-      const match = {
-        marketScore: 90,
-        teamScore: null,
-        productScore: null,
-        tractionScore: null,
-        financialsScore: null,
-      };
-
-      const weights = {
-        marketWeight: 30,
-        teamWeight: 25,
-        productWeight: 20,
-        tractionWeight: 15,
-        financialsWeight: 10,
-      };
-
-      const result = service.calculateOverallScore(match, weights);
-
-      // (90*30 + 0*25 + 0*20 + 0*15 + 0*10) / 100 = 27
-      expect(result).toBe(27);
-    });
-
-    it('should calculate with equal weights (defaults)', () => {
-      const match = {
-        marketScore: 80,
-        teamScore: 80,
-        productScore: 80,
-        tractionScore: 80,
-        financialsScore: 80,
-      };
-
-      const weights = {
-        marketWeight: 20,
-        teamWeight: 20,
-        productWeight: 20,
-        tractionWeight: 20,
-        financialsWeight: 20,
-      };
-
-      const result = service.calculateOverallScore(match, weights);
-
-      expect(result).toBe(80);
-    });
-  });
-
   describe('regenerateMatches', () => {
     it('should queue matching retries for approved startups', async () => {
       mockDb.where.mockResolvedValueOnce([{ id: mockStartupId }]);
@@ -286,58 +216,6 @@ describe('MatchService', () => {
           startupId: mockStartupId,
           requestedBy: mockInvestorId,
           triggerSource: 'retry',
-        }),
-      );
-    });
-  });
-
-  describe('createOrUpdate', () => {
-    const scores = {
-      marketScore: 90,
-      teamScore: 85,
-      productScore: 80,
-      tractionScore: 75,
-      financialsScore: 85,
-      matchReason: 'Test match',
-    };
-
-    it('should create new match when none exists', async () => {
-      mockDb.limit.mockResolvedValue([]);
-      mockDb.returning.mockResolvedValue([mockMatch]);
-
-      const result = await service.createOrUpdate(
-        mockInvestorId,
-        mockStartupId,
-        scores,
-      );
-
-      expect(result).toEqual(mockMatch);
-      expect(mockDb.insert).toHaveBeenCalled();
-    });
-
-    it('should update existing match', async () => {
-      mockDb.limit.mockResolvedValue([mockMatch]);
-      mockDb.returning.mockResolvedValue([{ ...mockMatch, ...scores }]);
-
-      const result = await service.createOrUpdate(
-        mockInvestorId,
-        mockStartupId,
-        scores,
-      );
-
-      expect(result).toBeDefined();
-      expect(mockDb.update).toHaveBeenCalled();
-    });
-
-    it('should calculate overall score using default weights', async () => {
-      mockDb.limit.mockResolvedValue([]);
-      mockDb.returning.mockResolvedValue([mockMatch]);
-
-      await service.createOrUpdate(mockInvestorId, mockStartupId, scores);
-
-      expect(mockDb.values).toHaveBeenCalledWith(
-        expect.objectContaining({
-          overallScore: expect.any(Number),
         }),
       );
     });

@@ -5,6 +5,7 @@ import { NotificationModule } from '../../notification/notification.module';
 import { AdminModule } from '../admin';
 import { AiModule } from '../ai';
 import { StartupModule } from '../startup/startup.module';
+import { DdModule } from '../dd/dd.module';
 import { InvestorOnboardingModule } from './onboarding/investor-onboarding.module';
 import { ThesisService } from './thesis.service';
 import { MatchService } from './match.service';
@@ -22,6 +23,7 @@ import { CalibrationProposalService } from './calibration-proposal.service';
 import { LensDeltaService } from './lens-delta.service';
 import { ScreeningQueueService } from './screening-queue.service';
 import { ScreeningCalibrationService } from './screening-calibration.service';
+import { ScreeningOverrideService } from './screening-override.service';
 import { DealbreakerParseService } from './dealbreaker-parse.service';
 import { DealTriggerProcessor } from './deal-trigger.processor';
 import {
@@ -37,6 +39,7 @@ import {
     forwardRef(() => AdminModule),
     forwardRef(() => AiModule),
     StartupModule,
+    DdModule,
     forwardRef(() => InvestorOnboardingModule),
   ],
   controllers: [InvestorController, InvestorTeamPublicController],
@@ -57,6 +60,7 @@ import {
     LensDeltaService,
     ScreeningQueueService,
     ScreeningCalibrationService,
+    ScreeningOverrideService,
     DealbreakerParseService,
     DealTriggerProcessor,
   ],
@@ -74,6 +78,7 @@ import {
     CalibrationProposalService,
     LensDeltaService,
     ScreeningQueueService,
+    ScreeningOverrideService,
   ],
 })
 export class InvestorModule {}

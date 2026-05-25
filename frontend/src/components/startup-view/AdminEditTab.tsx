@@ -355,7 +355,7 @@ export function AdminEditTab({ startup }: AdminEditTabProps) {
 
             <div className="space-y-2">
               <FormLabel>Status</FormLabel>
-              <Input value={formatStatus(startup.status)} readOnly disabled />
+              <Input value={formatStatus(startup.status ?? "unknown")} readOnly disabled />
             </div>
 
             <TwoLevelIndustrySelector

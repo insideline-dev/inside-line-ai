@@ -9,6 +9,7 @@ import {
   ExternalLink,
   ShieldAlert,
   Sparkles,
+  History,
   X,
   XCircle,
 } from "lucide-react";
@@ -433,13 +434,49 @@ export function ScreeningDetailBody({
     [screeningOutput],
   );
 
+  const overrideHistory = row.overrideHistory ?? [];
 
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
       {/* Left: rich write-ups */}
       <div className="flex flex-col gap-4">
+        {row.description && (
+          <Card>
+            <CardContent className="p-4 text-sm leading-relaxed text-foreground/90">
+              {row.description}
+            </CardContent>
+          </Card>
+        )}
         {portfolioConflicts && portfolioConflicts.length > 0 && (
           <PortfolioConflictBanner conflicts={portfolioConflicts} />
+        )}
+        {overrideHistory.length > 0 && (
+          <section className="flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 p-4">
+            <h3 className="flex items-center gap-2 text-xs font-semibold uppercase text-amber-900">
+              <History className="size-3.5" />
+              Verdict override audit
+            </h3>
+            <div className="space-y-3">
+              {overrideHistory.map((entry) => (
+                <div key={entry.id} className="text-sm">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="outline">
+                      {VERDICT_BADGE[entry.previousClassification].label} → {VERDICT_BADGE[entry.newClassification].label}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      {formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true })}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-pretty text-foreground/90">{entry.reason}</p>
+                  {entry.reasonCode && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Category: {entry.reasonCode.replace(/_/g, " ")}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
         )}
         {row.fit?.rationale && (
           <section
@@ -507,18 +544,6 @@ export function ScreeningDetailBody({
           </section>
         )}
 
-        {row.description && (
-          <section className="flex flex-col gap-2">
-            <h3 className="text-xs font-semibold uppercase text-muted-foreground">
-              Company description
-            </h3>
-            <Card>
-              <CardContent className="p-4 text-sm leading-relaxed text-foreground/90">
-                {row.description}
-              </CardContent>
-            </Card>
-          </section>
-        )}
       </div>
 
       <div className="flex flex-col gap-2 lg:sticky lg:top-4 lg:self-start">

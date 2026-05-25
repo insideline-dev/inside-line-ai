@@ -13,6 +13,7 @@ import type {
   ExtractionResult,
   ResearchResult,
   ScrapingResult,
+  ScreeningResult,
 } from "../../interfaces/phase-results.interface";
 import type {
   EvaluationFallbackReason,
@@ -53,6 +54,7 @@ export interface ReportSynthesisInput {
   evaluation: EvaluationResult;
   stageWeights: Record<string, number>;
   memoOutput: MemoSynthesisOutput;
+  screening?: ScreeningResult | null;
 }
 
 export interface ReportSynthesisOutput {
@@ -316,7 +318,7 @@ export class ReportSynthesisAgent {
   }
 
   private buildPromptVariables(input: ReportSynthesisInput): Record<string, string> {
-    return {
+    const vars: Record<string, string> = {
       companyName: input.extraction.companyName || "Unknown",
       stage: input.extraction.stage || "Unknown",
       sector: input.extraction.industry || "Unknown",
@@ -329,6 +331,12 @@ export class ReportSynthesisAgent {
       evaluationRecommendations: this.buildEvaluationRecommendations(input.evaluation),
       stageWeights: JSON.stringify(input.stageWeights),
     };
+    if (input.screening?.lenses?.length) {
+      vars.screeningContext = input.screening.lenses
+        .map((l) => `[${l.key}] signal=${l.signal} score=${l.score} — ${l.rationale}`)
+        .join("\n\n");
+    }
+    return vars;
   }
 
   private buildEvaluationBrief(input: ReportSynthesisInput): string {

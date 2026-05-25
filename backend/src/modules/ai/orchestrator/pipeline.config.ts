@@ -1,5 +1,5 @@
 import { QueueName, QUEUE_NAMES } from "../../../queue";
-import { PhaseStatus, PipelinePhase } from "../interfaces/pipeline.interface";
+import { PhaseStatus, PipelinePhase, PipelineStage } from "../interfaces/pipeline.interface";
 
 export type RetryBackoff = "exponential" | "linear" | "fixed";
 
@@ -11,6 +11,7 @@ export interface RetryPolicy {
 
 export interface PhaseConfig {
   phase: PipelinePhase;
+  stage: PipelineStage;
   dependsOn: PipelinePhase[];
   canRunParallelWith: PipelinePhase[];
   timeoutMs: number;
@@ -41,8 +42,10 @@ export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
     initialDelayMs: 1000,
   },
   phases: [
+    // ── Deal Screening ──────────────────────────────────────────────
     {
       phase: PipelinePhase.CLASSIFICATION,
+      stage: PipelineStage.DEAL_SCREENING,
       dependsOn: [],
       canRunParallelWith: [],
       timeoutMs: 5 * 60 * 1000,
@@ -52,6 +55,7 @@ export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
     },
     {
       phase: PipelinePhase.EXTRACTION,
+      stage: PipelineStage.DEAL_SCREENING,
       dependsOn: [PipelinePhase.CLASSIFICATION],
       canRunParallelWith: [],
       timeoutMs: 8 * 60 * 1000,
@@ -61,6 +65,7 @@ export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
     },
     {
       phase: PipelinePhase.ENRICHMENT,
+      stage: PipelineStage.DEAL_SCREENING,
       dependsOn: [PipelinePhase.EXTRACTION],
       canRunParallelWith: [PipelinePhase.SCRAPING],
       timeoutMs: 5 * 60 * 1000,
@@ -70,6 +75,7 @@ export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
     },
     {
       phase: PipelinePhase.SCRAPING,
+      stage: PipelineStage.DEAL_SCREENING,
       dependsOn: [PipelinePhase.EXTRACTION],
       canRunParallelWith: [PipelinePhase.ENRICHMENT],
       timeoutMs: 10 * 60 * 1000,
@@ -78,19 +84,8 @@ export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
       queue: QUEUE_NAMES.AI_SCRAPING,
     },
     {
-      // First-pass screening lenses (market/team/traction). Runs the
-      // CHEAP pre-check directly after enrichment + scraping so an
-      // investor gets a screening verdict before any of the expensive
-      // DD phases (RESEARCH / EVALUATION / SYNTHESIS) start. The market
-      // lens itself does its own scoped web search (it's configured as
-      // a research-capable agent) so it doesn't need the 40-min deep
-      // RESEARCH phase to have run first.
-      //
-      // Pipeline default: STOP at SCREENING. `applyScreeningGate` only
-      // releases RESEARCH/EVALUATION/SYNTHESIS when the screening result
-      // is `advance` with no dealbreaker reason codes, OR when an
-      // investor has explicitly recorded an advance verdict.
       phase: PipelinePhase.SCREENING,
+      stage: PipelineStage.DEAL_SCREENING,
       dependsOn: [PipelinePhase.ENRICHMENT, PipelinePhase.SCRAPING],
       canRunParallelWith: [],
       timeoutMs: 5 * 60 * 1000,
@@ -98,12 +93,10 @@ export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
       required: true,
       queue: QUEUE_NAMES.AI_SCREENING,
     },
+    // ── Due Diligence ──────────────────────────────────────────────
     {
-      // Deep research — 5 staggered agents. Only runs AFTER screening
-      // returns advance OR an investor manually advances. Depending on
-      // SCREENING (not just ENRICHMENT+SCRAPING) gives the gate a place
-      // to short-circuit between the two.
       phase: PipelinePhase.RESEARCH,
+      stage: PipelineStage.DUE_DILIGENCE,
       dependsOn: [PipelinePhase.SCREENING],
       canRunParallelWith: [],
       timeoutMs: 40 * 60 * 1000,
@@ -113,15 +106,17 @@ export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
     },
     {
       phase: PipelinePhase.EVALUATION,
-      dependsOn: [PipelinePhase.RESEARCH, PipelinePhase.SCREENING],
+      stage: PipelineStage.DUE_DILIGENCE,
+      dependsOn: [PipelinePhase.RESEARCH],
       canRunParallelWith: [],
-      timeoutMs: 150 * 60 * 1000, // 2.5 hours — server-side polling, let agents finish
+      timeoutMs: 150 * 60 * 1000,
       maxRetries: 2,
       required: true,
       queue: QUEUE_NAMES.AI_EVALUATION,
     },
     {
       phase: PipelinePhase.SYNTHESIS,
+      stage: PipelineStage.DUE_DILIGENCE,
       dependsOn: [PipelinePhase.EVALUATION],
       canRunParallelWith: [],
       timeoutMs: 180 * 60 * 1000,
@@ -131,6 +126,23 @@ export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
     },
   ],
 };
+
+export const DEAL_SCREENING_PHASES: readonly PipelinePhase[] =
+  DEFAULT_PIPELINE_CONFIG.phases
+    .filter((p) => p.stage === PipelineStage.DEAL_SCREENING)
+    .map((p) => p.phase);
+
+export const DUE_DILIGENCE_PHASES: readonly PipelinePhase[] =
+  DEFAULT_PIPELINE_CONFIG.phases
+    .filter((p) => p.stage === PipelineStage.DUE_DILIGENCE)
+    .map((p) => p.phase);
+
+export function getPipelineStage(
+  phase: PipelinePhase,
+  config: PipelineConfig = DEFAULT_PIPELINE_CONFIG,
+): PipelineStage {
+  return getPhaseConfig(config, phase).stage;
+}
 
 export function isPhaseTerminal(status: PhaseStatus): boolean {
   return PIPELINE_TERMINAL_STATUSES.has(status);

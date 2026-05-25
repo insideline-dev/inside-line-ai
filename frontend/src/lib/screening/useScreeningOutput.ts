@@ -69,6 +69,7 @@ export interface ScreeningOverallV1 {
     | "manual_review"
     | "request_materials"
     | "stop";
+  confidence?: ScreeningEvidenceConfidence;
   missingMaterials: string[];
 }
 
@@ -80,7 +81,7 @@ export interface ScreeningLensScoreV2 {
 }
 
 export interface ScreeningOutputV1 {
-  version: 1 | 2;
+  version: 1 | 2 | 3;
   startupId: string;
   pipelineRunId: string | null;
   generatedAt: string;

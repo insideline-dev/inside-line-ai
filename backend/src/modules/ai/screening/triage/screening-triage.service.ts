@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { DrizzleService } from "../../../../database";
 import type { Env } from "../../../../config/env.schema";
@@ -10,7 +10,12 @@ import {
   type ScreeningDecisionRow,
 } from "../../entities/screening-decision.schema";
 import { startup } from "../../../startup/entities/startup.schema";
-import { investorThesis } from "../../../investor/entities/investor.schema";
+import {
+  investorScoringPreference,
+  investorThesis,
+  stageScoringWeight,
+  type ScoringWeights,
+} from "../../../investor/entities/investor.schema";
 import { investorPortfolio } from "../../../investor/entities/investor-portfolio.schema";
 import { investorDealbreakerRuleVersion } from "../../../investor/entities/dealbreaker-rule-version.schema";
 import {
@@ -189,6 +194,7 @@ export const TriageDecideInputSchema = z.object({
    * burning DD attention on the deal.
    */
   thesisFitScore: z.number().int().min(0).max(100).nullable().optional(),
+  thesisFit: z.any().nullable().optional(),
   /**
    * Active lens versions at decision time (DS-E2-F1-S2). Empty object means
    * the caller didn't supply versions; the decision row falls back to `{}`
@@ -228,6 +234,17 @@ interface OwnerThesisBoundarySnapshot {
   stages: string[] | null;
   industries: string[] | null;
   geographicFocus: string[] | null;
+}
+
+interface OwnerThresholdSnapshot {
+  minThesisFitScore: number | null;
+  minStartupScore: number | null;
+}
+
+type ScreeningAggregateWeights = Pick<ScoringWeights, "team" | "traction" | "market">;
+
+function normalizeScoringStage(stage: string): string {
+  return stage === "growth" ? "series_f_plus" : stage;
 }
 
 const DEALBREAKER_REASON_PREFIX = "dealbreaker:";
@@ -521,18 +538,54 @@ function hasLowConfidenceEvidence(
  *    `SCREENING_ADVANCE_CONFIDENCE_FLOOR` once at construction and threads
  *    it through here.
  */
+export function computeScreeningAggregateScore(
+  lenses: TriageLensInput[],
+  weights?: ScreeningAggregateWeights | null,
+): number {
+  const scoringLenses = lenses.filter(
+    (lens) => lens.key === "team" || lens.key === "traction" || lens.key === "market",
+  );
+  if (scoringLenses.length === 0) {
+    if (lenses.length === 0) return 0;
+    return Math.round(
+      lenses.reduce((sum, lens) => sum + lens.score, 0) / lenses.length,
+    );
+  }
+
+  const weighted = weights ?? { team: 1, traction: 1, market: 1 };
+  const weightFor = (key: string): number => {
+    if (key === "team") return weighted.team;
+    if (key === "traction") return weighted.traction;
+    if (key === "market") return weighted.market;
+    return 0;
+  };
+  const totalWeight = scoringLenses.reduce((sum, lens) => sum + Math.max(weightFor(lens.key), 0), 0);
+  if (totalWeight <= 0) {
+    return Math.round(scoringLenses.reduce((sum, lens) => sum + lens.score, 0) / scoringLenses.length);
+  }
+
+  const score = scoringLenses.reduce(
+    (sum, lens) => sum + lens.score * Math.max(weightFor(lens.key), 0),
+    0,
+  ) / totalWeight;
+  return Math.round(score);
+}
+
 export function applyTriagePolicy(
   lenses: TriageLensInput[],
   options?: {
     thesisFitScore?: number | null;
+    minThesisFitScore?: number | null;
+    minStartupScore?: number | null;
     dealbreakerReasonCodes?: readonly string[];
     advanceConfidenceFloor?: number;
+    screeningWeights?: ScreeningAggregateWeights | null;
   },
 ): TriageOutcome {
-  const overallScore =
-    lenses.length === 0
-      ? 0
-      : Math.round(lenses.reduce((sum, l) => sum + l.score, 0) / lenses.length);
+  const overallScore = computeScreeningAggregateScore(
+    lenses,
+    options?.screeningWeights ?? null,
+  );
 
   const dealbreakerReasonCodes = dedupeStrings(
     (options?.dealbreakerReasonCodes ?? [])
@@ -540,14 +593,12 @@ export function applyTriagePolicy(
       .filter((code) => code.length > 0),
   );
   if (dealbreakerReasonCodes.length > 0) {
-    // DS-E4-F3 — split structured-rule outcomes into hard reject vs soft
-    // require_override. Hard codes (including all F4-F1 boundary codes,
-    // F4-F2 portfolio conflicts, and structured rules with action=reject)
-    // short-circuit to REJECT. Only when ALL matched codes are
-    // require_override do we downgrade to REVIEW with the override codes
-    // surfaced — that's the partner-friendly "flag but don't kill" path.
+    const SOFT_CODES = new Set(["out_of_scope", "out_of_stage", "out_of_geo"]);
     const hardCodes = dealbreakerReasonCodes.filter(
-      (code) => !isRequireOverrideReasonCode(code),
+      (code) =>
+        !isRequireOverrideReasonCode(code) &&
+        !SOFT_CODES.has(code) &&
+        !code.startsWith("dealbreaker:"),
     );
     if (hardCodes.length > 0) {
       return {
@@ -567,10 +618,12 @@ export function applyTriagePolicy(
   // even runs. Caller may pass null to opt out (e.g. when no investor
   // thesis is registered yet).
   const thesisFitScore = options?.thesisFitScore;
+  const thesisFitThreshold =
+    options?.minThesisFitScore ?? OUT_OF_SCOPE_THESIS_THRESHOLD;
   if (
     thesisFitScore !== null &&
     thesisFitScore !== undefined &&
-    thesisFitScore < OUT_OF_SCOPE_THESIS_THRESHOLD
+    thesisFitScore < thesisFitThreshold
   ) {
     return {
       classification: "reject",
@@ -617,7 +670,8 @@ export function applyTriagePolicy(
     };
   }
 
-  if (overallScore < LOW_SCORE_THRESHOLD) {
+  const minimumStartupScore = options?.minStartupScore ?? LOW_SCORE_THRESHOLD;
+  if (overallScore < minimumStartupScore) {
     return {
       classification: "reject",
       overallScore,
@@ -633,7 +687,11 @@ export function applyTriagePolicy(
   const reviewing = effectiveLenses.filter(
     (l) => l.signal === "review" && !downgradedKeys.has(l.key),
   );
-  const borderline = overallScore < ADVANCE_SCORE_THRESHOLD;
+  const advanceScoreThreshold = Math.max(
+    ADVANCE_SCORE_THRESHOLD,
+    options?.minStartupScore ?? 0,
+  );
+  const borderline = overallScore < advanceScoreThreshold;
 
   if (
     reviewing.length > 0 ||
@@ -719,10 +777,20 @@ export class ScreeningTriageService {
     const dealbreakerReasonCodes = await this.fetchDealbreakerReasonCodes(
       startupSnapshot,
     );
+    const ownerThresholds = await this.fetchOwnerThresholds(
+      startupSnapshot?.userId ?? null,
+    );
+    const screeningWeights = await this.fetchOwnerScreeningWeights(
+      startupSnapshot?.userId ?? null,
+      startupSnapshot?.stage ?? null,
+    );
     const outcome = applyTriagePolicy(parsed.lensResults, {
       thesisFitScore: parsed.thesisFitScore ?? null,
+      minThesisFitScore: ownerThresholds?.minThesisFitScore ?? null,
+      minStartupScore: ownerThresholds?.minStartupScore ?? null,
       dealbreakerReasonCodes,
       advanceConfidenceFloor: this.advanceConfidenceFloor,
+      screeningWeights,
     });
     const materials = buildMissingMaterials(startupSnapshot);
     const canonical = canonicalizeDecision(outcome, materials);
@@ -741,6 +809,7 @@ export class ScreeningTriageService {
         lensSnapshot: snapshot,
         lensVersions: parsed.lensVersions ?? {},
         policyVersion: POLICY_VERSION,
+        thesisFit: parsed.thesisFit ?? null,
       })
       .returning();
 
@@ -843,6 +912,67 @@ export class ScreeningTriageService {
     return row ?? null;
   }
 
+  private async fetchOwnerThresholds(
+    ownerUserId: string | null,
+  ): Promise<OwnerThresholdSnapshot | null> {
+    if (!ownerUserId) return null;
+    const [row] = await this.drizzle.db
+      .select({
+        minThesisFitScore: investorThesis.minThesisFitScore,
+        minStartupScore: investorThesis.minStartupScore,
+      })
+      .from(investorThesis)
+      .where(eq(investorThesis.userId, ownerUserId))
+      .limit(1);
+    return row ?? null;
+  }
+
+  private async fetchOwnerScreeningWeights(
+    ownerUserId: string | null,
+    stage: string | null,
+  ): Promise<ScreeningAggregateWeights | null> {
+    if (!ownerUserId || !stage) return null;
+    const scoringStage = normalizeScoringStage(stage);
+
+    const [pref] = await this.drizzle.db
+      .select({
+        useCustomWeights: investorScoringPreference.useCustomWeights,
+        customWeights: investorScoringPreference.customWeights,
+      })
+      .from(investorScoringPreference)
+      .where(
+        and(
+          and(
+          eq(investorScoringPreference.investorId, ownerUserId),
+          eq(investorScoringPreference.stage, scoringStage as never),
+        ),
+          eq(investorScoringPreference.stage, stage as never),
+        ),
+      )
+      .orderBy(desc(investorScoringPreference.updatedAt))
+      .limit(1);
+
+    if (pref?.useCustomWeights && pref.customWeights) {
+      return this.pickScreeningWeights(pref.customWeights);
+    }
+
+    const [defaults] = await this.drizzle.db
+      .select({ weights: stageScoringWeight.weights })
+      .from(stageScoringWeight)
+      .where(eq(stageScoringWeight.stage, scoringStage as never))
+      .limit(1);
+
+    return defaults?.weights ? this.pickScreeningWeights(defaults.weights) : null;
+  }
+
+  private pickScreeningWeights(weights: ScoringWeights): ScreeningAggregateWeights {
+    return {
+      team: weights.team,
+      traction: weights.traction,
+      market: weights.market,
+    };
+  }
+
   private async fetchDealbreakerReasonCodes(
     startupSnapshot: ScreeningStartupSnapshot | null,
   ): Promise<string[]> {
@@ -856,11 +986,22 @@ export class ScreeningTriageService {
       .orderBy(desc(investorThesis.createdAt))
       .limit(1000);
 
-    const tagCodes = collectDealbreakerReasonCodes(startupSnapshot, rows);
+    const rawTagCodes = collectDealbreakerReasonCodes(startupSnapshot, rows);
 
     // DS-E4-F1 — structural thesis-boundary violations for the owner investor.
     const ownerThesis = await this.fetchOwnerThesisBoundary(startupSnapshot.userId);
     const boundaryCodes = collectThesisBoundaryViolations(startupSnapshot, ownerThesis);
+
+    // Filter out dealbreaker tags that overlap with the investor's own thesis
+    // industries — e.g. "Defense" in dealbreakers when thesis focuses on
+    // "Space infrastructure and defense-grade systems" is a config contradiction.
+    const ownerIndustries = ownerThesis?.industries ?? [];
+    const tagCodes = ownerIndustries.length > 0
+      ? rawTagCodes.filter((code) => {
+          const term = code.replace(DEALBREAKER_REASON_PREFIX, "");
+          return !fuzzyMatchesAny(ownerIndustries, term);
+        })
+      : rawTagCodes;
 
     // DS-E4-F2 — portfolio-conflict detection against the owner's portfolio.
     const portfolio = await this.fetchOwnerPortfolioCompanies(startupSnapshot.userId);

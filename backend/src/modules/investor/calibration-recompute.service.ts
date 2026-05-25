@@ -1,13 +1,19 @@
 import { Injectable, Logger, NotFoundException } from "@nestjs/common";
-import { eq, sql } from "drizzle-orm";
+import { eq, or, sql } from "drizzle-orm";
 import { DrizzleService } from "../../database";
 import { QueueService } from "../../queue/queue.service";
 import { QUEUE_NAMES } from "../../queue/queue.config";
 import { user, UserRole } from "../../auth/entities/auth.schema";
-import { summarizeCalibrationRows, type CalibrationSummary } from "./calibration.service";
+import {
+  summarizeCalibrationRows,
+  type CalibrationRow,
+  type CalibrationSummary,
+} from "./calibration.service";
 import { LensDeltaService, summarizeLensDeltas } from "./lens-delta.service";
 import { CalibrationProposalService } from "./calibration-proposal.service";
 import { investorDealDecision } from "./entities/investor-deal-decision.schema";
+import { screeningDecisionOverride } from "../ai/entities/screening-decision-override.schema";
+import { startup } from "../startup/entities/startup.schema";
 import {
   investorCalibrationSnapshot,
   type CalibrationSnapshotStatus,
@@ -210,11 +216,25 @@ export class CalibrationRecomputeService {
    * `enqueueRecompute(investorId, { force: true })`.
    */
   private async hasMinOutcomeEvents(investorId: string): Promise<boolean> {
-    const [row] = await this.drizzle.db
+    const [dealDecisionRow] = await this.drizzle.db
       .select({ count: sql<number>`count(*)::int` })
       .from(investorDealDecision)
       .where(eq(investorDealDecision.investorId, investorId));
-    return (row?.count ?? 0) >= MIN_OUTCOME_EVENTS_FOR_AUTO_RECOMPUTE;
+    const [overrideRow] = await this.drizzle.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(screeningDecisionOverride)
+      .innerJoin(startup, eq(startup.id, screeningDecisionOverride.startupId))
+      .where(
+        or(
+          eq(startup.userId, investorId),
+          eq(screeningDecisionOverride.actorUserId, investorId),
+        ),
+      );
+
+    return (
+      (dealDecisionRow?.count ?? 0) + (overrideRow?.count ?? 0) >=
+      MIN_OUTCOME_EVENTS_FOR_AUTO_RECOMPUTE
+    );
   }
 
   /**
@@ -310,7 +330,38 @@ export class CalibrationRecomputeService {
       .from(investorDealDecision)
       .where(eq(investorDealDecision.investorId, investorId));
 
-    const summary = summarizeCalibrationRows(rows);
+    const overrideRows = await this.drizzle.db
+      .select({
+        verdict: screeningDecisionOverride.newClassification,
+        triage: screeningDecisionOverride.previousClassification,
+        reasonCode: screeningDecisionOverride.reasonCode,
+        startupId: screeningDecisionOverride.startupId,
+        decidedAt: screeningDecisionOverride.createdAt,
+      })
+      .from(screeningDecisionOverride)
+      .innerJoin(startup, eq(startup.id, screeningDecisionOverride.startupId))
+      .where(
+        or(
+          eq(startup.userId, investorId),
+          eq(screeningDecisionOverride.actorUserId, investorId),
+        ),
+      );
+
+    const overrideCalibrationRows: CalibrationRow[] = overrideRows.map((row) => {
+      const verdict = row.verdict === "reject" ? "pass" : row.verdict;
+      return {
+        verdict:
+          verdict === "advance" || verdict === "pass" || verdict === "hold"
+            ? verdict
+            : "hold",
+        triage: row.triage,
+        reasonTags: row.reasonCode ? [`override:${row.reasonCode}`] : ["override"],
+        startupId: row.startupId,
+        decidedAt: row.decidedAt,
+      };
+    });
+
+    const summary = summarizeCalibrationRows([...rows, ...overrideCalibrationRows]);
 
     // 2. DS-E11-F2-S1 — DD-vs-screening lens deltas. Folded into the
     //    same summary so reads stay O(1) and the existing

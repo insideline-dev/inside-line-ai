@@ -3,8 +3,10 @@ import { AlertTriangle, ShieldCheck, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ScoreRing } from "@/components/analysis/ScoreRing";
 import { cn } from "@/lib/utils";
 import { ClassificationBadge } from "@/components/deal-card/ClassificationBadge";
+import { ConfidenceBadge } from "@/components/ConfidenceBadge";
 import { summarizeReasonCodes, labelForReasonCode } from "@/lib/screening/reason-codes";
 import { useScreeningOutput } from "@/lib/screening/useScreeningOutput";
 import { useTriageDecision } from "@/lib/screening/useTriageDecision";
@@ -60,37 +62,7 @@ function phaseStatusLabel(status: string): string {
   return formatLabel(status);
 }
 
-function LensBadge({
-  lens,
-}: {
-  lens: { key: string; score: number; signal: string };
-}) {
-  const tone =
-    lens.signal === "advance"
-      ? "border-green-300 bg-green-50 text-green-900 dark:border-green-800 dark:bg-green-900/25 dark:text-green-100"
-      : lens.signal === "review"
-        ? "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-900/25 dark:text-amber-100"
-        : lens.signal === "reject"
-          ? "border-red-300 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-900/25 dark:text-red-100"
-          : "border-border bg-muted/40 text-foreground";
-
-  return (
-    <div className={cn("rounded-md border px-3 py-2", tone)}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-[11px] font-medium uppercase tracking-wide opacity-70">
-            {formatLabel(lens.key)}
-          </div>
-          <div className="text-sm font-semibold">{signalLabel(lens.signal)}</div>
-        </div>
-        <div className="text-right">
-          <div className="text-lg font-semibold tabular-nums leading-none">{lens.score}</div>
-          <div className="text-[11px] opacity-70">/100</div>
-        </div>
-      </div>
-    </div>
-  );
-}
+const LENS_LABELS = ["market", "team", "traction"] as const;
 
 export function ScreeningSummaryCard({
   startupId,
@@ -111,6 +83,7 @@ export function ScreeningSummaryCard({
   const screeningSignal = screeningState.signal;
   const screeningScore = screeningState.score;
   const nextAction = screeningState.nextAction;
+  const screeningConfidence = screeningState.confidence;
   const missingMaterials = screeningState.missingMaterials;
   const displayReasonCodes = screeningState.reasonCodes.filter(
     (code) => !(code === "missing_materials" && missingMaterials.length > 0),
@@ -171,6 +144,10 @@ export function ScreeningSummaryCard({
                 Score {Math.round(screeningScore)}/100
               </Badge>
             )}
+            <ConfidenceBadge
+              confidence={screeningConfidence}
+              dataTestId="screening-confidence"
+            />
             {nextAction && (
               <Badge variant="outline" className="text-[10px] text-muted-foreground">
                 Next {nextActionLabel(nextAction)}
@@ -245,17 +222,32 @@ export function ScreeningSummaryCard({
                   <Sparkles className="h-3.5 w-3.5" />
                   Lens scores
                 </div>
-                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                  {lenses.map((lens) => (
-                    <LensBadge
-                      key={lens.key}
-                      lens={{
-                        key: lens.key,
-                        score: lens.score,
-                        signal: lens.signal,
-                      }}
-                    />
-                  ))}
+                <div className="grid grid-cols-3 gap-2 rounded-lg border bg-muted/20 p-3">
+                  {LENS_LABELS.map((key) => {
+                    const lens = lenses.find((l) => l.key === key);
+                    return (
+                      <div
+                        key={key}
+                        className="flex flex-col items-center gap-1 rounded-md p-1"
+                      >
+                        {lens ? (
+                          <ScoreRing
+                            score={lens.score}
+                            size="sm"
+                            showLabel={false}
+                            colorText
+                          />
+                        ) : (
+                          <div className="flex h-12 w-12 items-center justify-center rounded-full border-2 border-dashed border-muted-foreground/30 text-[10px] text-muted-foreground">
+                            —
+                          </div>
+                        )}
+                        <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                          {key}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}

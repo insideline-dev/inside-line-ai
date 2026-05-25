@@ -69,7 +69,7 @@ export interface CalibrationSummary {
   lensDeltas: CalibrationLensDelta[];
 }
 
-interface CalibrationRow {
+export interface CalibrationRow {
   verdict: "advance" | "pass" | "hold";
   triage: string | null;
   reasonTags: string[];

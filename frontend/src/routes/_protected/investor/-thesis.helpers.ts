@@ -172,8 +172,8 @@ export function buildThesisSavePayload(formData: ThesisFormData) {
     geographicFocusNodes: formData.geographicFocusNodes,
     businessModels: formData.businessModels,
     notes: formData.notes,
-    thesisNarrative: formData.thesisNarrative || undefined,
-    antiPortfolio: formData.antiPortfolio || undefined,
+    thesisNarrative: formData.thesisNarrative,
+    antiPortfolio: formData.antiPortfolio,
     website: formData.website || undefined,
     fundSize: formData.fundSize,
     dealBreakers:

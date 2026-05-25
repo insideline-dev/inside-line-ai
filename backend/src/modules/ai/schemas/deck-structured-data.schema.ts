@@ -9,6 +9,8 @@ const nullableNumber = z.number().nullable().default(null);
 // file. Empty array means "the LLM saw nothing for this section".
 const sourcePages = z.array(z.number().int().min(1)).default([]);
 
+const requiredSourcePages = z.array(z.number().int().min(1)).min(1);
+
 const DeckArrKpiSchema = z.preprocess(
   (v) => v ?? null,
   z
@@ -16,6 +18,7 @@ const DeckArrKpiSchema = z.preprocess(
       value: z.string(),
       currency: z.string().default("USD"),
       period: z.string().default("current"),
+      sourcePages: requiredSourcePages,
     })
     .nullable(),
 );
@@ -29,6 +32,7 @@ const DeckGrowthRateKpiSchema = z.preprocess(
         .enum(["MoM", "QoQ", "YoY", "CAGR", "unknown"])
         .default("unknown"),
       period: z.string().default("current"),
+      sourcePages: requiredSourcePages,
     })
     .nullable(),
 );
@@ -39,6 +43,7 @@ const DeckGrossMarginKpiSchema = z.preprocess(
     .object({
       value: z.string(),
       period: z.string().default("current"),
+      sourcePages: requiredSourcePages,
     })
     .nullable(),
 );
@@ -82,6 +87,7 @@ const DeckTamKpiSchema = z.preprocess(
       value: z.string(),
       scale: z.enum(["M", "B", "T"]).default("B"),
       currency: z.string().default("USD"),
+      sourcePages: requiredSourcePages,
     })
     .nullable(),
 );

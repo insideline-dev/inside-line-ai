@@ -26,6 +26,7 @@ import {
   PipelinePhase,
   PipelineStatus,
 } from "../ai/interfaces/pipeline.interface";
+import { screeningDecision } from "../ai/entities/screening-decision.schema";
 import { PipelineFeedbackService } from "../ai/services/pipeline-feedback.service";
 import { StartupMatchingPipelineService } from "../ai/services/startup-matching-pipeline.service";
 import { DataRoomService } from "./data-room.service";
@@ -68,8 +69,14 @@ import {
 } from "./screening-intake-normalization";
 import { FundingEnrichmentService } from "../integrations/funding-enrichment";
 
-const GPT_5_4_INPUT_COST_PER_MILLION = 2.5;
-const GPT_5_4_OUTPUT_COST_PER_MILLION = 15;
+const MODEL_PRICING: Record<string, { input: number; output: number }> = {
+  "gpt-5.4": { input: 2.5, output: 15 },
+  "gpt-5.4-mini": { input: 0.4, output: 1.6 },
+  "gpt-4.1": { input: 2.0, output: 8.0 },
+  "gpt-4.1-mini": { input: 0.4, output: 1.6 },
+  "gpt-4.1-nano": { input: 0.1, output: 0.4 },
+};
+const DEFAULT_PRICING = MODEL_PRICING["gpt-5.4"]!;
 
 interface OpenAiUsageSummary {
   inputTokens?: number;
@@ -581,6 +588,12 @@ export class StartupService {
       await this.triggerAnalysis(id, userId);
 
       this.logger.log(`Submitted startup ${id} for review`);
+      this.dealEvents.record({
+        startupId: id,
+        actorUserId: userId,
+        type: "startup.submitted",
+        payload: { resubmission: false },
+      });
       return updated;
     });
   }
@@ -607,6 +620,12 @@ export class StartupService {
       await this.triggerAnalysis(id, userId);
 
       this.logger.log(`Resubmitted startup ${id}`);
+      this.dealEvents.record({
+        startupId: id,
+        actorUserId: userId,
+        type: "startup.submitted",
+        payload: { resubmission: true },
+      });
       return updated;
     });
   }
@@ -1047,14 +1066,13 @@ export class StartupService {
   }
 
   async adminFindAll(query: GetStartupsQuery) {
-    const { page, limit, status, industry, stage, search } = query;
+    const { page, limit, status, industry, stage, search, excludePreScreening } = query;
     const offset = (page - 1) * limit;
 
     const conditions = [];
 
     if (status) {
       if (status === StartupStatus.PENDING_REVIEW) {
-        // Admin "Pending Review" UI groups both submitted (awaiting info) and pending_review.
         conditions.push(
           inArray(startup.status, [
             StartupStatus.PENDING_REVIEW,
@@ -1079,6 +1097,16 @@ export class StartupService {
           ilike(startup.tagline, `%${escaped}%`),
           ilike(startup.description, `%${escaped}%`),
         )!,
+      );
+    }
+    if (excludePreScreening) {
+      conditions.push(
+        sql`COALESCE(
+          (SELECT ${screeningDecision.classification} FROM ${screeningDecision}
+           WHERE ${screeningDecision.startupId} = ${startup.id}
+           ORDER BY ${screeningDecision.createdAt} DESC LIMIT 1),
+          'advance'
+        ) = 'advance'`,
       );
     }
 
@@ -1836,20 +1864,35 @@ export class StartupService {
     };
   }
 
+  private readModelFromMeta(meta: unknown): string | undefined {
+    if (!meta || typeof meta !== "object" || Array.isArray(meta)) return undefined;
+    const record = meta as Record<string, unknown>;
+    const telemetry = record.openaiTelemetry;
+    if (telemetry && typeof telemetry === "object" && !Array.isArray(telemetry)) {
+      const model = (telemetry as Record<string, unknown>).model;
+      if (typeof model === "string") return model;
+    }
+    const modelId = record.modelId;
+    if (typeof modelId === "string") return modelId;
+    return undefined;
+  }
+
   private buildOpenAiCostSummaryFromUsage(
     usage: OpenAiUsageSummary | undefined,
+    model?: string,
   ): OpenAiCostSummary | undefined {
     if (!usage) {
       return undefined;
     }
 
+    const pricing = (model && MODEL_PRICING[model]) || DEFAULT_PRICING;
     const inputCostUsd =
       typeof usage.inputTokens === "number"
-        ? (usage.inputTokens / 1_000_000) * GPT_5_4_INPUT_COST_PER_MILLION
+        ? (usage.inputTokens / 1_000_000) * pricing.input
         : undefined;
     const outputCostUsd =
       typeof usage.outputTokens === "number"
-        ? (usage.outputTokens / 1_000_000) * GPT_5_4_OUTPUT_COST_PER_MILLION
+        ? (usage.outputTokens / 1_000_000) * pricing.output
         : undefined;
     const totalCostUsd =
       inputCostUsd !== undefined || outputCostUsd !== undefined
@@ -1881,7 +1924,8 @@ export class StartupService {
 
     for (const trace of traces) {
       const usage = this.readOpenAiUsageFromMeta(trace.meta);
-      const cost = this.buildOpenAiCostSummaryFromUsage(usage);
+      const model = this.readModelFromMeta(trace.meta);
+      const cost = this.buildOpenAiCostSummaryFromUsage(usage, model);
       if (!cost?.totalCostUsd && cost?.totalCostUsd !== 0) {
         continue;
       }
@@ -1907,7 +1951,8 @@ export class StartupService {
     meta: Record<string, unknown> | undefined,
   ): Record<string, unknown> | undefined {
     const usage = this.readOpenAiUsageFromMeta(meta);
-    const cost = this.buildOpenAiCostSummaryFromUsage(usage);
+    const model = this.readModelFromMeta(meta);
+    const cost = this.buildOpenAiCostSummaryFromUsage(usage, model);
     if (!cost) {
       return meta;
     }

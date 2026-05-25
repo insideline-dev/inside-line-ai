@@ -2,7 +2,7 @@ import { useEffect, useRef, useMemo, useCallback, useState } from "react";
 import { io, Socket } from "socket.io-client";
 import { useCurrentUser } from "./hooks";
 
-const SOCKET_URL = import.meta.env.DEV ? "http://localhost:8080" : "";
+const SOCKET_URL = "";
 
 // ── Shared socket singleton ──────────────────────────────────────────
 

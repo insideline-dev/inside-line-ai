@@ -44,6 +44,8 @@ import { BulkStartupIntakeService } from './bulk-startup-intake.service';
 import { AdminMatchingService } from './admin-matching.service';
 import { AdminScreeningService } from './admin-screening.service';
 import { ScreeningQueueService } from '../investor/screening-queue.service';
+import { ScreeningOverrideService } from '../investor/screening-override.service';
+import { OverrideScreeningVerdictDto } from '../investor/dto/override-screening-verdict.dto';
 import { AdminInvestorService } from './admin-investor.service';
 import { assertCalibrationEnabled } from '../investor/calibration-feature';
 import { AiPromptService } from '../ai/services/ai-prompt.service';
@@ -130,6 +132,7 @@ export class AdminController {
     private phaseTransitionService: PhaseTransitionService,
     private adminInvestorService: AdminInvestorService,
     private screeningQueueService: ScreeningQueueService,
+    private screeningOverrideService: ScreeningOverrideService,
   ) {}
 
   /**
@@ -140,6 +143,23 @@ export class AdminController {
   @Get('screening')
   async getScreeningQueue(@CurrentUser() user: User) {
     return this.screeningQueueService.getQueue(user.id, { allStartups: true });
+  }
+
+
+  @Post('screening/:startupId/override')
+  async overrideScreeningVerdict(
+    @Param('startupId', ParseUUIDPipe) startupId: string,
+    @CurrentUser() user: User,
+    @Body() body: OverrideScreeningVerdictDto,
+  ) {
+    return this.screeningOverrideService.createOverride({
+      startupId,
+      actor: user,
+      targetClassification: body.targetClassification,
+      reason: body.reason,
+      reasonCode: body.reasonCode,
+      source: 'admin',
+    });
   }
 
   // ============ ANALYTICS ENDPOINTS ============

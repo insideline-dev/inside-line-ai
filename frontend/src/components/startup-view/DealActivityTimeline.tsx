@@ -302,7 +302,7 @@ export function DealActivityTimeline({
                 <li key={event.id} className="relative">
                   <span
                     className={cn(
-                      "absolute -left-[1.4rem] top-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full border bg-background",
+                      "absolute -left-[1.625rem] top-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full border bg-background",
                       TONE_CLASSES[f.tone],
                     )}
                   >

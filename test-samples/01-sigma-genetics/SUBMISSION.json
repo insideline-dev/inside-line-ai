@@ -1,0 +1,18 @@
+{
+  "name": "Sigma Genetics",
+  "tagline": "Novel gene delivery platform using magnetic fields",
+  "website": "https://sigmagenetics.com/",
+  "industry": "genetics",
+  "stage": "seed",
+  "fundingTarget": 2000000,
+  "location": "SF, CA",
+  "contactName": "Karim Nassereddine",
+  "contactEmail": "karim.nassereddine@gmail.com",
+  "teamSize": 1,
+  "description": "Magnetoporator™ platform using magnetic fields to induce nanosecond pulsed electric fields for payload delivery (DNA, RNA, proteins) across cell types. Applications in drug discovery, cell & gene therapy, and biomanufacturing.",
+  "files": [
+    "Sigma_Genetics_deck.pdf",
+    "Sigma_Genetics_memo.pdf"
+  ],
+  "originalScore": 79.8
+}

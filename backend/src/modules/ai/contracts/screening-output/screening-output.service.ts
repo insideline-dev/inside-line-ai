@@ -230,6 +230,7 @@ export class ScreeningOutputService {
         signal: ScreeningSignal;
         score: number;
         reasonCodes: string[];
+        thesisFit: ThesisFitOutput | null;
       }
     | null
   > {
@@ -246,6 +247,7 @@ export class ScreeningOutputService {
         classification: screeningDecision.classification,
         overallScore: screeningDecision.overallScore,
         reasonCodes: screeningDecision.reasonCodes,
+        thesisFit: screeningDecision.thesisFit,
       })
       .from(screeningDecision)
       .where(where)
@@ -258,6 +260,7 @@ export class ScreeningOutputService {
       signal: row.classification as ScreeningSignal,
       score: row.overallScore,
       reasonCodes: row.reasonCodes,
+      thesisFit: (row.thesisFit as ThesisFitOutput) ?? null,
     };
   }
 
@@ -299,7 +302,7 @@ export class ScreeningOutputService {
     pipelineRunId: string | null,
     rows: StartupLensResult[],
     materials: MaterialsInput | null,
-    decision: { signal: ScreeningSignal; score: number; reasonCodes: string[] } | null,
+    decision: { signal: ScreeningSignal; score: number; reasonCodes: string[]; thesisFit?: ThesisFitOutput | null } | null,
   ): ScreeningOutputV1 {
     const lenses = rows.map((row) => this.toContractLens(row));
     const overall = this.computeOverall(lenses, materials, decision);
@@ -311,6 +314,7 @@ export class ScreeningOutputService {
       overall,
       handoff: this.buildHandoff(lenses, overall, decision),
       lenses,
+      thesisFit: decision?.thesisFit ?? null,
     };
   }
 
@@ -382,7 +386,7 @@ export class ScreeningOutputService {
       version: 3,
       dealbreakersObserved: buildDealbreakersObserved(reasonCodes),
       reasoning: this.buildOverallReasoning(v2, reasonCodes),
-      confidence: this.deriveOverallConfidence(v2.lenses),
+      confidence: v2.overall.confidence,
     };
   }
 
@@ -551,6 +555,7 @@ export class ScreeningOutputService {
       score: canonicalBase.score,
       signal: canonical.signal,
       nextAction: canonical.nextAction,
+      confidence: this.deriveOverallConfidence(lenses),
       missingMaterials: canonical.missingMaterials,
     };
   }
@@ -558,7 +563,7 @@ export class ScreeningOutputService {
   private buildHandoff(
     lenses: ScreeningLensV1[],
     overall: ScreeningOverallV1,
-    decision: { reasonCodes: string[] } | null,
+    decision: { signal?: string; reasonCodes: string[] } | null,
   ): ScreeningHandoff {
     return {
       evidenceSeeds: this.collectEvidenceSeeds(lenses),
@@ -608,7 +613,7 @@ export class ScreeningOutputService {
   private collectOpenIssues(
     lenses: ScreeningLensV1[],
     overall: ScreeningOverallV1,
-    decision: { reasonCodes: string[] } | null,
+    decision: { signal?: string; reasonCodes: string[] } | null,
   ): ScreeningHandoffIssue[] {
     const seen = new Set<string>();
     const rows: ScreeningHandoffIssue[] = [];
@@ -629,7 +634,7 @@ export class ScreeningOutputService {
       });
     }
 
-    if (decision?.reasonCodes.length) {
+    if (decision?.signal === "reject" && decision.reasonCodes.length) {
       for (const code of decision.reasonCodes) {
         if (code === "missing_materials") continue;
         push({
@@ -639,7 +644,6 @@ export class ScreeningOutputService {
           source: "triage-decision",
         });
       }
-      return rows;
     }
 
     for (const lens of lenses) {

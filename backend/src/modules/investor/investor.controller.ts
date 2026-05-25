@@ -33,17 +33,13 @@ import { RecordDealDecisionDto } from './dto/record-deal-decision.dto';
 import { CalibrationService } from './calibration.service';
 import { ScreeningQueueService } from './screening-queue.service';
 import { ScreeningCalibrationService } from './screening-calibration.service';
-import { ScreeningProcessor } from '../ai/processors/screening.processor';
+import { ScreeningOverrideService } from './screening-override.service';
+import { OverrideScreeningVerdictDto } from './dto/override-screening-verdict.dto';
 import { PipelineService } from '../ai/services/pipeline.service';
-import { ProgressTrackerService } from '../ai/orchestrator/progress-tracker.service';
-import { PipelineStateService } from '../ai/services/pipeline-state.service';
-import { pipelineRun } from '../ai/entities/pipeline.schema';
 import { screeningDecision } from '../ai/entities/screening-decision.schema';
-import { PhaseStatus, PipelinePhase, PipelineStatus } from '../ai/interfaces/pipeline.interface';
+import { PipelinePhase } from '../ai/interfaces/pipeline.interface';
 import { desc, eq } from 'drizzle-orm';
 import { DrizzleService } from '../../database';
-import { randomBytes } from 'node:crypto';
-import { ForbiddenException } from '@nestjs/common';
 import { CalibrationProposalService } from './calibration-proposal.service';
 import { assertCalibrationEnabled } from './calibration-feature';
 import {
@@ -63,6 +59,7 @@ import {
   UpdateMatchStatusDto,
   UpdateScoringPreferencesDto,
   UpdateStructuredDealbreakersDto,
+  GenerateStructuredDealbreakersDto,
 } from './dto';
 
 type User = {
@@ -95,10 +92,8 @@ export class InvestorController {
     private startupMatching: StartupMatchingPipelineService,
     private screeningQueueService: ScreeningQueueService,
     private screeningCalibrationService: ScreeningCalibrationService,
-    private screeningProcessor: ScreeningProcessor,
+    private screeningOverrideService: ScreeningOverrideService,
     private pipelineCoreService: PipelineService,
-    private progressTracker: ProgressTrackerService,
-    private pipelineState: PipelineStateService,
     private drizzle: DrizzleService,
     private dealEvents: DealEventService,
   ) {}
@@ -121,7 +116,9 @@ export class InvestorController {
     @Body() dto: CreateThesisDto,
   ) {
     const thesis = await this.thesisService.upsert(user.id, dto);
-    await this.matchService.regenerateMatches(user.id);
+    if (!dto.skipRematching) {
+      void this.matchService.regenerateMatches(user.id).catch(() => {});
+    }
     return thesis;
   }
 
@@ -163,6 +160,18 @@ export class InvestorController {
     @Body() dto: UpdateStructuredDealbreakersDto,
   ) {
     return this.thesisService.upsertStructuredDealbreakers(user.id, dto.rules);
+  }
+
+  @Post('thesis/structured-dealbreakers/generate')
+  async generateStructuredDealbreakers(
+    @CurrentUser() user: User,
+    @Body() dto: GenerateStructuredDealbreakersDto,
+  ) {
+    const rules = await this.thesisService.generateStructuredDealbreakers(
+      user.id,
+      dto.narrative,
+    );
+    return { rules };
   }
 
   // ============ DEAL DECISIONS (DS-E11-F1-S1) ============
@@ -327,6 +336,22 @@ export class InvestorController {
     return this.screeningQueueService.getQueue(user.id);
   }
 
+  @Post('screening/:startupId/override')
+  async overrideScreeningVerdict(
+    @Param('startupId', ParseUUIDPipe) startupId: string,
+    @CurrentUser() user: User,
+    @Body() body: OverrideScreeningVerdictDto,
+  ) {
+    return this.screeningOverrideService.createOverride({
+      startupId,
+      actor: user,
+      targetClassification: body.targetClassification,
+      reason: body.reason,
+      reasonCode: body.reasonCode,
+      source: 'investor',
+    });
+  }
+
   /**
    * Advance a screening REVIEW deal into Due Diligence.
    *
@@ -387,94 +412,36 @@ export class InvestorController {
     // 2. Audit the partner's call — keep `screening_review_overridden` as
     //    the default reason tag so legacy callers still get a usable
     //    calibration signal, but layer any partner-supplied tags on top.
-    const reasonTags = (body?.reasonTags ?? []).filter(
-      (tag) => typeof tag === 'string' && tag.trim().length > 0,
-    );
+    const reasonTags = (body?.reasonTags ?? [])
+      .filter((tag) => typeof tag === 'string' && tag.trim().length > 0)
+      .map((tag) => tag.trim().slice(0, 40))
+      .slice(0, 8);
     const auditTags =
       reasonTags.length > 0
         ? ['screening_review_overridden', ...reasonTags]
         : ['screening_review_overridden'];
+    const notes = body?.notes?.slice(0, 500) ?? undefined;
     await this.dealDecisionService.record(user.id, startupId, {
       verdict: 'advance',
       reasonTags: auditTags,
-      notes: body?.notes ?? undefined,
+      notes,
     });
 
-    // 3. Re-run from EVALUATION when possible (cheapest path — reuses
-    //    cached extraction/enrichment/scraping/research/screening), and
-    //    fall back to a full pipeline restart when the state isn't usable
-    //    (no live state, expired, or upstream phase results missing —
-    //    e.g. a previous run was cancelled mid-flight). The gate override
-    //    (applyScreeningGate, investor_deal_decision check) ensures that
-    //    even in the fresh-restart path, the new screening verdict won't
-    //    overrule the partner's ADVANCE intent.
-    // Cheap pre-check: rerun-from-eval only works if extraction +
-    // scraping + research phase results are still in pipelineState (the
-    // evaluation service requires all three). If any is missing — e.g.
-    // a previous run was cancelled mid-way — skip straight to the full
-    // pipeline path so eval doesn't bomb post-queue with an unhelpful
-    // 500.
-    const upstreamReady = await (async () => {
-      try {
-        const [extraction, scraping, research] = await Promise.all([
-          this.pipelineState.getPhaseResult(startupId, PipelinePhase.EXTRACTION),
-          this.pipelineState.getPhaseResult(startupId, PipelinePhase.SCRAPING),
-          this.pipelineState.getPhaseResult(startupId, PipelinePhase.RESEARCH),
-        ]);
-        return Boolean(extraction && scraping && research);
-      } catch {
-        return false;
-      }
-    })();
-
-    let path: 'rerun_from_eval' | 'fresh_full_pipeline' = upstreamReady
-      ? 'rerun_from_eval'
-      : 'fresh_full_pipeline';
-    const tryRerun = async (): Promise<void> => {
+    // 3. Continue the pipeline from RESEARCH (first DD phase). RESEARCH
+    //    depends on SCREENING which is already completed, so the chain
+    //    fires: RESEARCH → EVALUATION → SYNTHESIS. Never fall back to
+    //    startPipeline() — that re-runs SCREENING and overwrites the
+    //    advance verdict.
+    try {
       await this.pipelineCoreService.rerunFromPhase(
         startupId,
-        PipelinePhase.EVALUATION,
+        PipelinePhase.RESEARCH,
       );
-    };
-    const tryFreshFull = async (): Promise<void> => {
-      await this.pipelineCoreService.startPipeline(startupId, user.id, {
-        skipExtraction: true,
-      });
-      path = 'fresh_full_pipeline';
-    };
-
-    if (path === 'rerun_from_eval') {
-      try {
-        await tryRerun();
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        const isStateMissing = /not found/i.test(message);
-        if (!isStateMissing) {
-          throw new NotFoundException(
-            `Could not start DD from screening — ${message}`,
-          );
-        }
-        try {
-          await tryFreshFull();
-        } catch (fallbackErr) {
-          const fbMsg =
-            fallbackErr instanceof Error
-              ? fallbackErr.message
-              : String(fallbackErr);
-          throw new NotFoundException(
-            `Could not start DD from screening — ${fbMsg}`,
-          );
-        }
-      }
-    } else {
-      try {
-        await tryFreshFull();
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        throw new NotFoundException(
-          `Could not start DD from screening — ${message}`,
-        );
-      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new NotFoundException(
+        `Could not start DD from screening — ${message}`,
+      );
     }
 
     void this.dealEvents.record({
@@ -491,11 +458,8 @@ export class InvestorController {
       ok: true,
       startupId,
       verdict: 'advance' as const,
-      path,
-      note:
-        path === 'rerun_from_eval'
-          ? 'Evaluation + synthesis queued; deal will move to DD when complete.'
-          : 'No prior pipeline state — full pipeline restarted; deal will move to DD when complete.',
+      path: 'rerun_from_research' as const,
+      note: 'Research + evaluation + synthesis queued; deal will move to DD when complete.',
     };
   }
 
@@ -557,97 +521,20 @@ export class InvestorController {
    * if the new verdict is ADVANCE — the deal stays where it is and only
    * its screening surface refreshes.
    *
-   * Returns 403 in any environment other than development.
    */
-  @Post('screening/:startupId/rescreen-dev')
-  async rescreenForDev(
+  @Post('screening/:startupId/rescreen')
+  async rescreenStartup(
     @Param('startupId', ParseUUIDPipe) startupId: string,
     @CurrentUser() _user: User,
   ) {
-    if (process.env.NODE_ENV !== 'development') {
-      throw new ForbiddenException(
-        'rescreen-dev is only available in development environment',
-      );
-    }
-    const pipelineRunId = `rescreen_${randomBytes(8).toString('hex')}`;
-    // pipeline_run_id is an FK on screening_decision + startup_lens_result —
-    // we have to create the parent row before runScreening can persist
-    // lens results / triage decision. Status COMPLETED so it doesn't get
-    // picked up as a hung pipeline by health probes.
-    await this.drizzle.db.insert(pipelineRun).values({
-      pipelineRunId,
+    await this.pipelineCoreService.rerunFromPhase(
       startupId,
-      userId: _user.id,
-      status: PipelineStatus.COMPLETED,
-      config: { source: 'rescreen-dev' },
-      startedAt: new Date(),
-      completedAt: new Date(),
-    });
-
-    // Fix 7 (post-audit): seed the live-progress payload so the admin DS
-    // pipeline view shows upstream phases as "cached/completed" rather
-    // than stalling on "pending". Rescreen-dev intentionally re-runs only
-    // the SCREENING phase — the earlier phases are reused from the original
-    // pipeline run. We mark them COMPLETED for the UI and SCREENING as
-    // RUNNING so the user sees the right state.
-    // DS phases only — research/evaluation/synthesis are DD-only and
-    // intentionally not part of the screening live view. The lens agents
-    // (market/team/traction) do their own light research inside the
-    // SCREENING phase.
-    try {
-      await this.progressTracker.initProgress({
-        startupId,
-        userId: _user.id,
-        pipelineRunId,
-        phases: [
-          PipelinePhase.CLASSIFICATION,
-          PipelinePhase.EXTRACTION,
-          PipelinePhase.ENRICHMENT,
-          PipelinePhase.SCRAPING,
-          PipelinePhase.SCREENING,
-        ],
-        initialPhaseStatuses: {
-          [PipelinePhase.CLASSIFICATION]: PhaseStatus.COMPLETED,
-          [PipelinePhase.EXTRACTION]: PhaseStatus.COMPLETED,
-          [PipelinePhase.ENRICHMENT]: PhaseStatus.COMPLETED,
-          [PipelinePhase.SCRAPING]: PhaseStatus.COMPLETED,
-          [PipelinePhase.SCREENING]: PhaseStatus.RUNNING,
-        },
-        currentPhase: PipelinePhase.SCREENING,
-      });
-    } catch (err) {
-      // Non-fatal — progress seeding is UX-only; rescreen still runs.
-      // (Lens-level events are still emitted from runScreening below.)
-      void err;
-    }
-
-    const result = await this.screeningProcessor.runScreening(
-      startupId,
-      pipelineRunId,
-      { userId: _user.id },
+      PipelinePhase.SCREENING,
     );
-
-    // Mark SCREENING phase complete for the live view.
-    try {
-      await this.progressTracker.updatePhaseProgress({
-        startupId,
-        userId: _user.id,
-        pipelineRunId,
-        phase: PipelinePhase.SCREENING,
-        status: PhaseStatus.COMPLETED,
-      });
-    } catch (err) {
-      void err;
-    }
 
     return {
       ok: true,
-      pipelineRunId,
-      classification: result.classification ?? null,
-      overallScore: result.overallScore ?? null,
-      lensCount: result.lenses.length,
-      note:
-        'Re-screen complete. Deal not auto-advanced; the DD pipeline was NOT triggered.',
+      note: 'Re-screening queued. Lenses will re-run with cached upstream data.',
     };
   }
 

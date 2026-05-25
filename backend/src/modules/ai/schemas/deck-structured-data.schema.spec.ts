@@ -48,6 +48,16 @@ describe("DeckStructuredDataAiSchema (DS-E12-F1)", () => {
         moat: "Evidence graph + lens versioning.",
         sourcePages: [11],
       },
+      financials: {
+        arrKpi: { value: "$2.5M", currency: "USD", period: "Q1 2026", sourcePages: [7] },
+        growthRateKpi: { value: "15%", basis: "MoM", period: "current", sourcePages: [8] },
+        grossMarginKpi: { value: "72%", period: "FY2025", sourcePages: [9] },
+        sourcePages: [7, 8, 9],
+      },
+      market: {
+        tamKpi: { value: "4.5", scale: "B", currency: "USD", sourcePages: [10] },
+        sourcePages: [10],
+      },
     });
 
     expect(parsed.problem.sourcePages).toEqual([3, 4]);
@@ -58,6 +68,44 @@ describe("DeckStructuredDataAiSchema (DS-E12-F1)", () => {
     expect(parsed.competitors.namedCompetitors[1].positioning).toBe("incumbent");
     expect(parsed.competitors.moat).toContain("Evidence graph");
     expect(parsed.competitors.sourcePages).toEqual([11]);
+    expect(parsed.financials.arrKpi?.sourcePages).toEqual([7]);
+    expect(parsed.financials.growthRateKpi?.sourcePages).toEqual([8]);
+    expect(parsed.financials.grossMarginKpi?.sourcePages).toEqual([9]);
+    expect(parsed.market.tamKpi?.sourcePages).toEqual([10]);
+  });
+
+  it("keeps missing KPI objects nullable", () => {
+    const parsed = DeckStructuredDataAiSchema.parse({
+      financials: {
+        arrKpi: null,
+        growthRateKpi: null,
+        grossMarginKpi: null,
+      },
+      market: { tamKpi: null },
+    });
+
+    expect(parsed.financials.arrKpi).toBeNull();
+    expect(parsed.financials.growthRateKpi).toBeNull();
+    expect(parsed.financials.grossMarginKpi).toBeNull();
+    expect(parsed.market.tamKpi).toBeNull();
+  });
+
+  it("rejects non-null KPI objects without their own source pages", () => {
+    expect(() =>
+      DeckStructuredDataAiSchema.parse({
+        financials: { arrKpi: { value: "$2.5M", currency: "USD", period: "current" } },
+      }),
+    ).toThrow();
+    expect(() =>
+      DeckStructuredDataAiSchema.parse({
+        market: { tamKpi: { value: "4.5", scale: "B", currency: "USD" } },
+      }),
+    ).toThrow();
+    expect(() =>
+      DeckStructuredDataAiSchema.parse({
+        financials: { grossMarginKpi: { value: "72%", period: "current", sourcePages: [] } },
+      }),
+    ).toThrow();
   });
 
   it("rejects negative or zero page numbers", () => {
@@ -66,6 +114,11 @@ describe("DeckStructuredDataAiSchema (DS-E12-F1)", () => {
     ).toThrow();
     expect(() =>
       DeckStructuredDataAiSchema.parse({ market: { sourcePages: [-1] } }),
+    ).toThrow();
+    expect(() =>
+      DeckStructuredDataAiSchema.parse({
+        financials: { growthRateKpi: { value: "15%", basis: "MoM", period: "current", sourcePages: [0] } },
+      }),
     ).toThrow();
   });
 });

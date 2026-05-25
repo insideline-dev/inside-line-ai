@@ -23,12 +23,15 @@ import { QueueModule } from '../../queue';
 import { EarlyAccessModule } from '../early-access';
 import { NotificationModule } from '../../notification/notification.module';
 import { InvestorModule } from '../investor/investor.module';
+import { ScreeningOverrideService } from '../investor/screening-override.service';
+import { DdModule } from '../dd/dd.module';
 
 @Module({
   imports: [
     DatabaseModule,
     QueueModule,
     StartupModule,
+    DdModule,
     UnipileModule,
     EarlyAccessModule,
     NotificationModule,
@@ -63,6 +66,7 @@ import { InvestorModule } from '../investor/investor.module';
     AdminMatchingService,
     AdminScreeningService,
     AdminInvestorService,
+    ScreeningOverrideService,
   ],
   exports: [AnalyticsService, UserManagementService, ScoringConfigService],
 })

@@ -29,8 +29,10 @@ import type {
   CreateNoteDto,
   CreateTeamInviteDto,
   CreateThesisDto,
+  GenerateStructuredDealbreakersDto,
   InvestorControllerGetMatchesParams,
   InvestorControllerListCalibrationProposalsParams,
+  OverrideScreeningVerdictDto,
   ParseDealbreakersDto,
   RecordDealDecisionDto,
   RejectCalibrationProposalDto,
@@ -841,6 +843,82 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getInvestorControllerUpdateStructuredDealbreakersMutationOptions(options), queryClient);
+    }
+    export type investorControllerGenerateStructuredDealbreakersResponse201 = {
+  data: void
+  status: 201
+}
+    
+export type investorControllerGenerateStructuredDealbreakersResponseSuccess = (investorControllerGenerateStructuredDealbreakersResponse201) & {
+  headers: Headers;
+};
+;
+
+export type investorControllerGenerateStructuredDealbreakersResponse = (investorControllerGenerateStructuredDealbreakersResponseSuccess)
+
+export const getInvestorControllerGenerateStructuredDealbreakersUrl = () => {
+
+
+  
+
+  return `/investor/thesis/structured-dealbreakers/generate`
+}
+
+export const investorControllerGenerateStructuredDealbreakers = async (generateStructuredDealbreakersDto: GenerateStructuredDealbreakersDto, options?: RequestInit): Promise<investorControllerGenerateStructuredDealbreakersResponse> => {
+  
+  return customFetch<investorControllerGenerateStructuredDealbreakersResponse>(getInvestorControllerGenerateStructuredDealbreakersUrl(),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      generateStructuredDealbreakersDto,)
+  }
+);}
+
+
+
+
+export const getInvestorControllerGenerateStructuredDealbreakersMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof investorControllerGenerateStructuredDealbreakers>>, TError,{data: BodyType<GenerateStructuredDealbreakersDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof investorControllerGenerateStructuredDealbreakers>>, TError,{data: BodyType<GenerateStructuredDealbreakersDto>}, TContext> => {
+
+const mutationKey = ['investorControllerGenerateStructuredDealbreakers'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof investorControllerGenerateStructuredDealbreakers>>, {data: BodyType<GenerateStructuredDealbreakersDto>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  investorControllerGenerateStructuredDealbreakers(data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type InvestorControllerGenerateStructuredDealbreakersMutationResult = NonNullable<Awaited<ReturnType<typeof investorControllerGenerateStructuredDealbreakers>>>
+    export type InvestorControllerGenerateStructuredDealbreakersMutationBody = BodyType<GenerateStructuredDealbreakersDto>
+    export type InvestorControllerGenerateStructuredDealbreakersMutationError = ErrorType<unknown>
+
+    export const useInvestorControllerGenerateStructuredDealbreakers = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof investorControllerGenerateStructuredDealbreakers>>, TError,{data: BodyType<GenerateStructuredDealbreakersDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof investorControllerGenerateStructuredDealbreakers>>,
+        TError,
+        {data: BodyType<GenerateStructuredDealbreakersDto>},
+        TContext
+      > => {
+      return useMutation(getInvestorControllerGenerateStructuredDealbreakersMutationOptions(options), queryClient);
     }
     export type investorControllerRecordDealDecisionResponse201 = {
   data: void
@@ -2581,7 +2659,84 @@ export function useInvestorControllerGetScreeningQueue<TData = Awaited<ReturnTyp
 
 
 
-export type investorControllerAdvanceFromScreeningResponse201 = {
+export type investorControllerOverrideScreeningVerdictResponse201 = {
+  data: void
+  status: 201
+}
+    
+export type investorControllerOverrideScreeningVerdictResponseSuccess = (investorControllerOverrideScreeningVerdictResponse201) & {
+  headers: Headers;
+};
+;
+
+export type investorControllerOverrideScreeningVerdictResponse = (investorControllerOverrideScreeningVerdictResponseSuccess)
+
+export const getInvestorControllerOverrideScreeningVerdictUrl = (startupId: string,) => {
+
+
+  
+
+  return `/investor/screening/${startupId}/override`
+}
+
+export const investorControllerOverrideScreeningVerdict = async (startupId: string,
+    overrideScreeningVerdictDto: OverrideScreeningVerdictDto, options?: RequestInit): Promise<investorControllerOverrideScreeningVerdictResponse> => {
+  
+  return customFetch<investorControllerOverrideScreeningVerdictResponse>(getInvestorControllerOverrideScreeningVerdictUrl(startupId),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      overrideScreeningVerdictDto,)
+  }
+);}
+
+
+
+
+export const getInvestorControllerOverrideScreeningVerdictMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof investorControllerOverrideScreeningVerdict>>, TError,{startupId: string;data: BodyType<OverrideScreeningVerdictDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof investorControllerOverrideScreeningVerdict>>, TError,{startupId: string;data: BodyType<OverrideScreeningVerdictDto>}, TContext> => {
+
+const mutationKey = ['investorControllerOverrideScreeningVerdict'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof investorControllerOverrideScreeningVerdict>>, {startupId: string;data: BodyType<OverrideScreeningVerdictDto>}> = (props) => {
+          const {startupId,data} = props ?? {};
+
+          return  investorControllerOverrideScreeningVerdict(startupId,data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type InvestorControllerOverrideScreeningVerdictMutationResult = NonNullable<Awaited<ReturnType<typeof investorControllerOverrideScreeningVerdict>>>
+    export type InvestorControllerOverrideScreeningVerdictMutationBody = BodyType<OverrideScreeningVerdictDto>
+    export type InvestorControllerOverrideScreeningVerdictMutationError = ErrorType<unknown>
+
+    export const useInvestorControllerOverrideScreeningVerdict = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof investorControllerOverrideScreeningVerdict>>, TError,{startupId: string;data: BodyType<OverrideScreeningVerdictDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof investorControllerOverrideScreeningVerdict>>,
+        TError,
+        {startupId: string;data: BodyType<OverrideScreeningVerdictDto>},
+        TContext
+      > => {
+      return useMutation(getInvestorControllerOverrideScreeningVerdictMutationOptions(options), queryClient);
+    }
+    export type investorControllerAdvanceFromScreeningResponse201 = {
   data: void
   status: 201
 }
@@ -2835,29 +2990,29 @@ export function useInvestorControllerGetScreeningCalibration<TData = Awaited<Ret
 
 
 
-export type investorControllerRescreenForDevResponse201 = {
+export type investorControllerRescreenStartupResponse201 = {
   data: void
   status: 201
 }
     
-export type investorControllerRescreenForDevResponseSuccess = (investorControllerRescreenForDevResponse201) & {
+export type investorControllerRescreenStartupResponseSuccess = (investorControllerRescreenStartupResponse201) & {
   headers: Headers;
 };
 ;
 
-export type investorControllerRescreenForDevResponse = (investorControllerRescreenForDevResponseSuccess)
+export type investorControllerRescreenStartupResponse = (investorControllerRescreenStartupResponseSuccess)
 
-export const getInvestorControllerRescreenForDevUrl = (startupId: string,) => {
+export const getInvestorControllerRescreenStartupUrl = (startupId: string,) => {
 
 
   
 
-  return `/investor/screening/${startupId}/rescreen-dev`
+  return `/investor/screening/${startupId}/rescreen`
 }
 
-export const investorControllerRescreenForDev = async (startupId: string, options?: RequestInit): Promise<investorControllerRescreenForDevResponse> => {
+export const investorControllerRescreenStartup = async (startupId: string, options?: RequestInit): Promise<investorControllerRescreenStartupResponse> => {
   
-  return customFetch<investorControllerRescreenForDevResponse>(getInvestorControllerRescreenForDevUrl(startupId),
+  return customFetch<investorControllerRescreenStartupResponse>(getInvestorControllerRescreenStartupUrl(startupId),
   {      
     ...options,
     method: 'POST'
@@ -2869,11 +3024,11 @@ export const investorControllerRescreenForDev = async (startupId: string, option
 
 
 
-export const getInvestorControllerRescreenForDevMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof investorControllerRescreenForDev>>, TError,{startupId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof investorControllerRescreenForDev>>, TError,{startupId: string}, TContext> => {
+export const getInvestorControllerRescreenStartupMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof investorControllerRescreenStartup>>, TError,{startupId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof investorControllerRescreenStartup>>, TError,{startupId: string}, TContext> => {
 
-const mutationKey = ['investorControllerRescreenForDev'];
+const mutationKey = ['investorControllerRescreenStartup'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -2883,10 +3038,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof investorControllerRescreenForDev>>, {startupId: string}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof investorControllerRescreenStartup>>, {startupId: string}> = (props) => {
           const {startupId} = props ?? {};
 
-          return  investorControllerRescreenForDev(startupId,requestOptions)
+          return  investorControllerRescreenStartup(startupId,requestOptions)
         }
 
 
@@ -2896,19 +3051,19 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type InvestorControllerRescreenForDevMutationResult = NonNullable<Awaited<ReturnType<typeof investorControllerRescreenForDev>>>
+    export type InvestorControllerRescreenStartupMutationResult = NonNullable<Awaited<ReturnType<typeof investorControllerRescreenStartup>>>
     
-    export type InvestorControllerRescreenForDevMutationError = ErrorType<unknown>
+    export type InvestorControllerRescreenStartupMutationError = ErrorType<unknown>
 
-    export const useInvestorControllerRescreenForDev = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof investorControllerRescreenForDev>>, TError,{startupId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+    export const useInvestorControllerRescreenStartup = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof investorControllerRescreenStartup>>, TError,{startupId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof investorControllerRescreenForDev>>,
+        Awaited<ReturnType<typeof investorControllerRescreenStartup>>,
         TError,
         {startupId: string},
         TContext
       > => {
-      return useMutation(getInvestorControllerRescreenForDevMutationOptions(options), queryClient);
+      return useMutation(getInvestorControllerRescreenStartupMutationOptions(options), queryClient);
     }
     export type investorControllerTriggerStartupMatchingResponse201 = {
   data: void

@@ -44,6 +44,8 @@ interface ScreeningVerdictOverrideDialogProps {
     reason: string;
     reasonCode?: string;
   }) => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 export function ScreeningVerdictOverrideDialog({
@@ -51,8 +53,12 @@ export function ScreeningVerdictOverrideDialog({
   disabled,
   isSubmitting,
   onSubmit,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
 }: ScreeningVerdictOverrideDialogProps) {
-  const [open, setOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = isControlled ? controlledOpen : internalOpen;
   const [targetClassification, setTargetClassification] =
     useState<ScreeningVerdict>(currentVerdict === "reject" ? "review" : "reject");
   const [reasonCode, setReasonCode] = useState<string | undefined>();
@@ -70,7 +76,11 @@ export function ScreeningVerdictOverrideDialog({
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (isSubmitting) return;
-    setOpen(nextOpen);
+    if (isControlled) {
+      controlledOnOpenChange?.(nextOpen);
+    } else {
+      setInternalOpen(nextOpen);
+    }
     if (nextOpen) {
       setTargetClassification(availableVerdicts[0] ?? "review");
       setReasonCode(undefined);
@@ -87,11 +97,13 @@ export function ScreeningVerdictOverrideDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="sm" disabled={disabled}>
-          Change verdict
-        </Button>
-      </DialogTrigger>
+      {!isControlled && (
+        <DialogTrigger asChild>
+          <Button variant="outline" size="sm" disabled={disabled}>
+            Change verdict
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent>
         <DialogHeader>
           <DialogTitle className="text-balance">Change screening verdict</DialogTitle>

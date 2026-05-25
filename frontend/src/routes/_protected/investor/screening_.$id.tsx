@@ -44,6 +44,7 @@ function ScreeningDetailPage() {
   const queryClient = useQueryClient();
   const [isDownloadingScreening, setIsDownloadingScreening] = useState(false);
   const [showPassDialog, setShowPassDialog] = useState(false);
+  const [overrideOpen, setOverrideOpen] = useState(false);
 
   const {
     data: rows,
@@ -166,6 +167,7 @@ function ScreeningDetailPage() {
         }),
       }),
     onSuccess: (_res, input) => {
+      setOverrideOpen(false);
       toast.success("Screening verdict override saved");
       queryClient.invalidateQueries({ queryKey: ["investor", "screening"] });
       queryClient.invalidateQueries({ queryKey: ["investor", "pipeline"] });
@@ -295,10 +297,15 @@ function ScreeningDetailPage() {
             isSubmitting={advanceMutation.isPending}
             onSubmit={handleAdvance}
           />
+          <Button variant="outline" onClick={() => setOverrideOpen(true)}>
+            Change verdict
+          </Button>
           <ScreeningVerdictOverrideDialog
             currentVerdict={row.verdict}
             isSubmitting={overrideMutation.isPending}
             onSubmit={(input) => overrideMutation.mutate({ startupId: id, ...input })}
+            open={overrideOpen}
+            onOpenChange={setOverrideOpen}
           />
           <Button
             variant="outline"

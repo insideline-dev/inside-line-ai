@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Download, Loader2, Radio, RefreshCw } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -61,6 +61,8 @@ function unwrap<T>(payload: unknown): T | undefined {
 function AdminScreeningDetailPage() {
   const { id } = Route.useParams();
   const qc = useQueryClient();
+  const navigate = useNavigate();
+  const [overrideOpen, setOverrideOpen] = useState(false);
 
   // Shared with /admin/screening so the cache is reused. The detail row
   // comes from the same global admin queue payload.
@@ -120,10 +122,18 @@ function AdminScreeningDetailPage() {
         method: "POST",
         body: JSON.stringify(input),
       }),
-    onSuccess: () => {
+    onSuccess: (_res, input) => {
+      setOverrideOpen(false);
       toast.success("Screening verdict override saved");
       qc.invalidateQueries({ queryKey: ["admin", "screening"] });
       qc.invalidateQueries({ queryKey: ["investor", "screening"] });
+      qc.invalidateQueries({ queryKey: ["investor", "pipeline"] });
+      qc.invalidateQueries({ queryKey: ["startupController"] });
+      if (input.targetClassification === "advance") {
+        void navigate({ to: "/admin/screening/$id", params: { id }, search: {} });
+        // Brief delay so queries refetch before navigating to the startup DD view
+        setTimeout(() => void navigate({ to: "/investor/startup/$id", params: { id } }), 300);
+      }
     },
     onError: (err) =>
       toast.error("Override failed", { description: (err as Error).message }),
@@ -167,11 +177,18 @@ function AdminScreeningDetailPage() {
   const extraActions = (
     <>
       {row && (
-        <ScreeningVerdictOverrideDialog
-          currentVerdict={row.verdict}
-          isSubmitting={overrideMutation.isPending}
-          onSubmit={(input) => overrideMutation.mutate(input)}
-        />
+        <>
+          <Button variant="outline" size="sm" onClick={() => setOverrideOpen(true)}>
+            Change verdict
+          </Button>
+          <ScreeningVerdictOverrideDialog
+            currentVerdict={row.verdict}
+            isSubmitting={overrideMutation.isPending}
+            onSubmit={(input) => overrideMutation.mutate(input)}
+            open={overrideOpen}
+            onOpenChange={setOverrideOpen}
+          />
+        </>
       )}
       <Button
         variant="outline"

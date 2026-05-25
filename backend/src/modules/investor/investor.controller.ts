@@ -545,16 +545,31 @@ export class InvestorController {
   @Post('screening/:startupId/rescreen')
   async rescreenStartup(
     @Param('startupId', ParseUUIDPipe) startupId: string,
-    @CurrentUser() _user: User,
+    @CurrentUser() user: User,
   ) {
-    await this.pipelineCoreService.rerunFromPhase(
-      startupId,
-      PipelinePhase.SCREENING,
-    );
+    let restartedFromScratch = false;
+
+    try {
+      await this.pipelineCoreService.rerunFromPhase(
+        startupId,
+        PipelinePhase.SCREENING,
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const isStateMissing = /not found/i.test(message);
+      if (!isStateMissing) {
+        throw err;
+      }
+
+      await this.pipelineCoreService.startPipeline(startupId, user.id);
+      restartedFromScratch = true;
+    }
 
     return {
       ok: true,
-      note: 'Re-screening queued. Lenses will re-run with cached upstream data.',
+      note: restartedFromScratch
+        ? 'Cached pipeline state was missing, so the startup was restarted from the beginning.'
+        : 'Re-screening queued. Lenses will re-run with cached upstream data.',
     };
   }
 

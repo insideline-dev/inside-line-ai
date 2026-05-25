@@ -72,6 +72,7 @@ interface PipelineLike {
 interface AdminStatsLike {
   startups?: {
     total?: number;
+    ddCount?: number;
     byStatus?: Record<string, number | undefined>;
   };
 }
@@ -120,7 +121,7 @@ function useAutoCounts(surface: "investor" | "admin", overrides: StageCounts) {
 
   const pipeline = unwrap<PipelineLike>(pipelineQ.data);
   const adminStats = unwrap<AdminStatsLike>(adminStatsQ.data);
-  const adminDdCount = adminStats?.startups?.total;
+  const adminDdCount = adminStats?.startups?.ddCount ?? adminStats?.startups?.total;
 
   return {
     screening:

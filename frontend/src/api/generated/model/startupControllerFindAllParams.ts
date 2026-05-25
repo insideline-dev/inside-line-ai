@@ -5,6 +5,7 @@
  * Inside Line API Documentation
  * OpenAPI spec version: 2.0
  */
+import type { StartupControllerFindAllExcludePreScreening } from './startupControllerFindAllExcludePreScreening';
 import type { StartupControllerFindAllStage } from './startupControllerFindAllStage';
 import type { StartupControllerFindAllStatus } from './startupControllerFindAllStatus';
 
@@ -23,4 +24,5 @@ status?: StartupControllerFindAllStatus;
 industry?: string;
 stage?: StartupControllerFindAllStage;
 search?: string;
+excludePreScreening?: StartupControllerFindAllExcludePreScreening;
 };

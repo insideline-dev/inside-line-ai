@@ -324,6 +324,7 @@ export class AiModelExecutionService {
       experimental_output: result.experimental_output,
       sources: result.sources as GenerateTextResult["sources"],
       telemetry: result.telemetry,
+      usage: result.telemetry?.usage,
     };
   }
 }

@@ -13,6 +13,7 @@ import {
   ScreeningDetailHeader,
 } from "@/components/investor/ScreeningDetail";
 import { ScreeningVerdictOverrideDialog } from "@/components/investor/ScreeningVerdictOverrideDialog";
+import { ScreeningAdvanceDialog, type AdvanceInput } from "@/components/investor/ScreeningAdvanceDialog";
 import type { ScreeningRow, ScreeningVerdict } from "@/components/investor/screening-types";
 import type { InvestmentThesis } from "@/types/investor";
 import { findPortfolioConflicts } from "@/lib/screening/portfolio-conflicts";
@@ -91,7 +92,7 @@ function ScreeningDetailPage() {
     return findPortfolioConflicts(startupLike, thesis);
   }, [row, thesis]);
 
-  const invalidateAndBack = () => {
+  const invalidateStageQueries = () => {
     queryClient.invalidateQueries({ queryKey: ["investor", "screening"] });
     queryClient.invalidateQueries({ queryKey: ["investor", "pipeline"] });
     queryClient.invalidateQueries({ queryKey: ["admin", "screening"] });
@@ -99,18 +100,34 @@ function ScreeningDetailPage() {
     queryClient.invalidateQueries({
       queryKey: getStartupControllerGetOpenQuestionsQueryKey(id),
     });
+  };
+
+  const invalidateAndBack = () => {
+    invalidateStageQueries();
     void navigate({ to: "/investor/screening" });
   };
 
   const advanceMutation = useMutation({
-    mutationFn: (startupId: string) =>
-      customFetch<{ ok: boolean; note: string }>(
+    mutationFn: ({
+      startupId,
+      reasonTags,
+      notes,
+    }: {
+      startupId: string;
+      reasonTags?: string[];
+      notes?: string;
+    }) =>
+      customFetch<{ ok: boolean; startupId: string; note: string }>(
         `/investor/screening/${startupId}/advance`,
-        { method: "POST" },
+        {
+          method: "POST",
+          body: JSON.stringify({ reasonTags, notes }),
+        },
       ),
     onSuccess: (res) => {
       toast.success("Advanced to Due Diligence", { description: res.note });
-      invalidateAndBack();
+      invalidateStageQueries();
+      void navigate({ to: "/investor/startup/$id", params: { id: res.startupId } });
     },
     onError: (err) =>
       toast.error("Advance failed", { description: (err as Error).message }),
@@ -156,7 +173,7 @@ function ScreeningDetailPage() {
       ),
     onSuccess: (res) => {
       toast.success("Re-screening queued", { description: res.note });
-      queryClient.invalidateQueries();
+      queryClient.invalidateQueries({ refetchType: "all" });
     },
     onError: (err) =>
       toast.error("Re-screen failed", { description: (err as Error).message }),
@@ -173,10 +190,17 @@ function ScreeningDetailPage() {
     passMutation.mutate(row.id);
   }, [row, passMutation]);
 
-  const handleAdvance = useCallback(() => {
-    if (!row) return;
-    advanceMutation.mutate(row.id);
-  }, [row, advanceMutation]);
+  const handleAdvance = useCallback(
+    (input: AdvanceInput) => {
+      if (!row) return;
+      advanceMutation.mutate({
+        startupId: row.id,
+        reasonTags: input.reasonTags,
+        notes: input.notes,
+      });
+    },
+    [row, advanceMutation],
+  );
 
   const handleDownloadScreening = useCallback(async () => {
     if (!row || !screeningOutput.data) return;
@@ -250,10 +274,14 @@ function ScreeningDetailPage() {
         row={row}
         backTo="/investor/screening"
         onPass={handlePass}
-        onAdvance={handleAdvance}
-        busy={advanceMutation.isPending || passMutation.isPending}
+        busy={passMutation.isPending}
         extraActions={
           <>
+          <ScreeningAdvanceDialog
+            disabled={row.verdict !== "review" || advanceMutation.isPending}
+            isSubmitting={advanceMutation.isPending}
+            onSubmit={handleAdvance}
+          />
           <ScreeningVerdictOverrideDialog
             currentVerdict={row.verdict}
             isSubmitting={overrideMutation.isPending}

@@ -129,5 +129,6 @@ export const ScreeningOutputV1Schema = z.object({
   overall: ScreeningOverallV1Schema,
   handoff: ScreeningHandoffSchema,
   lenses: z.array(ScreeningLensV1Schema),
+  thesisFit: z.unknown().nullable().optional(),
 });
 export type ScreeningOutputV1 = z.infer<typeof ScreeningOutputV1Schema>;

@@ -5,6 +5,7 @@
  * Inside Line API Documentation
  * OpenAPI spec version: 2.0
  */
+import type { StartupControllerAdminFindPendingExcludePreScreening } from './startupControllerAdminFindPendingExcludePreScreening';
 import type { StartupControllerAdminFindPendingStage } from './startupControllerAdminFindPendingStage';
 import type { StartupControllerAdminFindPendingStatus } from './startupControllerAdminFindPendingStatus';
 
@@ -23,4 +24,5 @@ status?: StartupControllerAdminFindPendingStatus;
 industry?: string;
 stage?: StartupControllerAdminFindPendingStage;
 search?: string;
+excludePreScreening?: StartupControllerAdminFindPendingExcludePreScreening;
 };

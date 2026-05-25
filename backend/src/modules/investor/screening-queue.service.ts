@@ -396,7 +396,7 @@ export class ScreeningQueueService {
           r.submitted_at instanceof Date
             ? r.submitted_at.toISOString()
             : String(r.submitted_at),
-        dealbreakerNote: dealbreakerNoteFromReasonCodes(reasonCodes),
+        dealbreakerNote: verdict === "reject" ? dealbreakerNoteFromReasonCodes(reasonCodes) : null,
       });
     }
     return out;

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { PipelinePhase } from "../../interfaces/pipeline.interface";
+import { PipelinePhase, PipelineStage } from "../../interfaces/pipeline.interface";
 import {
+  DEAL_SCREENING_PHASES,
   DEFAULT_PIPELINE_CONFIG,
+  DUE_DILIGENCE_PHASES,
   validatePipelineConfig,
 } from "../../orchestrator/pipeline.config";
 
@@ -19,10 +21,7 @@ describe("pipeline.config", () => {
     );
 
     expect(screening?.canRunParallelWith).toEqual([]);
-    expect(evaluation?.dependsOn).toEqual([
-      PipelinePhase.RESEARCH,
-      PipelinePhase.SCREENING,
-    ]);
+    expect(evaluation?.dependsOn).toEqual([PipelinePhase.RESEARCH]);
   });
 
   it("rejects duplicate phases", () => {
@@ -68,6 +67,42 @@ describe("pipeline.config", () => {
     expect(() => validatePipelineConfig(circular)).toThrow(
       'Pipeline config contains circular dependency at "extraction"',
     );
+  });
+
+  it("deal screening phases end with SCREENING", () => {
+    expect(DEAL_SCREENING_PHASES.at(-1)).toBe(PipelinePhase.SCREENING);
+    expect(DEAL_SCREENING_PHASES).toEqual([
+      PipelinePhase.CLASSIFICATION,
+      PipelinePhase.EXTRACTION,
+      PipelinePhase.ENRICHMENT,
+      PipelinePhase.SCRAPING,
+      PipelinePhase.SCREENING,
+    ]);
+  });
+
+  it("due diligence phases start with RESEARCH", () => {
+    expect(DUE_DILIGENCE_PHASES[0]).toBe(PipelinePhase.RESEARCH);
+    expect(DUE_DILIGENCE_PHASES).toEqual([
+      PipelinePhase.RESEARCH,
+      PipelinePhase.EVALUATION,
+      PipelinePhase.SYNTHESIS,
+    ]);
+  });
+
+  it("every phase belongs to exactly one stage", () => {
+    const allPhases = [...DEAL_SCREENING_PHASES, ...DUE_DILIGENCE_PHASES];
+    const configPhases = DEFAULT_PIPELINE_CONFIG.phases.map((p) => p.phase);
+    expect(allPhases).toEqual(configPhases);
+  });
+
+  it("stage field matches grouping constants", () => {
+    for (const phaseConfig of DEFAULT_PIPELINE_CONFIG.phases) {
+      if (DEAL_SCREENING_PHASES.includes(phaseConfig.phase)) {
+        expect(phaseConfig.stage).toBe(PipelineStage.DEAL_SCREENING);
+      } else {
+        expect(phaseConfig.stage).toBe(PipelineStage.DUE_DILIGENCE);
+      }
+    }
   });
 
   it("rejects non-positive timeout values", () => {

@@ -5,6 +5,7 @@ import { DrizzleService } from '../../database';
 import { CacheService } from './cache.service';
 import { user } from '../../auth/entities/auth.schema';
 import { startup, StartupStatus } from '../startup/entities/startup.schema';
+import { screeningDecision } from '../ai/entities/screening-decision.schema';
 import { startupMatch } from '../investor/entities/investor.schema';
 import { portal, portalSubmission } from '../portal/entities/portal.schema';
 import { investorThesis } from '../investor/entities/investor.schema';
@@ -27,6 +28,7 @@ export interface PlatformStats {
     total: number;
     byStatus: Record<string, number>;
     pending: number;
+    ddCount: number;
   };
   matches: {
     total: number;
@@ -77,6 +79,7 @@ export class AnalyticsService {
       portalStats,
       submissionCount,
       topIndustries,
+      ddCountResult,
     ] = await Promise.all([
       // Total users
       this.drizzle.db.select({ count: count() }).from(user),
@@ -119,6 +122,20 @@ export class AnalyticsService {
 
       // Top industries
       this.getTopIndustries(),
+
+      // DD count: startups whose latest screening decision is 'advance'
+      // (or no screening decision — legacy startups that bypassed screening)
+      this.drizzle.db
+        .select({ count: count() })
+        .from(startup)
+        .where(
+          sql`COALESCE(
+            (SELECT ${screeningDecision.classification} FROM ${screeningDecision}
+             WHERE ${screeningDecision.startupId} = ${startup.id}
+             ORDER BY ${screeningDecision.createdAt} DESC LIMIT 1),
+            'advance'
+          ) = 'advance'`,
+        ),
     ]);
 
     const byRole: Record<string, number> = {};
@@ -141,6 +158,7 @@ export class AnalyticsService {
         total: Number(startupStats[0]?.count ?? 0),
         byStatus,
         pending: byStatus[StartupStatus.SUBMITTED] ?? 0,
+        ddCount: Number(ddCountResult[0]?.count ?? 0),
       },
       matches: {
         total: Number(matchStats[0]?.count ?? 0),

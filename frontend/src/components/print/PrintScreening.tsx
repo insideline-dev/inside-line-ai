@@ -369,6 +369,9 @@ export function PrintScreening({
         generatedBy={generatedBy}
         score={output.overall.score}
         logoUrl={startup.logoUrl ?? undefined}
+        verdict={verdictCfg.label}
+        verdictClassName={verdictCfg.className}
+        fitScore={fit?.overall}
       />
 
       {/* Page 2+: Content */}
@@ -457,19 +460,6 @@ export function PrintScreening({
             </section>
           )}
 
-          {/* Company Description */}
-          {startup.description && (
-            <section className="print-section flex flex-col gap-2">
-              <h3 className="text-xs font-semibold uppercase text-muted-foreground">
-                Company description
-              </h3>
-              <Card>
-                <CardContent className="p-4 text-sm leading-relaxed text-foreground/90">
-                  {startup.description}
-                </CardContent>
-              </Card>
-            </section>
-          )}
         </div>
       </PrintPage>
     </PrintLayout>

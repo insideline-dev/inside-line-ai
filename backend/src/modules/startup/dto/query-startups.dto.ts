@@ -9,6 +9,10 @@ export const GetStartupsQuerySchema = z.object({
   industry: z.string().optional(),
   stage: z.nativeEnum(StartupStage).optional(),
   search: z.string().optional(),
+  excludePreScreening: z
+    .enum(["true", "false"])
+    .transform((v) => v === "true")
+    .optional(),
 });
 
 export type GetStartupsQuery = z.infer<typeof GetStartupsQuerySchema>;

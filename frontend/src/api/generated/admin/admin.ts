@@ -49,6 +49,7 @@ import type {
   CreateAiAgentConfigDto,
   CreateEarlyAccessInviteDto,
   CreatePipelineFlowConfigDto,
+  OverrideScreeningVerdictDto,
   PipelineFlowConfigListResponseDto,
   PipelineFlowConfigResponseDto,
   PreviewAiPipelineContextRequestDto,
@@ -175,7 +176,84 @@ export function useAdminControllerGetScreeningQueue<TData = Awaited<ReturnType<t
 
 
 
-export type adminControllerGetStatsResponse200 = {
+export type adminControllerOverrideScreeningVerdictResponse201 = {
+  data: void
+  status: 201
+}
+    
+export type adminControllerOverrideScreeningVerdictResponseSuccess = (adminControllerOverrideScreeningVerdictResponse201) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerOverrideScreeningVerdictResponse = (adminControllerOverrideScreeningVerdictResponseSuccess)
+
+export const getAdminControllerOverrideScreeningVerdictUrl = (startupId: string,) => {
+
+
+  
+
+  return `/admin/screening/${startupId}/override`
+}
+
+export const adminControllerOverrideScreeningVerdict = async (startupId: string,
+    overrideScreeningVerdictDto: OverrideScreeningVerdictDto, options?: RequestInit): Promise<adminControllerOverrideScreeningVerdictResponse> => {
+  
+  return customFetch<adminControllerOverrideScreeningVerdictResponse>(getAdminControllerOverrideScreeningVerdictUrl(startupId),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      overrideScreeningVerdictDto,)
+  }
+);}
+
+
+
+
+export const getAdminControllerOverrideScreeningVerdictMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerOverrideScreeningVerdict>>, TError,{startupId: string;data: BodyType<OverrideScreeningVerdictDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminControllerOverrideScreeningVerdict>>, TError,{startupId: string;data: BodyType<OverrideScreeningVerdictDto>}, TContext> => {
+
+const mutationKey = ['adminControllerOverrideScreeningVerdict'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminControllerOverrideScreeningVerdict>>, {startupId: string;data: BodyType<OverrideScreeningVerdictDto>}> = (props) => {
+          const {startupId,data} = props ?? {};
+
+          return  adminControllerOverrideScreeningVerdict(startupId,data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminControllerOverrideScreeningVerdictMutationResult = NonNullable<Awaited<ReturnType<typeof adminControllerOverrideScreeningVerdict>>>
+    export type AdminControllerOverrideScreeningVerdictMutationBody = BodyType<OverrideScreeningVerdictDto>
+    export type AdminControllerOverrideScreeningVerdictMutationError = ErrorType<unknown>
+
+    export const useAdminControllerOverrideScreeningVerdict = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerOverrideScreeningVerdict>>, TError,{startupId: string;data: BodyType<OverrideScreeningVerdictDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof adminControllerOverrideScreeningVerdict>>,
+        TError,
+        {startupId: string;data: BodyType<OverrideScreeningVerdictDto>},
+        TContext
+      > => {
+      return useMutation(getAdminControllerOverrideScreeningVerdictMutationOptions(options), queryClient);
+    }
+    export type adminControllerGetStatsResponse200 = {
   data: void
   status: 200
 }

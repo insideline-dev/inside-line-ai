@@ -5,6 +5,7 @@ import { NotificationModule } from '../../notification/notification.module';
 import { AdminModule } from '../admin';
 import { AiModule } from '../ai';
 import { StartupModule } from '../startup/startup.module';
+import { DdModule } from '../dd/dd.module';
 import { InvestorOnboardingModule } from './onboarding/investor-onboarding.module';
 import { ThesisService } from './thesis.service';
 import { MatchService } from './match.service';
@@ -38,6 +39,7 @@ import {
     forwardRef(() => AdminModule),
     forwardRef(() => AiModule),
     StartupModule,
+    DdModule,
     forwardRef(() => InvestorOnboardingModule),
   ],
   controllers: [InvestorController, InvestorTeamPublicController],

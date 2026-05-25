@@ -20,6 +20,11 @@ export enum PipelinePhase {
   SYNTHESIS = "synthesis",
 }
 
+export enum PipelineStage {
+  DEAL_SCREENING = "deal_screening",
+  DUE_DILIGENCE = "due_diligence",
+}
+
 export enum PhaseStatus {
   PENDING = "pending",
   WAITING = "waiting",

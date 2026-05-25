@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Download, Loader2, Radio, RefreshCw, X } from "lucide-react";
+import { Download, Loader2, Radio, RefreshCw } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { customFetch } from "@/api/client";
@@ -102,7 +102,7 @@ function AdminScreeningDetailPage() {
     onSuccess: (res) => {
       toast.success("Re-screening queued", { description: res.note });
       setActiveTab("pipeline");
-      qc.invalidateQueries();
+      qc.invalidateQueries({ refetchType: "all" });
     },
     onError: (err) =>
       toast.error("Re-screen failed", { description: (err as Error).message }),
@@ -127,17 +127,6 @@ function AdminScreeningDetailPage() {
     },
     onError: (err) =>
       toast.error("Override failed", { description: (err as Error).message }),
-  });
-
-  const cancelPipeline = useMutation({
-    mutationFn: () =>
-      customFetch<{ cancelled: boolean }>(
-        `/admin/startups/${id}/cancel-pipeline`,
-        { method: "POST" },
-      ),
-    onSuccess: () => toast.success("Pipeline cancellation requested"),
-    onError: (err) =>
-      toast.error("Cancel failed", { description: (err as Error).message }),
   });
 
   const [isDownloadingScreening, setIsDownloadingScreening] = useState(false);
@@ -215,16 +204,6 @@ function AdminScreeningDetailPage() {
         )}
         {isScreeningLive ? "Screening…" : "Re-run screening"}
       </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => cancelPipeline.mutate()}
-        disabled={cancelPipeline.isPending}
-        className="border-red-200 text-red-700 hover:bg-red-50"
-      >
-        <X className="h-4 w-4 mr-2" />
-        Cancel pipeline
-      </Button>
     </>
   );
 
@@ -292,7 +271,7 @@ function AdminScreeningDetailPage() {
             startupStatus={startup?.status ?? "unknown"}
             phaseFilter={DS_PHASES}
             title="Screening Pipeline Live"
-            onCancelPipeline={() => cancelPipeline.mutate()}
+            onCancelPipeline={undefined}
           />
         </TabsContent>
 

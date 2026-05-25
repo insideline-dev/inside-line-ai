@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { DrizzleService } from "../../database";
 import { UserRole } from "../../auth/entities/auth.schema";
@@ -10,6 +10,8 @@ import {
   type ScreeningVerdict,
 } from "../ai/entities/screening-decision-override.schema";
 import { isVerdict } from "./screening-queue.service";
+import { CalibrationRecomputeService } from "./calibration-recompute.service";
+import { OpenQuestionService } from "../dd/open-question.service";
 
 export interface ScreeningOverrideActor {
   id: string;
@@ -40,7 +42,13 @@ export interface ScreeningOverrideAuditEntry {
 
 @Injectable()
 export class ScreeningOverrideService {
-  constructor(private drizzle: DrizzleService) {}
+  private readonly logger = new Logger(ScreeningOverrideService.name);
+
+  constructor(
+    private drizzle: DrizzleService,
+    private calibrationRecompute: CalibrationRecomputeService,
+    private openQuestions: OpenQuestionService,
+  ) {}
 
   async createOverride(input: ScreeningOverrideInput): Promise<ScreeningOverrideAuditEntry> {
     const reason = input.reason.trim();
@@ -48,6 +56,7 @@ export class ScreeningOverrideService {
       throw new BadRequestException("Override reason is required");
     }
 
+    const startupOwnerId = await this.getStartupOwnerId(input.startupId);
     const decision = await this.getLatestDecision(input.startupId);
     if (!decision) {
       throw new NotFoundException("Screening decision not found");
@@ -78,7 +87,28 @@ export class ScreeningOverrideService {
       })
       .returning();
 
-    return this.toAuditEntry(row);
+    const auditEntry = this.toAuditEntry(row);
+    void this.calibrationRecompute
+      .enqueueRecompute(startupOwnerId, { force: false })
+      .catch((err) => {
+        const message = err instanceof Error ? err.message : String(err);
+        this.logger.warn(
+          `Auto-recompute enqueue failed for investor=${startupOwnerId}: ${message}`,
+        );
+      });
+
+    if (input.targetClassification === "advance") {
+      void this.openQuestions
+        .dismissTriageDecisionQuestions(input.startupId)
+        .catch((err) => {
+          const message = err instanceof Error ? err.message : String(err);
+          this.logger.warn(
+            `Auto-dismiss open questions failed for startup=${input.startupId}: ${message}`,
+          );
+        });
+    }
+
+    return auditEntry;
   }
 
   async getOverridesForDecisionIds(
@@ -102,6 +132,17 @@ export class ScreeningOverrideService {
       out.set(row.screeningDecisionId, existing);
     }
     return out;
+  }
+
+  private async getStartupOwnerId(startupId: string): Promise<string> {
+    const [row] = await this.drizzle.db
+      .select({ userId: startup.userId })
+      .from(startup)
+      .where(eq(startup.id, startupId))
+      .limit(1);
+
+    if (!row) throw new NotFoundException("Startup not found");
+    return row.userId;
   }
 
   private async getLatestDecision(startupId: string): Promise<{ id: string; classification: string } | null> {

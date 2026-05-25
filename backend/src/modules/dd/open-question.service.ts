@@ -105,6 +105,32 @@ export class OpenQuestionService {
     return { seeded, updated };
   }
 
+  async dismissTriageDecisionQuestions(startupId: string): Promise<number> {
+    const result = await this.drizzle.db
+      .update(ddOpenQuestion)
+      .set({
+        status: "dismissed" as const,
+        resolvedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(ddOpenQuestion.startupId, startupId),
+          eq(ddOpenQuestion.seedSource, "screening_seed"),
+          eq(ddOpenQuestion.screeningSource, "triage-decision"),
+          eq(ddOpenQuestion.status, "open"),
+        ),
+      )
+      .returning();
+
+    if (result.length > 0) {
+      this.logger.debug(
+        `Dismissed ${result.length} triage-decision open questions for startup=${startupId}`,
+      );
+    }
+    return result.length;
+  }
+
   async listForStartup(
     startupId: string,
     viewerUserId: string,

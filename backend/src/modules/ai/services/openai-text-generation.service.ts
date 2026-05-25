@@ -326,7 +326,24 @@ export class OpenAiTextGenerationService {
       iteration += 1;
     }
 
-    const text = this.extractOutputText(response).trim();
+    let text = this.extractOutputText(response).trim();
+
+    if (!text && params.schema) {
+      response = await client.responses.create(
+        {
+          model: params.modelName,
+          previous_response_id: response.id,
+          input: [],
+          text: textConfig,
+          temperature,
+          max_output_tokens: params.maxOutputTokens,
+          reasoning: this.toReasoningConfig(params.reasoningEffort),
+        },
+        { signal: params.abortSignal },
+      );
+      text = this.extractOutputText(response).trim();
+    }
+
     const structured = params.schema ? this.parseStructuredText<TOutput>(text) : null;
     const completedAt = new Date();
     const finishReason = this.readString(response, "status");

@@ -656,9 +656,12 @@ export class ScreeningProcessor
         latencyMs: result.latencyMs,
         ...(result.usage ? {
           openaiTelemetry: {
+            provider: "openai",
+            model: result.modelId,
             usage: {
-              inputTokens: result.usage.inputTokens,
-              outputTokens: result.usage.outputTokens,
+              inputTokens: result.usage.inputTokens ?? 0,
+              outputTokens: result.usage.outputTokens ?? 0,
+              totalTokens: (result.usage.inputTokens ?? 0) + (result.usage.outputTokens ?? 0),
             },
           },
         } : {}),

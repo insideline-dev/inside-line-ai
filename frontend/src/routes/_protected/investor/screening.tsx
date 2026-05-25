@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, Inbox, Loader2 } from "lucide-react";
@@ -81,6 +81,7 @@ function mapBackendRow(row: BackendScreeningRow): ScreeningRow {
 
 function ScreeningPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { data: backendRows, isLoading, error } = useQuery({
     queryKey: ["investor", "screening"],
     queryFn: fetchScreeningQueue,
@@ -111,6 +112,7 @@ function ScreeningPage() {
     onSuccess: (res) => {
       toast.success("Advanced to Due Diligence", { description: res.note });
       invalidateStageQueries();
+      void navigate({ to: "/investor/startup/$id", params: { id: res.startupId } });
     },
     onError: (err) =>
       toast.error("Advance failed", { description: (err as Error).message }),

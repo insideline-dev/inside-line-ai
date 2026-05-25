@@ -114,6 +114,25 @@ function toLensWeights(weights: Record<string, number>): Record<LensKey, number>
   };
 }
 
+function distributeIntegers(total: number, keys: readonly string[], ratios: number[]): Record<string, number> {
+  if (keys.length === 0) return {};
+  if (total <= 0) return Object.fromEntries(keys.map((key) => [key, 0]));
+  const ratioSum = ratios.reduce((sum, r) => sum + Math.max(0, r), 0);
+  const safeRatios = ratioSum > 0 ? ratios : keys.map(() => 1);
+  const safeRatioSum = safeRatios.reduce((sum, r) => sum + r, 0);
+  const allocations = keys.map((key, i) => {
+    const raw = (total * safeRatios[i]) / safeRatioSum;
+    return { key, floor: Math.floor(raw), remainder: raw - Math.floor(raw) };
+  });
+  let remaining = total - allocations.reduce((sum, a) => sum + a.floor, 0);
+  allocations.sort((a, b) => b.remainder - a.remainder);
+  for (let i = 0; i < allocations.length && remaining > 0; i++) {
+    allocations[i].floor += 1;
+    remaining -= 1;
+  }
+  return Object.fromEntries(allocations.map((a) => [a.key, a.floor]));
+}
+
 const CRITERION_TO_LENS: Record<SectionId, LensKey> = Object.fromEntries(
   LENS_KEYS.flatMap((lensKey) =>
     LENS_GROUPS[lensKey].map((criterionId) => [criterionId, lensKey])
@@ -240,13 +259,35 @@ function WeightEditor({
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
-                          <Badge variant="secondary" className="font-medium text-sm px-2.5 py-0.5">
-                            {lensVal}%
-                          </Badge>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={lensVal}
+                            onChange={(e) => {
+                              const v = parseInt(e.target.value, 10);
+                              if (Number.isNaN(v) || v < 0 || v > 100) return;
+                              const keys = LENS_GROUPS[key];
+                              const ratios = keys.map((k) => weights[k] ?? 0);
+                              const distributed = distributeIntegers(v, keys, ratios);
+                              setWeights((prev) => ({ ...prev, ...distributed } as typeof prev));
+                              setHasChanges(true);
+                            }}
+                            className="w-16 text-center h-8"
+                          />
+                          <span className="text-muted-foreground text-sm">%</span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-sm text-muted-foreground">
-                        {lensRationale || "—"}
+                      <td className="px-4 py-3">
+                        <Input
+                          value={lensRationale}
+                          placeholder="Why this lens matters at this stage..."
+                          className="h-8 text-sm"
+                          onChange={(e) => {
+                            const primaryKey = LENS_GROUPS[key][0];
+                            handleRationaleChange(primaryKey, e.target.value);
+                          }}
+                        />
                       </td>
                     </tr>
                   );

@@ -394,17 +394,19 @@ export class InvestorController {
     // 2. Audit the partner's call — keep `screening_review_overridden` as
     //    the default reason tag so legacy callers still get a usable
     //    calibration signal, but layer any partner-supplied tags on top.
-    const reasonTags = (body?.reasonTags ?? []).filter(
-      (tag) => typeof tag === 'string' && tag.trim().length > 0,
-    );
+    const reasonTags = (body?.reasonTags ?? [])
+      .filter((tag) => typeof tag === 'string' && tag.trim().length > 0)
+      .map((tag) => tag.trim().slice(0, 40))
+      .slice(0, 8);
     const auditTags =
       reasonTags.length > 0
         ? ['screening_review_overridden', ...reasonTags]
         : ['screening_review_overridden'];
+    const notes = body?.notes?.slice(0, 500) ?? undefined;
     await this.dealDecisionService.record(user.id, startupId, {
       verdict: 'advance',
       reasonTags: auditTags,
-      notes: body?.notes ?? undefined,
+      notes,
     });
 
     // 3. Re-run from EVALUATION when possible (cheapest path — reuses

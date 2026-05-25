@@ -440,6 +440,13 @@ export function ScreeningDetailBody({
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
       {/* Left: rich write-ups */}
       <div className="flex flex-col gap-4">
+        {row.description && (
+          <Card>
+            <CardContent className="p-4 text-sm leading-relaxed text-foreground/90">
+              {row.description}
+            </CardContent>
+          </Card>
+        )}
         {portfolioConflicts && portfolioConflicts.length > 0 && (
           <PortfolioConflictBanner conflicts={portfolioConflicts} />
         )}
@@ -537,18 +544,6 @@ export function ScreeningDetailBody({
           </section>
         )}
 
-        {row.description && (
-          <section className="flex flex-col gap-2">
-            <h3 className="text-xs font-semibold uppercase text-muted-foreground">
-              Company description
-            </h3>
-            <Card>
-              <CardContent className="p-4 text-sm leading-relaxed text-foreground/90">
-                {row.description}
-              </CardContent>
-            </Card>
-          </section>
-        )}
       </div>
 
       <div className="flex flex-col gap-2 lg:sticky lg:top-4 lg:self-start">

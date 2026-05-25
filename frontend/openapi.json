@@ -874,6 +874,18 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "excludePreScreening",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
           }
         ],
         "responses": {
@@ -2062,6 +2074,18 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "excludePreScreening",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
           }
         ],
         "responses": {
@@ -2155,6 +2179,18 @@
             "in": "query",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "excludePreScreening",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
             }
           }
         ],
@@ -3474,6 +3510,39 @@
         ]
       }
     },
+    "/admin/screening/{startupId}/override": {
+      "post": {
+        "operationId": "AdminController_overrideScreeningVerdict",
+        "parameters": [
+          {
+            "name": "startupId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OverrideScreeningVerdictDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
     "/admin/stats": {
       "get": {
         "operationId": "AdminController_getStats",
@@ -3991,6 +4060,18 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "excludePreScreening",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
           }
         ],
         "responses": {
@@ -4079,6 +4160,18 @@
             "in": "query",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "excludePreScreening",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
             }
           }
         ],
@@ -6327,6 +6420,39 @@
         ]
       }
     },
+    "/investor/screening/{startupId}/override": {
+      "post": {
+        "operationId": "InvestorController_overrideScreeningVerdict",
+        "parameters": [
+          {
+            "name": "startupId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OverrideScreeningVerdictDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      }
+    },
     "/investor/screening/{startupId}/advance": {
       "post": {
         "operationId": "InvestorController_advanceFromScreening",
@@ -6387,9 +6513,9 @@
         ]
       }
     },
-    "/investor/screening/{startupId}/rescreen-dev": {
+    "/investor/screening/{startupId}/rescreen": {
       "post": {
-        "operationId": "InvestorController_rescreenForDev",
+        "operationId": "InvestorController_rescreenStartup",
         "parameters": [
           {
             "name": "startupId",
@@ -10913,6 +11039,31 @@
           ]
         }
       },
+      "OverrideScreeningVerdictDto": {
+        "type": "object",
+        "properties": {
+          "targetClassification": {
+            "type": "string",
+            "enum": [
+              "advance",
+              "review",
+              "reject"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 3
+          },
+          "reasonCode": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "targetClassification",
+          "reason"
+        ]
+      },
       "CalibrationSnapshotResponseDto": {
         "type": "object",
         "properties": {
@@ -14111,6 +14262,12 @@
           "thesisSummary": {
             "type": "string",
             "maxLength": 2000
+          },
+          "skipRematching": {
+            "type": "boolean"
+          },
+          "regenerateSummary": {
+            "type": "boolean"
           }
         }
       },
@@ -14229,6 +14386,14 @@
           "notes": {
             "type": "string",
             "maxLength": 500
+          },
+          "primaryDriverLens": {
+            "type": "string",
+            "enum": [
+              "team",
+              "market",
+              "traction"
+            ]
           }
         },
         "required": [
@@ -15002,6 +15167,14 @@
                   "stop"
                 ]
               },
+              "confidence": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ]
+              },
               "missingMaterials": {
                 "type": "array",
                 "items": {
@@ -15013,6 +15186,7 @@
               "score",
               "signal",
               "nextAction",
+              "confidence",
               "missingMaterials"
             ]
           },

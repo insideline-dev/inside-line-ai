@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from "@nestjs/common";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { desc, eq, inArray } from "drizzle-orm";
 import { DrizzleService } from "../../database";
 import { UserRole } from "../../auth/entities/auth.schema";
 import { startup } from "../startup/entities/startup.schema";
@@ -12,6 +12,9 @@ import {
 import { isVerdict } from "./screening-queue.service";
 import { CalibrationRecomputeService } from "./calibration-recompute.service";
 import { OpenQuestionService } from "../dd/open-question.service";
+import { PipelineService } from "../ai/services/pipeline.service";
+import { PipelineStateService } from "../ai/services/pipeline-state.service";
+import { PipelinePhase } from "../ai/interfaces/pipeline.interface";
 
 export interface ScreeningOverrideActor {
   id: string;
@@ -48,6 +51,8 @@ export class ScreeningOverrideService {
     private drizzle: DrizzleService,
     private calibrationRecompute: CalibrationRecomputeService,
     private openQuestions: OpenQuestionService,
+    private pipelineService: PipelineService,
+    private pipelineState: PipelineStateService,
   ) {}
 
   async createOverride(input: ScreeningOverrideInput): Promise<ScreeningOverrideAuditEntry> {
@@ -98,6 +103,12 @@ export class ScreeningOverrideService {
       });
 
     if (input.targetClassification === "advance") {
+      // Update the base screening_decision classification so the gate sees "advance"
+      await this.drizzle.db
+        .update(screeningDecision)
+        .set({ classification: "advance" })
+        .where(eq(screeningDecision.id, decision.id));
+
       void this.openQuestions
         .dismissTriageDecisionQuestions(input.startupId)
         .catch((err) => {
@@ -106,9 +117,51 @@ export class ScreeningOverrideService {
             `Auto-dismiss open questions failed for startup=${input.startupId}: ${message}`,
           );
         });
+
+      // Trigger evaluation → synthesis pipeline (same pattern as advanceFromScreening)
+      void this.triggerDdPipeline(input.startupId, input.actor.id).catch((err) => {
+        const message = err instanceof Error ? err.message : String(err);
+        this.logger.error(
+          `DD pipeline trigger failed for startup=${input.startupId}: ${message}`,
+        );
+      });
     }
 
     return auditEntry;
+  }
+
+  /**
+   * Trigger DD pipeline (evaluation → synthesis) after an advance override.
+   * Tries rerunFromPhase(EVALUATION) first; falls back to full pipeline.
+   */
+  private async triggerDdPipeline(startupId: string, actorId: string): Promise<void> {
+    const upstreamReady = await (async () => {
+      try {
+        const [extraction, scraping, research] = await Promise.all([
+          this.pipelineState.getPhaseResult(startupId, PipelinePhase.EXTRACTION),
+          this.pipelineState.getPhaseResult(startupId, PipelinePhase.SCRAPING),
+          this.pipelineState.getPhaseResult(startupId, PipelinePhase.RESEARCH),
+        ]);
+        return Boolean(extraction && scraping && research);
+      } catch {
+        return false;
+      }
+    })();
+
+    if (upstreamReady) {
+      try {
+        await this.pipelineService.rerunFromPhase(startupId, PipelinePhase.EVALUATION);
+        return;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (!/not found/i.test(message)) throw err;
+        // State missing — fall through to fresh pipeline
+      }
+    }
+
+    await this.pipelineService.startPipeline(startupId, actorId, {
+      skipExtraction: true,
+    });
   }
 
   async getOverridesForDecisionIds(
@@ -185,14 +238,17 @@ export class ScreeningOverrideService {
       return;
     }
 
-    const [ownedStartup] = await this.drizzle.db
-      .select({ id: startup.id })
-      .from(startup)
-      .where(and(eq(startup.id, startupId), eq(startup.userId, actor.id)))
+    // Investors don't own startups (startup.userId is the founder).
+    // Instead, verify the startup has a screening decision — if it's in
+    // the screening pipeline, the investor has access to override it.
+    const [decision] = await this.drizzle.db
+      .select({ id: screeningDecision.id })
+      .from(screeningDecision)
+      .where(eq(screeningDecision.startupId, startupId))
       .limit(1);
 
-    if (!ownedStartup) {
-      throw new ForbiddenException("You cannot override this startup's screening verdict");
+    if (!decision) {
+      throw new ForbiddenException("No screening decision exists for this startup");
     }
   }
 

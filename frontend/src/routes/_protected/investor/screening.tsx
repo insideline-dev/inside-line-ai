@@ -116,8 +116,10 @@ function ScreeningPage() {
       invalidateStageQueries();
       void navigate({ to: "/investor" });
     },
-    onError: (err) =>
-      toast.error("Advance failed", { description: (err as Error).message }),
+    onError: (err, variables) => {
+      setRows((prev) => prev.map((r) => r.id === variables.startupId ? { ...r, verdict: "review" } : r));
+      toast.error("Advance failed", { description: (err as Error).message });
+    },
   });
 
   const passMutation = useMutation({
@@ -130,8 +132,10 @@ function ScreeningPage() {
       toast.success("Marked as passed — moved to rejected archive.");
       invalidateStageQueries();
     },
-    onError: (err) =>
-      toast.error("Pass failed", { description: (err as Error).message }),
+    onError: (err, variables) => {
+      setRows((prev) => prev.map((r) => r.id === variables.startupId ? { ...r, verdict: "review", dealbreakerNote: null } : r));
+      toast.error("Pass failed", { description: (err as Error).message });
+    },
   });
 
   // Pessimistic local mirror so PASS/ADVANCE update the row immediately.

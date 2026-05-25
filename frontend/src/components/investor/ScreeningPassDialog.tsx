@@ -128,8 +128,11 @@ export function ScreeningPassDialog({
             onClick={handleSubmit}
             disabled={isSubmitting}
           >
-            {isSubmitting && <Loader2 className="mr-2 size-4 animate-spin" />}
-            <X className="mr-1 h-4 w-4" />
+            {isSubmitting ? (
+              <Loader2 className="mr-2 size-4 animate-spin" />
+            ) : (
+              <X className="mr-1 h-4 w-4" />
+            )}
             Pass
           </Button>
         </DialogFooter>

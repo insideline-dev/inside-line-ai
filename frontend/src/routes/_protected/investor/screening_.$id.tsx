@@ -14,6 +14,7 @@ import {
 } from "@/components/investor/ScreeningDetail";
 import { ScreeningVerdictOverrideDialog } from "@/components/investor/ScreeningVerdictOverrideDialog";
 import { ScreeningAdvanceDialog, type AdvanceInput } from "@/components/investor/ScreeningAdvanceDialog";
+import { ScreeningPassDialog, type PassInput } from "@/components/investor/ScreeningPassDialog";
 import type { ScreeningRow, ScreeningVerdict } from "@/components/investor/screening-types";
 import type { InvestmentThesis } from "@/types/investor";
 import { findPortfolioConflicts } from "@/lib/screening/portfolio-conflicts";
@@ -42,6 +43,7 @@ function ScreeningDetailPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [isDownloadingScreening, setIsDownloadingScreening] = useState(false);
+  const [showPassDialog, setShowPassDialog] = useState(false);
 
   const {
     data: rows,
@@ -134,12 +136,14 @@ function ScreeningDetailPage() {
   });
 
   const passMutation = useMutation({
-    mutationFn: (startupId: string) =>
+    mutationFn: ({ startupId, reasonTags, notes }: { startupId: string; reasonTags?: string[]; notes?: string }) =>
       customFetch<{ ok: boolean }>(`/investor/screening/${startupId}/pass`, {
         method: "POST",
+        body: JSON.stringify({ reasonTags, notes }),
       }),
     onSuccess: () => {
       toast.success("Marked as passed — moved to rejected archive.");
+      setShowPassDialog(false);
       invalidateAndBack();
     },
     onError: (err) =>
@@ -148,18 +152,28 @@ function ScreeningDetailPage() {
 
   const overrideMutation = useMutation({
     mutationFn: (input: {
+      startupId: string;
       targetClassification: ScreeningVerdict;
       reason: string;
       reasonCode?: string;
     }) =>
-      customFetch(`/investor/screening/${id}/override`, {
+      customFetch(`/investor/screening/${input.startupId}/override`, {
         method: "POST",
-        body: JSON.stringify(input),
+        body: JSON.stringify({
+          targetClassification: input.targetClassification,
+          reason: input.reason,
+          reasonCode: input.reasonCode,
+        }),
       }),
-    onSuccess: () => {
+    onSuccess: (_res, input) => {
       toast.success("Screening verdict override saved");
       queryClient.invalidateQueries({ queryKey: ["investor", "screening"] });
+      queryClient.invalidateQueries({ queryKey: ["investor", "pipeline"] });
       queryClient.invalidateQueries({ queryKey: ["admin", "screening"] });
+      queryClient.invalidateQueries({ queryKey: ["startupController"] });
+      if (input.targetClassification === "advance") {
+        void navigate({ to: "/investor" });
+      }
     },
     onError: (err) =>
       toast.error("Override failed", { description: (err as Error).message }),
@@ -186,9 +200,8 @@ function ScreeningDetailPage() {
   }, [row, rescreenMutation]);
 
   const handlePass = useCallback(() => {
-    if (!row) return;
-    passMutation.mutate(row.id);
-  }, [row, passMutation]);
+    setShowPassDialog(true);
+  }, []);
 
   const handleAdvance = useCallback(
     (input: AdvanceInput) => {
@@ -285,7 +298,7 @@ function ScreeningDetailPage() {
           <ScreeningVerdictOverrideDialog
             currentVerdict={row.verdict}
             isSubmitting={overrideMutation.isPending}
-            onSubmit={(input) => overrideMutation.mutate(input)}
+            onSubmit={(input) => overrideMutation.mutate({ startupId: id, ...input })}
           />
           <Button
             variant="outline"
@@ -342,6 +355,16 @@ function ScreeningDetailPage() {
           <DealActivityTimeline startupId={id} />
         </TabsContent>
       </Tabs>
+
+      <ScreeningPassDialog
+        open={showPassDialog}
+        onOpenChange={setShowPassDialog}
+        isSubmitting={passMutation.isPending}
+        onSubmit={(input: PassInput) => {
+          if (!row) return;
+          passMutation.mutate({ startupId: row.id, ...input });
+        }}
+      />
     </div>
   );
 }

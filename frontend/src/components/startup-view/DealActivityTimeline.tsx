@@ -192,6 +192,36 @@ export function formatEvent(event: DealEvent): FormattedEvent {
         detail: readString(p, "trigger"),
         tone: "neutral",
       };
+    case "due_diligence.started":
+      return {
+        icon: <Activity className="h-3.5 w-3.5" />,
+        label: "Due diligence started",
+        detail: readString(p, "trigger") ?? readString(p, "path"),
+        tone: "neutral",
+      };
+    case "due_diligence.completed":
+      return {
+        icon: <CheckCircle2 className="h-3.5 w-3.5" />,
+        label: "Due diligence completed",
+        detail:
+          readNumber(p, "overallScore") != null
+            ? `overall score ${readNumber(p, "overallScore")}`
+            : readString(p, "warningMessage"),
+        tone: readString(p, "warningMessage") ? "warn" : "good",
+      };
+    case "calibration.delta_checked": {
+      const count = readNumber(p, "materialDeltaCount") ?? 0;
+      const lenses = readArray<string>(p, "lensKeys");
+      return {
+        icon: <TrendingUp className="h-3.5 w-3.5" />,
+        label: "Calibration delta check",
+        detail:
+          lenses.length > 0
+            ? `${count} material delta${count === 1 ? "" : "s"} · ${lenses.join(", ")}`
+            : `${count} material delta${count === 1 ? "" : "s"}`,
+        tone: count > 0 ? "warn" : "neutral",
+      };
+    }
     case "thesis.regenerated":
       return {
         icon: <Pencil className="h-3.5 w-3.5" />,

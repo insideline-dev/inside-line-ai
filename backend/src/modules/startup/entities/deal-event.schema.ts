@@ -42,6 +42,9 @@ export const DEAL_EVENT_TYPES = [
   "thesis.regenerated",
   "open_questions.seeded",
   "agent.refresh",
+  "due_diligence.started",
+  "due_diligence.completed",
+  "calibration.delta_checked",
   // DS-E8-F1-S2 / F2 — partner-visible lifecycle signals:
   // `stage.changed` fires when an investor moves a deal across the
   // kanban (new → reviewing → engaged → closed / passed / bookmarked).

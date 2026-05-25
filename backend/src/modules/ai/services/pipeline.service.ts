@@ -10,6 +10,7 @@ import { NotificationType } from "../../../notification/entities";
 import { NotificationService } from "../../../notification/notification.service";
 import { QueueService } from "../../../queue";
 import { startup, StartupStatus } from "../../startup/entities";
+import { DealEventService } from "../../startup/deal-event.service";
 import { STARTUP_DESCRIPTION_PLACEHOLDER } from "../../startup/startup.constants";
 import type { MissingMaterialCode } from "../contracts/screening-output/missing-materials";
 import { UserRole } from "../../../auth/entities/auth.schema";
@@ -115,6 +116,7 @@ export const PIPELINE_MISSING_FIELDS_ERROR_PREFIX =
 export class PipelineService {
   private readonly logger = new Logger(PipelineService.name);
   private claraService: ClaraService | null = null;
+  private dealEventService: DealEventService | null = null;
   private readonly typeByPhase: Record<
     PipelinePhase,
     | "document_classification"
@@ -163,6 +165,18 @@ export class PipelineService {
       const { ClaraService: Cls } = require("../../clara/clara.service");
       this.claraService = this.moduleRef.get(Cls, { strict: false });
       return this.claraService;
+    } catch {
+      return null;
+    }
+  }
+
+  private getDealEventService(): DealEventService | null {
+    if (this.dealEventService) return this.dealEventService;
+    try {
+      this.dealEventService = this.moduleRef.get(DealEventService, {
+        strict: false,
+      });
+      return this.dealEventService;
     } catch {
       return null;
     }
@@ -2423,6 +2437,17 @@ export class PipelineService {
         refreshed.pipelineRunId,
       );
       await this.finalizeStartupAfterPipelineCompletion(startupId, refreshed.userId);
+      if (synthesisResult) {
+        void this.getDealEventService()?.record({
+          startupId,
+          type: "due_diligence.completed",
+          payload: {
+            pipelineRunId: refreshed.pipelineRunId,
+            overallScore: synthesisResult.overallScore,
+            warningMessage: degradedCompletionReason,
+          },
+        });
+      }
       if (shouldNotifyTerminal) {
         await this.notifyPipelineLifecycle({
           userId: refreshed.userId,
@@ -2465,6 +2490,16 @@ export class PipelineService {
       refreshed.pipelineRunId,
     );
     await this.finalizeStartupAfterPipelineCompletion(startupId, refreshed.userId);
+    if (synthesisResult) {
+      void this.getDealEventService()?.record({
+        startupId,
+        type: "due_diligence.completed",
+        payload: {
+          pipelineRunId: refreshed.pipelineRunId,
+          overallScore: synthesisResult.overallScore,
+        },
+      });
+    }
     if (shouldNotifyTerminal) {
       if (screeningHold.shouldSkipClaraCompletionEmail) {
         if (screeningHold.actionNeededNotification) {

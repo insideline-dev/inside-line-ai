@@ -24,6 +24,7 @@ import { EvaluationService } from "../services/evaluation.service";
 import { PipelineStateService } from "../services/pipeline-state.service";
 import { PipelineService } from "../services/pipeline.service";
 import { LensDeltaService } from "../../investor/lens-delta.service";
+import { DealEventService } from "../../startup/deal-event.service";
 import { runPipelinePhase } from "./run-phase.util";
 
 @Injectable()
@@ -41,6 +42,7 @@ export class EvaluationProcessor
     private notificationGateway: NotificationGateway,
     @Inject(forwardRef(() => LensDeltaService))
     private lensDeltaService: LensDeltaService,
+    private dealEvents: DealEventService,
   ) {
     const redisUrl = config.get<string>("REDIS_URL", "redis://localhost:6379");
     const queuePrefix = config.get<string>("QUEUE_PREFIX");
@@ -317,7 +319,7 @@ export class EvaluationProcessor
         traction?: { score?: number };
       };
       try {
-        await this.lensDeltaService.computeAndPersistForEvaluation({
+        const deltaRows = await this.lensDeltaService.computeAndPersistForEvaluation({
           startupId: runResult.startupId,
           pipelineRunId: runResult.pipelineRunId,
           evaluation: {
@@ -335,6 +337,15 @@ export class EvaluationProcessor
                 : null,
             ddAgentVersion:
               process.env.AI_MODEL_EVALUATION ?? null,
+          },
+        });
+        void this.dealEvents.record({
+          startupId: runResult.startupId,
+          type: "calibration.delta_checked",
+          payload: {
+            pipelineRunId: runResult.pipelineRunId,
+            materialDeltaCount: deltaRows.length,
+            lensKeys: deltaRows.map((row) => row.lensKey),
           },
         });
       } catch (err) {

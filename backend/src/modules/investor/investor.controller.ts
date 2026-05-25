@@ -16,6 +16,7 @@ import { JwtAuthGuard } from '../../auth/guards';
 import { CurrentUser } from '../../auth/decorators';
 import { UserRole } from '../../auth/entities/auth.schema';
 import { StartupStage } from '../startup/entities/startup.schema';
+import { DealEventService } from '../startup/deal-event.service';
 import { RolesGuard } from '../startup/guards';
 import { Roles } from '../startup/decorators/roles.decorator';
 import { ThesisService } from './thesis.service';
@@ -99,6 +100,7 @@ export class InvestorController {
     private progressTracker: ProgressTrackerService,
     private pipelineState: PipelineStateService,
     private drizzle: DrizzleService,
+    private dealEvents: DealEventService,
   ) {}
 
   // ============ THESIS ENDPOINTS ============
@@ -364,6 +366,24 @@ export class InvestorController {
       .set({ classification: 'advance' })
       .where(eq(screeningDecision.id, latest.id));
 
+    try {
+      const screeningResult = await this.pipelineState.getPhaseResult(
+        startupId,
+        PipelinePhase.SCREENING,
+      );
+      if (screeningResult) {
+        await this.pipelineState.setPhaseResult(startupId, PipelinePhase.SCREENING, {
+          ...screeningResult,
+          classification: 'advance',
+          nextAction: 'continue_evaluation',
+          missingMaterials: [],
+        });
+      }
+    } catch {
+      // Ignore missing pipeline state here — the rerun path below already
+      // handles absent state separately.
+    }
+
     // 2. Audit the partner's call — keep `screening_review_overridden` as
     //    the default reason tag so legacy callers still get a usable
     //    calibration signal, but layer any partner-supplied tags on top.
@@ -456,6 +476,16 @@ export class InvestorController {
         );
       }
     }
+
+    void this.dealEvents.record({
+      startupId,
+      actorUserId: user.id,
+      type: 'due_diligence.started',
+      payload: {
+        trigger: 'screening_advance',
+        path,
+      },
+    });
 
     return {
       ok: true,

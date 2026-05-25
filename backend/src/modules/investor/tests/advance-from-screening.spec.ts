@@ -5,6 +5,7 @@ import { InvestorController } from "../investor.controller";
 import { ThesisService } from "../thesis.service";
 import { MatchService } from "../match.service";
 import { TeamService } from "../team.service";
+import { DealbreakerParseService } from "../dealbreaker-parse.service";
 import { InvestorNoteService } from "../investor-note.service";
 import { PortfolioService } from "../portfolio.service";
 import { DealPipelineService } from "../deal-pipeline.service";
@@ -23,6 +24,7 @@ import { ProgressTrackerService } from "../../ai/orchestrator/progress-tracker.s
 import { PipelineStateService } from "../../ai/services/pipeline-state.service";
 import { DrizzleService } from "../../../database";
 import { UserRole } from "../../../auth/entities/auth.schema";
+import { DealEventService } from "../../startup/deal-event.service";
 
 const STARTUP_ID = "11111111-2222-4222-8444-555555555555";
 const investor = {
@@ -40,6 +42,7 @@ describe("InvestorController.advanceFromScreening", () => {
   let drizzleUpdateMock: ReturnType<typeof jest.fn>;
   let pipelineService: { rerunFromPhase: ReturnType<typeof jest.fn> };
   let dealDecisionService: { record: ReturnType<typeof jest.fn> };
+  let dealEvents: { record: ReturnType<typeof jest.fn> };
 
   function buildSelectMock(latestRow: { id: string } | null) {
     const limit = jest.fn().mockResolvedValue(latestRow ? [latestRow] : []);
@@ -60,11 +63,13 @@ describe("InvestorController.advanceFromScreening", () => {
     drizzleUpdateMock = buildUpdateMock();
     pipelineService = { rerunFromPhase: jest.fn().mockResolvedValue(undefined) };
     dealDecisionService = { record: jest.fn().mockResolvedValue({}) };
+    dealEvents = { record: jest.fn().mockResolvedValue({}) };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [InvestorController],
       providers: [
         { provide: ThesisService, useValue: {} },
+        { provide: DealbreakerParseService, useValue: {} },
         { provide: MatchService, useValue: {} },
         { provide: TeamService, useValue: {} },
         { provide: InvestorNoteService, useValue: {} },
@@ -96,8 +101,10 @@ describe("InvestorController.advanceFromScreening", () => {
             getPhaseResult: jest
               .fn()
               .mockResolvedValue({ stub: 'phase-result' }),
+            setPhaseResult: jest.fn().mockResolvedValue(undefined),
           },
         },
+        { provide: DealEventService, useValue: dealEvents },
         {
           provide: DrizzleService,
           useValue: {
@@ -121,7 +128,7 @@ describe("InvestorController.advanceFromScreening", () => {
     expect(pipelineService.rerunFromPhase).not.toHaveBeenCalled();
   });
 
-  it("overrides verdict to 'advance', records the decision, and re-runs from EVALUATION", async () => {
+  it("overrides verdict to 'advance', syncs cached screening state, and queues DD", async () => {
     const res = await controller.advanceFromScreening(STARTUP_ID, investor);
     expect(res.ok).toBe(true);
     expect(res.verdict).toBe("advance");
@@ -132,9 +139,25 @@ describe("InvestorController.advanceFromScreening", () => {
       STARTUP_ID,
       expect.objectContaining({ verdict: "advance" }),
     );
+    expect((controller as unknown as { pipelineState: { setPhaseResult: ReturnType<typeof jest.fn> } }).pipelineState.setPhaseResult).toHaveBeenCalledWith(
+      STARTUP_ID,
+      "screening",
+      expect.objectContaining({
+        classification: "advance",
+        nextAction: "continue_evaluation",
+        missingMaterials: [],
+      }),
+    );
     expect(pipelineService.rerunFromPhase).toHaveBeenCalledWith(
       STARTUP_ID,
       "evaluation",
+    );
+    expect(dealEvents.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startupId: STARTUP_ID,
+        actorUserId: investor.id,
+        type: "due_diligence.started",
+      }),
     );
   });
 
@@ -184,11 +207,13 @@ describe("InvestorController.advanceFromScreening", () => {
     };
     const localStateService = {
       getPhaseResult: jest.fn().mockResolvedValue(null),
+      setPhaseResult: jest.fn().mockResolvedValue(undefined),
     };
     const module: TestingModule = await Test.createTestingModule({
       controllers: [InvestorController],
       providers: [
         { provide: ThesisService, useValue: {} },
+        { provide: DealbreakerParseService, useValue: {} },
         { provide: MatchService, useValue: {} },
         { provide: TeamService, useValue: {} },
         { provide: InvestorNoteService, useValue: {} },
@@ -210,6 +235,7 @@ describe("InvestorController.advanceFromScreening", () => {
           useValue: { initProgress: jest.fn(), updatePhaseProgress: jest.fn() },
         },
         { provide: PipelineStateService, useValue: localStateService },
+        { provide: DealEventService, useValue: dealEvents },
         {
           provide: DrizzleService,
           useValue: {
@@ -245,6 +271,7 @@ describe("InvestorController.passFromScreening", () => {
   let drizzleSelectMock: ReturnType<typeof jest.fn>;
   let drizzleUpdateMock: ReturnType<typeof jest.fn>;
   let dealDecisionService: { record: ReturnType<typeof jest.fn> };
+  let dealEvents: { record: ReturnType<typeof jest.fn> };
 
   beforeEach(async () => {
     const latestRow = { id: "decision-1" };
@@ -257,11 +284,13 @@ describe("InvestorController.passFromScreening", () => {
     const set = jest.fn().mockReturnValue({ where: updateWhere });
     drizzleUpdateMock = jest.fn().mockReturnValue({ set });
     dealDecisionService = { record: jest.fn().mockResolvedValue({}) };
+    dealEvents = { record: jest.fn().mockResolvedValue({}) };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [InvestorController],
       providers: [
         { provide: ThesisService, useValue: {} },
+        { provide: DealbreakerParseService, useValue: {} },
         { provide: MatchService, useValue: {} },
         { provide: TeamService, useValue: {} },
         { provide: InvestorNoteService, useValue: {} },
@@ -293,8 +322,10 @@ describe("InvestorController.passFromScreening", () => {
             getPhaseResult: jest
               .fn()
               .mockResolvedValue({ stub: 'phase-result' }),
+            setPhaseResult: jest.fn().mockResolvedValue(undefined),
           },
         },
+        { provide: DealEventService, useValue: dealEvents },
         {
           provide: DrizzleService,
           useValue: {

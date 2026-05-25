@@ -87,7 +87,7 @@ function MatchDetailPanel({ event }: { event: ActivityEvent }) {
         )}
       </div>
       {event.matchFitRationale && (
-        <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">
+        <p className="text-xs text-muted-foreground leading-relaxed">
           {event.matchFitRationale}
         </p>
       )}

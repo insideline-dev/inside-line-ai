@@ -608,7 +608,7 @@ export function AdminSummaryTab({
                 )}>{thesisAlignment.thesisFitScore}</span>
               </div>
               {thesisAlignment.rationale && (
-                <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">{thesisAlignment.rationale}</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">{thesisAlignment.rationale}</p>
               )}
               {thesisAlignment.matchedAt && (
                 <time

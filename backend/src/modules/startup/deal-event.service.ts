@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { DrizzleService } from "../../database";
 import { UserRole } from "../../auth/entities/auth.schema";
 import {
@@ -79,7 +79,7 @@ export class DealEventService {
   async forInvestor(
     investorId: string,
     options: { limit?: number } = {},
-  ): Promise<(DealEventRow & { startupName: string | null })[]> {
+  ) {
     const limit = Math.min(Math.max(options.limit ?? 100, 1), 500);
 
     const investorStartupIds = await this.drizzle.db
@@ -100,9 +100,21 @@ export class DealEventService {
         payload: dealEvent.payload,
         occurredAt: dealEvent.occurredAt,
         startupName: startup.name,
+        matchThesisFitScore: startupMatch.thesisFitScore,
+        matchOverallScore: startupMatch.overallScore,
+        matchStatus: startupMatch.status,
+        matchFitRationale: startupMatch.fitRationale,
+        matchUpdatedAt: startupMatch.updatedAt,
       })
       .from(dealEvent)
       .innerJoin(startup, eq(startup.id, dealEvent.startupId))
+      .leftJoin(
+        startupMatch,
+        and(
+          eq(startupMatch.startupId, dealEvent.startupId),
+          eq(startupMatch.investorId, investorId),
+        ),
+      )
       .where(inArray(dealEvent.startupId, ids))
       .orderBy(desc(dealEvent.occurredAt))
       .limit(limit);

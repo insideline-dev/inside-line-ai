@@ -1,10 +1,12 @@
+import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { customFetch } from "@/api/client";
-import { History } from "lucide-react";
+import { ChevronDown, ChevronRight, ExternalLink, History } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { formatEvent } from "@/components/startup-view/DealActivityTimeline";
@@ -21,6 +23,11 @@ interface ActivityEvent {
   payload?: Record<string, unknown> | null;
   occurredAt: string;
   startupName: string | null;
+  matchThesisFitScore?: number | null;
+  matchOverallScore?: number | null;
+  matchStatus?: string | null;
+  matchFitRationale?: string | null;
+  matchUpdatedAt?: string | null;
 }
 
 const TONE_CLASSES: Record<string, string> = {
@@ -31,6 +38,138 @@ const TONE_CLASSES: Record<string, string> = {
   neutral: "border-sky-400/40 bg-sky-50 text-sky-700",
 };
 
+function scoreColor(score: number): string {
+  if (score >= 80) return "text-emerald-600";
+  if (score >= 60) return "text-green-600";
+  if (score >= 40) return "text-amber-600";
+  return "text-rose-600";
+}
+
+function hasMatchData(event: ActivityEvent): boolean {
+  return (
+    typeof event.matchThesisFitScore === "number" &&
+    (event.type === "matching.completed" ||
+      event.type === "matching.failed" ||
+      event.type === "thesis.regenerated")
+  );
+}
+
+function MatchDetailPanel({ event }: { event: ActivityEvent }) {
+  const fit = event.matchThesisFitScore!;
+  const overall = event.matchOverallScore ?? null;
+
+  return (
+    <div className="mt-2 rounded-md border bg-muted/30 p-3 space-y-2 text-sm">
+      <div className="flex items-center gap-4">
+        <div>
+          <span className="text-muted-foreground text-xs">Thesis Fit</span>
+          <p className={cn("text-lg font-bold tabular-nums", scoreColor(fit))}>
+            {fit}
+          </p>
+        </div>
+        {overall != null && (
+          <div>
+            <span className="text-muted-foreground text-xs">Overall Score</span>
+            <p className={cn("text-lg font-bold tabular-nums", scoreColor(overall))}>
+              {overall}
+            </p>
+          </div>
+        )}
+        {event.matchStatus && (
+          <div>
+            <span className="text-muted-foreground text-xs">Status</span>
+            <p className="text-xs font-medium mt-1">
+              <Badge variant="outline" className="text-[10px]">
+                {event.matchStatus}
+              </Badge>
+            </p>
+          </div>
+        )}
+      </div>
+      {event.matchFitRationale && (
+        <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">
+          {event.matchFitRationale}
+        </p>
+      )}
+      <Link
+        to="/investor/startup/$id"
+        params={{ id: event.startupId }}
+        className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+      >
+        View full analysis
+        <ExternalLink className="h-3 w-3" />
+      </Link>
+    </div>
+  );
+}
+
+function ActivityEventItem({ event }: { event: ActivityEvent }) {
+  const [expanded, setExpanded] = useState(false);
+  const f = formatEvent(event);
+  const occurred = new Date(event.occurredAt);
+  const expandable = hasMatchData(event);
+
+  return (
+    <li className="relative">
+      <span
+        className={cn(
+          "absolute -left-[1.625rem] top-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full border bg-background",
+          TONE_CLASSES[f.tone] ?? TONE_CLASSES.default,
+        )}
+      >
+        {f.icon}
+      </span>
+      <div className="space-y-0.5">
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm">
+          <Link
+            to="/investor/startup/$id"
+            params={{ id: event.startupId }}
+            className="font-semibold text-primary hover:underline"
+          >
+            {event.startupName ?? "Unknown startup"}
+          </Link>
+          <span className="font-medium">{f.label}</span>
+          {f.detail && (
+            <Badge variant="outline" className="text-[10px] font-normal">
+              {f.detail}
+            </Badge>
+          )}
+          {expandable && typeof event.matchThesisFitScore === "number" && (
+            <Badge
+              variant="secondary"
+              className="text-[10px] font-medium"
+            >
+              your fit: {event.matchThesisFitScore}
+            </Badge>
+          )}
+          {expandable && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="ml-auto h-5 w-5 p-0"
+              onClick={() => setExpanded((v) => !v)}
+            >
+              {expanded ? (
+                <ChevronDown className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5" />
+              )}
+            </Button>
+          )}
+        </div>
+        <time
+          dateTime={event.occurredAt}
+          className="text-[11px] text-muted-foreground"
+          title={format(occurred, "MMM d, yyyy h:mm a")}
+        >
+          {formatDistanceToNow(occurred, { addSuffix: true })}
+        </time>
+        {expanded && <MatchDetailPanel event={event} />}
+      </div>
+    </li>
+  );
+}
+
 function InvestorActivityPage() {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["investor", "activity"],
@@ -40,7 +179,10 @@ function InvestorActivityPage() {
     refetchOnWindowFocus: false,
   });
 
-  const events = (Array.isArray(data) ? data : (data as unknown as { data?: ActivityEvent[] })?.data) ?? [];
+  const events =
+    (Array.isArray(data)
+      ? data
+      : (data as unknown as { data?: ActivityEvent[] })?.data) ?? [];
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-6">
@@ -80,49 +222,9 @@ function InvestorActivityPage() {
             </p>
           ) : (
             <ol className="relative ml-2 space-y-4 border-l border-border pl-4">
-              {events.map((event) => {
-                const f = formatEvent(event);
-                const occurred = new Date(event.occurredAt);
-                return (
-                  <li key={event.id} className="relative">
-                    <span
-                      className={cn(
-                        "absolute -left-[1.625rem] top-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full border bg-background",
-                        TONE_CLASSES[f.tone] ?? TONE_CLASSES.default,
-                      )}
-                    >
-                      {f.icon}
-                    </span>
-                    <div className="space-y-0.5">
-                      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm">
-                        <Link
-                          to="/investor/startup/$id"
-                          params={{ id: event.startupId }}
-                          className="font-semibold text-primary hover:underline"
-                        >
-                          {event.startupName ?? "Unknown startup"}
-                        </Link>
-                        <span className="font-medium">{f.label}</span>
-                        {f.detail && (
-                          <Badge
-                            variant="outline"
-                            className="text-[10px] font-normal"
-                          >
-                            {f.detail}
-                          </Badge>
-                        )}
-                      </div>
-                      <time
-                        dateTime={event.occurredAt}
-                        className="text-[11px] text-muted-foreground"
-                        title={format(occurred, "MMM d, yyyy h:mm a")}
-                      >
-                        {formatDistanceToNow(occurred, { addSuffix: true })}
-                      </time>
-                    </div>
-                  </li>
-                );
-              })}
+              {events.map((event) => (
+                <ActivityEventItem key={event.id} event={event} />
+              ))}
             </ol>
           )}
         </CardContent>

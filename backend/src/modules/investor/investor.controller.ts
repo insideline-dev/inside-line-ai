@@ -36,6 +36,7 @@ import { ScreeningCalibrationService } from './screening-calibration.service';
 import { ScreeningOverrideService } from './screening-override.service';
 import { OverrideScreeningVerdictDto } from './dto/override-screening-verdict.dto';
 import { PipelineService } from '../ai/services/pipeline.service';
+import { PipelineStateService } from '../ai/services/pipeline-state.service';
 import { screeningDecision } from '../ai/entities/screening-decision.schema';
 import { PipelinePhase } from '../ai/interfaces/pipeline.interface';
 import { desc, eq } from 'drizzle-orm';
@@ -94,6 +95,7 @@ export class InvestorController {
     private screeningCalibrationService: ScreeningCalibrationService,
     private screeningOverrideService: ScreeningOverrideService,
     private pipelineCoreService: PipelineService,
+    private pipelineState: PipelineStateService,
     private drizzle: DrizzleService,
     private dealEvents: DealEventService,
   ) {}
@@ -427,11 +429,12 @@ export class InvestorController {
       notes,
     });
 
-    // 3. Continue the pipeline from RESEARCH (first DD phase). RESEARCH
-    //    depends on SCREENING which is already completed, so the chain
-    //    fires: RESEARCH → EVALUATION → SYNTHESIS. Never fall back to
-    //    startPipeline() — that re-runs SCREENING and overwrites the
-    //    advance verdict.
+    // 3. Prefer continuing from RESEARCH (first DD phase). If the old
+    //    screening card no longer has cached pipeline state, restart the
+    //    full pipeline from the beginning so the deal gets re-screened and
+    //    rebuilt instead of hard-failing.
+    let path: 'rerun_from_research' | 'fresh_full_pipeline' =
+      'rerun_from_research';
     try {
       await this.pipelineCoreService.rerunFromPhase(
         startupId,
@@ -439,9 +442,23 @@ export class InvestorController {
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      throw new NotFoundException(
-        `Could not start DD from screening — ${message}`,
-      );
+      const isStateMissing = /not found/i.test(message);
+      if (!isStateMissing) {
+        throw new NotFoundException(
+          `Could not start DD from screening — ${message}`,
+        );
+      }
+
+      try {
+        await this.pipelineCoreService.startPipeline(startupId, user.id);
+        path = 'fresh_full_pipeline';
+      } catch (fallbackErr) {
+        const fallbackMessage =
+          fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
+        throw new NotFoundException(
+          `Could not start DD from screening — ${fallbackMessage}`,
+        );
+      }
     }
 
     void this.dealEvents.record({
@@ -458,8 +475,11 @@ export class InvestorController {
       ok: true,
       startupId,
       verdict: 'advance' as const,
-      path: 'rerun_from_research' as const,
-      note: 'Research + evaluation + synthesis queued; deal will move to DD when complete.',
+      path,
+      note:
+        path === 'rerun_from_research'
+          ? 'Research + evaluation + synthesis queued; deal will move to DD when complete.'
+          : 'No cached pipeline state was found, so the deal was restarted from the beginning and will be re-screened.',
     };
   }
 

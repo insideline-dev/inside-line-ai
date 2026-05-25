@@ -25,6 +25,7 @@ import { PipelineStateService } from "../../ai/services/pipeline-state.service";
 import { DrizzleService } from "../../../database";
 import { UserRole } from "../../../auth/entities/auth.schema";
 import { DealEventService } from "../../startup/deal-event.service";
+import { ScreeningOverrideService } from "../screening-override.service";
 
 const STARTUP_ID = "11111111-2222-4222-8444-555555555555";
 const investor = {
@@ -43,6 +44,10 @@ describe("InvestorController.advanceFromScreening", () => {
   let pipelineService: { rerunFromPhase: ReturnType<typeof jest.fn> };
   let dealDecisionService: { record: ReturnType<typeof jest.fn> };
   let dealEvents: { record: ReturnType<typeof jest.fn> };
+  let pipelineStateService: {
+    getPhaseResult: ReturnType<typeof jest.fn>;
+    setPhaseResult: ReturnType<typeof jest.fn>;
+  };
 
   function buildSelectMock(latestRow: { id: string } | null) {
     const limit = jest.fn().mockResolvedValue(latestRow ? [latestRow] : []);
@@ -64,6 +69,10 @@ describe("InvestorController.advanceFromScreening", () => {
     pipelineService = { rerunFromPhase: jest.fn().mockResolvedValue(undefined) };
     dealDecisionService = { record: jest.fn().mockResolvedValue({}) };
     dealEvents = { record: jest.fn().mockResolvedValue({}) };
+    pipelineStateService = {
+      getPhaseResult: jest.fn().mockResolvedValue({ stub: 'phase-result' }),
+      setPhaseResult: jest.fn().mockResolvedValue(undefined),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [InvestorController],
@@ -84,25 +93,12 @@ describe("InvestorController.advanceFromScreening", () => {
         { provide: StartupMatchingPipelineService, useValue: {} },
         { provide: ScreeningQueueService, useValue: {} },
         { provide: ScreeningCalibrationService, useValue: {} },
+        { provide: ScreeningOverrideService, useValue: {} },
         { provide: ScreeningProcessor, useValue: {} },
         { provide: PipelineService, useValue: pipelineService },
         {
-          provide: ProgressTrackerService,
-          useValue: {
-            initProgress: jest.fn(),
-            updatePhaseProgress: jest.fn(),
-          },
-        },
-        {
           provide: PipelineStateService,
-          // Truthy values → upstream-ready precheck passes → endpoint picks
-          // the rerun_from_eval path (covered by the advance assertions).
-          useValue: {
-            getPhaseResult: jest
-              .fn()
-              .mockResolvedValue({ stub: 'phase-result' }),
-            setPhaseResult: jest.fn().mockResolvedValue(undefined),
-          },
+          useValue: pipelineStateService,
         },
         { provide: DealEventService, useValue: dealEvents },
         {
@@ -132,25 +128,16 @@ describe("InvestorController.advanceFromScreening", () => {
     const res = await controller.advanceFromScreening(STARTUP_ID, investor);
     expect(res.ok).toBe(true);
     expect(res.verdict).toBe("advance");
-    expect(res.note).toMatch(/Evaluation \+ synthesis queued/);
+    expect(res.note).toMatch(/Research \+ evaluation \+ synthesis queued/);
     expect(drizzleUpdateMock).toHaveBeenCalled();
     expect(dealDecisionService.record).toHaveBeenCalledWith(
       investor.id,
       STARTUP_ID,
       expect.objectContaining({ verdict: "advance" }),
     );
-    expect((controller as unknown as { pipelineState: { setPhaseResult: ReturnType<typeof jest.fn> } }).pipelineState.setPhaseResult).toHaveBeenCalledWith(
-      STARTUP_ID,
-      "screening",
-      expect.objectContaining({
-        classification: "advance",
-        nextAction: "continue_evaluation",
-        missingMaterials: [],
-      }),
-    );
     expect(pipelineService.rerunFromPhase).toHaveBeenCalledWith(
       STARTUP_ID,
-      "evaluation",
+      "research",
     );
     expect(dealEvents.record).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -196,13 +183,12 @@ describe("InvestorController.advanceFromScreening", () => {
     );
   });
 
-  it("falls back to fresh_full_pipeline when upstream phase results are missing", async () => {
-    // Build a fresh module where PipelineStateService.getPhaseResult
-    // returns null for all phases — the upstream-ready precheck must
-    // detect this and skip rerunFromPhase entirely.
+  it("falls back to fresh_full_pipeline when pipeline state is missing", async () => {
     const startPipelineMock = jest.fn().mockResolvedValue('new-run-id');
     const localPipelineService = {
-      rerunFromPhase: jest.fn(),
+      rerunFromPhase: jest
+        .fn()
+        .mockRejectedValue(new Error('Pipeline state not found')),
       startPipeline: startPipelineMock,
     };
     const localStateService = {
@@ -228,6 +214,7 @@ describe("InvestorController.advanceFromScreening", () => {
         { provide: StartupMatchingPipelineService, useValue: {} },
         { provide: ScreeningQueueService, useValue: {} },
         { provide: ScreeningCalibrationService, useValue: {} },
+        { provide: ScreeningOverrideService, useValue: {} },
         { provide: ScreeningProcessor, useValue: {} },
         { provide: PipelineService, useValue: localPipelineService },
         {
@@ -248,11 +235,13 @@ describe("InvestorController.advanceFromScreening", () => {
     const res = await localController.advanceFromScreening(STARTUP_ID, investor);
     expect(res.ok).toBe(true);
     expect(res.path).toBe('fresh_full_pipeline');
-    expect(localPipelineService.rerunFromPhase).not.toHaveBeenCalled();
+    expect(localPipelineService.rerunFromPhase).toHaveBeenCalledWith(
+      STARTUP_ID,
+      'research',
+    );
     expect(startPipelineMock).toHaveBeenCalledWith(
       STARTUP_ID,
       investor.id,
-      expect.objectContaining({ skipExtraction: true }),
     );
   });
 
@@ -305,6 +294,7 @@ describe("InvestorController.passFromScreening", () => {
         { provide: StartupMatchingPipelineService, useValue: {} },
         { provide: ScreeningQueueService, useValue: {} },
         { provide: ScreeningCalibrationService, useValue: {} },
+        { provide: ScreeningOverrideService, useValue: {} },
         { provide: ScreeningProcessor, useValue: {} },
         { provide: PipelineService, useValue: { rerunFromPhase: jest.fn() } },
         {

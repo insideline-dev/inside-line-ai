@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, inArray } from "drizzle-orm";
 import { DrizzleService } from "../../database";
 import { UserRole } from "../../auth/entities/auth.schema";
 import {
@@ -7,6 +7,8 @@ import {
   type DealEventRow,
   type DealEventType,
 } from "./entities/deal-event.schema";
+import { startupMatch } from "../investor/entities/investor.schema";
+import { startup } from "./entities/startup.schema";
 
 /**
  * DS-E8-F1-S1 — append-only event log for deal-level changes. The
@@ -70,6 +72,40 @@ export class DealEventService {
     if (options.viewerRole !== UserRole.FOUNDER) {
       return rows;
     }
+
+    return rows.filter((row) => row.type !== "decision.recorded");
+  }
+
+  async forInvestor(
+    investorId: string,
+    options: { limit?: number } = {},
+  ): Promise<(DealEventRow & { startupName: string | null })[]> {
+    const limit = Math.min(Math.max(options.limit ?? 100, 1), 500);
+
+    const investorStartupIds = await this.drizzle.db
+      .select({ startupId: startupMatch.startupId })
+      .from(startupMatch)
+      .where(eq(startupMatch.investorId, investorId));
+
+    if (investorStartupIds.length === 0) return [];
+
+    const ids = investorStartupIds.map((r) => r.startupId);
+
+    const rows = await this.drizzle.db
+      .select({
+        id: dealEvent.id,
+        startupId: dealEvent.startupId,
+        actorUserId: dealEvent.actorUserId,
+        type: dealEvent.type,
+        payload: dealEvent.payload,
+        occurredAt: dealEvent.occurredAt,
+        startupName: startup.name,
+      })
+      .from(dealEvent)
+      .innerJoin(startup, eq(startup.id, dealEvent.startupId))
+      .where(inArray(dealEvent.startupId, ids))
+      .orderBy(desc(dealEvent.occurredAt))
+      .limit(limit);
 
     return rows.filter((row) => row.type !== "decision.recorded");
   }

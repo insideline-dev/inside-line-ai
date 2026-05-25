@@ -173,34 +173,17 @@ export class ScreeningProcessor
       throw new Error("Invalid job type for screening processor");
     }
 
-    // Lenses are <30s each; with concurrency 3 the phase should land well under
-    // the 3-minute budget. Heartbeat once a minute as a safety net so the
-    // BullMQ stall watcher doesn't fire if a single lens drags.
-    const HEARTBEAT_MS = 60 * 1000;
-    const LOCK_DURATION_MS = 5 * 60 * 1000;
-    const heartbeat = setInterval(() => {
-      job.extendLock(job.token!, LOCK_DURATION_MS).catch((err: unknown) => {
-        this.logger.warn(
-          `[ScreeningProcessor] Failed to extend job lock: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      });
-    }, HEARTBEAT_MS);
-
     let runResult: Awaited<ReturnType<typeof runPipelinePhase>>;
-    try {
-      runResult = await runPipelinePhase({
-        job,
-        phase: PipelinePhase.SCREENING,
-        jobType: "ai_screening",
-        pipelineState: this.pipelineState,
-        pipelineService: this.pipelineService,
-        notificationGateway: this.notificationGateway,
-        run: () =>
-          this.runScreening(startupId, pipelineRunId, { userId }),
-      });
-    } finally {
-      clearInterval(heartbeat);
-    }
+    runResult = await runPipelinePhase({
+      job,
+      phase: PipelinePhase.SCREENING,
+      jobType: "ai_screening",
+      pipelineState: this.pipelineState,
+      pipelineService: this.pipelineService,
+      notificationGateway: this.notificationGateway,
+      run: () =>
+        this.runScreening(startupId, pipelineRunId, { userId }),
+    });
 
     return {
       type: "ai_screening",

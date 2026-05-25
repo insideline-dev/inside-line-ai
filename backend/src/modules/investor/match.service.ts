@@ -253,7 +253,7 @@ export class MatchService {
           await this.startupMatchingPipeline.queueStartupMatching({
             startupId: id,
             requestedBy: investorId,
-            triggerSource: 'retry',
+            triggerSource: 'thesis_update',
             requireApproved: true,
           });
           queued += 1;

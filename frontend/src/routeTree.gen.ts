@@ -44,6 +44,7 @@ import { Route as ProtectedInvestorNotesRouteImport } from './routes/_protected/
 import { Route as ProtectedInvestorMessagingRouteImport } from './routes/_protected/investor/messaging'
 import { Route as ProtectedInvestorDataRoomRouteImport } from './routes/_protected/investor/data-room'
 import { Route as ProtectedInvestorContractingRouteImport } from './routes/_protected/investor/contracting'
+import { Route as ProtectedInvestorActivityRouteImport } from './routes/_protected/investor/activity'
 import { Route as ProtectedFounderSubmitRouteImport } from './routes/_protected/founder/submit'
 import { Route as ProtectedFounderMeetingsRouteImport } from './routes/_protected/founder/meetings'
 import { Route as ProtectedFounderInvestorInterestRouteImport } from './routes/_protected/founder/investor-interest'
@@ -251,6 +252,12 @@ const ProtectedInvestorContractingRoute =
     path: '/contracting',
     getParentRoute: () => ProtectedInvestorRoute,
   } as any)
+const ProtectedInvestorActivityRoute =
+  ProtectedInvestorActivityRouteImport.update({
+    id: '/activity',
+    path: '/activity',
+    getParentRoute: () => ProtectedInvestorRoute,
+  } as any)
 const ProtectedFounderSubmitRoute = ProtectedFounderSubmitRouteImport.update({
   id: '/submit',
   path: '/submit',
@@ -414,6 +421,7 @@ export interface FileRoutesByFullPath {
   '/founder/investor-interest': typeof ProtectedFounderInvestorInterestRoute
   '/founder/meetings': typeof ProtectedFounderMeetingsRoute
   '/founder/submit': typeof ProtectedFounderSubmitRoute
+  '/investor/activity': typeof ProtectedInvestorActivityRoute
   '/investor/contracting': typeof ProtectedInvestorContractingRoute
   '/investor/data-room': typeof ProtectedInvestorDataRoomRoute
   '/investor/messaging': typeof ProtectedInvestorMessagingRoute
@@ -470,6 +478,7 @@ export interface FileRoutesByTo {
   '/founder/investor-interest': typeof ProtectedFounderInvestorInterestRoute
   '/founder/meetings': typeof ProtectedFounderMeetingsRoute
   '/founder/submit': typeof ProtectedFounderSubmitRoute
+  '/investor/activity': typeof ProtectedInvestorActivityRoute
   '/investor/contracting': typeof ProtectedInvestorContractingRoute
   '/investor/data-room': typeof ProtectedInvestorDataRoomRoute
   '/investor/messaging': typeof ProtectedInvestorMessagingRoute
@@ -532,6 +541,7 @@ export interface FileRoutesById {
   '/_protected/founder/investor-interest': typeof ProtectedFounderInvestorInterestRoute
   '/_protected/founder/meetings': typeof ProtectedFounderMeetingsRoute
   '/_protected/founder/submit': typeof ProtectedFounderSubmitRoute
+  '/_protected/investor/activity': typeof ProtectedInvestorActivityRoute
   '/_protected/investor/contracting': typeof ProtectedInvestorContractingRoute
   '/_protected/investor/data-room': typeof ProtectedInvestorDataRoomRoute
   '/_protected/investor/messaging': typeof ProtectedInvestorMessagingRoute
@@ -594,6 +604,7 @@ export interface FileRouteTypes {
     | '/founder/investor-interest'
     | '/founder/meetings'
     | '/founder/submit'
+    | '/investor/activity'
     | '/investor/contracting'
     | '/investor/data-room'
     | '/investor/messaging'
@@ -650,6 +661,7 @@ export interface FileRouteTypes {
     | '/founder/investor-interest'
     | '/founder/meetings'
     | '/founder/submit'
+    | '/investor/activity'
     | '/investor/contracting'
     | '/investor/data-room'
     | '/investor/messaging'
@@ -711,6 +723,7 @@ export interface FileRouteTypes {
     | '/_protected/founder/investor-interest'
     | '/_protected/founder/meetings'
     | '/_protected/founder/submit'
+    | '/_protected/investor/activity'
     | '/_protected/investor/contracting'
     | '/_protected/investor/data-room'
     | '/_protected/investor/messaging'
@@ -1002,6 +1015,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedInvestorContractingRouteImport
       parentRoute: typeof ProtectedInvestorRoute
     }
+    '/_protected/investor/activity': {
+      id: '/_protected/investor/activity'
+      path: '/activity'
+      fullPath: '/investor/activity'
+      preLoaderRoute: typeof ProtectedInvestorActivityRouteImport
+      parentRoute: typeof ProtectedInvestorRoute
+    }
     '/_protected/founder/submit': {
       id: '/_protected/founder/submit'
       path: '/submit'
@@ -1237,6 +1257,7 @@ const ProtectedFounderRouteWithChildren =
   ProtectedFounderRoute._addFileChildren(ProtectedFounderRouteChildren)
 
 interface ProtectedInvestorRouteChildren {
+  ProtectedInvestorActivityRoute: typeof ProtectedInvestorActivityRoute
   ProtectedInvestorContractingRoute: typeof ProtectedInvestorContractingRoute
   ProtectedInvestorDataRoomRoute: typeof ProtectedInvestorDataRoomRoute
   ProtectedInvestorMessagingRoute: typeof ProtectedInvestorMessagingRoute
@@ -1254,6 +1275,7 @@ interface ProtectedInvestorRouteChildren {
 }
 
 const ProtectedInvestorRouteChildren: ProtectedInvestorRouteChildren = {
+  ProtectedInvestorActivityRoute: ProtectedInvestorActivityRoute,
   ProtectedInvestorContractingRoute: ProtectedInvestorContractingRoute,
   ProtectedInvestorDataRoomRoute: ProtectedInvestorDataRoomRoute,
   ProtectedInvestorMessagingRoute: ProtectedInvestorMessagingRoute,

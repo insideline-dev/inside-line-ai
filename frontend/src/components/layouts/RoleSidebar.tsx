@@ -54,6 +54,7 @@ import {
   Calendar,
   Folder,
   Handshake,
+  History,
   DollarSign,
   Trophy,
   UserRoundSearch,
@@ -91,6 +92,7 @@ const roleNavItems: Record<UserRole, NavItem[]> = {
   ],
   investor: [
     { title: "Pipeline", url: "/investor", icon: Target },
+    { title: "Activity", url: "/investor/activity", icon: History },
     { title: "Analyze Startup", url: "/investor/submit", icon: Plus },
     { title: "Data Room", url: "/investor/data-room", icon: Folder },
     { title: "Investment Thesis", url: "/investor/thesis", icon: Settings },

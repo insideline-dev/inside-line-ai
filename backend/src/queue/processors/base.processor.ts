@@ -24,9 +24,10 @@ const HEALTH_CHECK_INTERVAL_MS = 15_000;
 const STALLED_CONSUMPTION_THRESHOLD_MS = 45_000;
 const RECOVERY_DELAY_MS = 5_000;
 const TRANSIENT_REDIS_WARN_WINDOW_MS = 30_000;
-const AI_JOB_LOCK_DURATION_MS = 15 * 60 * 1000;
+const AI_JOB_LOCK_DURATION_MS = 30 * 60 * 1000;
 const AI_JOB_STALLED_INTERVAL_MS = 15 * 60 * 1000;
 const AI_JOB_MAX_STALLED_COUNT = 3;
+const BASE_HEARTBEAT_MS = 2 * 60 * 1000;
 const TRANSIENT_REDIS_ERROR_PATTERNS = [
   "connection is closed",
   "connection closed",
@@ -178,10 +179,17 @@ export abstract class BaseProcessor<
   private async processJob(job: Job<TData>): Promise<TResult> {
     const startTime = Date.now();
 
+    const heartbeat = setInterval(() => {
+      job.extendLock(job.token!, AI_JOB_LOCK_DURATION_MS).catch((err: unknown) => {
+        this.logger.warn(
+          `[${this.queueName}] Failed to extend lock for job ${job.id}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
+    }, BASE_HEARTBEAT_MS);
+
     try {
       this.logger.log(`Processing job ${job.id} of type ${job.data.type}`);
 
-      // Execute the actual work (implemented by concrete processors)
       const result = await this.process(job);
 
       return {
@@ -191,9 +199,10 @@ export abstract class BaseProcessor<
         duration: Date.now() - startTime,
       } as TResult;
     } catch (error) {
-      // Wrap validation/input errors to prevent retries
       const wrappedError = this.wrapIfNonRetryable(error);
       throw wrappedError;
+    } finally {
+      clearInterval(heartbeat);
     }
   }
 

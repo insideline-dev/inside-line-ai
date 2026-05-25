@@ -40,6 +40,8 @@ export const DEAL_EVENT_TYPES = [
   "decision.recorded",
   "comment.added",
   "thesis.regenerated",
+  "matching.completed",
+  "matching.failed",
   "open_questions.seeded",
   "agent.refresh",
   "due_diligence.started",
@@ -79,6 +81,8 @@ export const dealEvent = pgTable(
      *  - decision.recorded: { verdict, reasonTags, hasNotes, calibration }
      *  - comment.added: { snippet: string }
      *  - thesis.regenerated: { source: 'auto' | 'manual' }
+     *  - matching.completed: { triggerSource, candidatesEvaluated, matchesFound }
+     *  - matching.failed: { triggerSource, error }
      */
     payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
     occurredAt: timestamp("occurred_at", { withTimezone: true })

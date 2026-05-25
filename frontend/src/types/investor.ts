@@ -72,6 +72,7 @@ export interface InvestorMatch {
   investmentNotes?: string;
   meetingRequested?: boolean;
   meetingRequestedAt?: string;
+  updatedAt?: string;
 }
 
 export interface PortalSettings {

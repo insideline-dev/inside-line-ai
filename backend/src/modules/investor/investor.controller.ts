@@ -15,7 +15,7 @@ import {
 import { JwtAuthGuard } from '../../auth/guards';
 import { CurrentUser } from '../../auth/decorators';
 import { UserRole } from '../../auth/entities/auth.schema';
-import { StartupStage } from '../startup/entities/startup.schema';
+import { StartupStage, PrivateInvestorPipelineStatus, startup } from '../startup/entities/startup.schema';
 import { DealEventService } from '../startup/deal-event.service';
 import { RolesGuard } from '../startup/guards';
 import { Roles } from '../startup/decorators/roles.decorator';
@@ -333,6 +333,15 @@ export class InvestorController {
     return this.pipelineService.getPipeline(user.id);
   }
 
+  @Get('activity')
+  async getActivity(
+    @CurrentUser() user: User,
+    @Query('limit') limit?: string,
+  ) {
+    const cap = limit ? Math.min(Math.max(Number(limit) || 100, 1), 500) : 100;
+    return this.dealEvents.forInvestor(user.id, { limit: cap });
+  }
+
   @Get('screening')
   async getScreeningQueue(@CurrentUser() user: User) {
     return this.screeningQueueService.getQueue(user.id);
@@ -428,6 +437,13 @@ export class InvestorController {
       reasonTags: auditTags,
       notes,
     });
+
+    await this.drizzle.db
+      .update(startup)
+      .set({
+        privateInvestorPipelineStatus: PrivateInvestorPipelineStatus.REVIEWING,
+      })
+      .where(eq(startup.id, startupId));
 
     // 3. Prefer continuing from RESEARCH (first DD phase). If the old
     //    screening card no longer has cached pipeline state, restart the

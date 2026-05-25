@@ -264,7 +264,7 @@ function InvestorStartupDetailPage() {
         className="space-y-6"
       >
         <TabsList className="flex h-auto w-full flex-wrap rounded-xl bg-muted/60 p-2">
-          {evaluation && (
+          {evaluation ? (
             <>
               <TabsTrigger value="summary" className="w-full sm:w-auto">Summary</TabsTrigger>
               <TabsTrigger value="memo" className="w-full sm:w-auto">Memo</TabsTrigger>
@@ -276,10 +276,12 @@ function InvestorStartupDetailPage() {
               <TabsTrigger value="data-room" className="w-full sm:w-auto">Data Room</TabsTrigger>
               <TabsTrigger value="events" className="w-full sm:w-auto">Events</TabsTrigger>
             </>
+          ) : (
+            <TabsTrigger value="events" className="w-full sm:w-auto">Events</TabsTrigger>
           )}
         </TabsList>
 
-        {evaluation && (
+        {evaluation ? (
           <>
             <TabsContent value="summary" className="mt-6">
               <AdminSummaryTab
@@ -289,7 +291,11 @@ function InvestorStartupDetailPage() {
                 onNavigateTab={(tab) => setActiveTab(tab as InvestorStartupTab)}
                 thesisAlignment={
                   typeof match?.thesisFitScore === "number"
-                    ? { thesisFitScore: match.thesisFitScore as number, rationale: thesisRationaleText ?? "" }
+                    ? {
+                        thesisFitScore: match.thesisFitScore as number,
+                        rationale: thesisRationaleText ?? "",
+                        matchedAt: typeof match?.updatedAt === "string" ? match.updatedAt : null,
+                      }
                     : null
                 }
               />
@@ -354,16 +360,20 @@ function InvestorStartupDetailPage() {
             <TabsContent value="events" className="mt-6">
               <DealActivityTimeline startupId={id} />
             </TabsContent>
-
           </>
-        )}
-
-        {!evaluation && (
-          <Card className="border-dashed">
-            <CardContent className="p-12 text-center text-muted-foreground">
-              Evaluation details are not available yet.
-            </CardContent>
-          </Card>
+        ) : (
+          <>
+            <TabsContent value="events" className="mt-6">
+              <DealActivityTimeline startupId={id} />
+            </TabsContent>
+            {activeTab !== "events" && (
+              <Card className="border-dashed">
+                <CardContent className="p-12 text-center text-muted-foreground">
+                  This deal is still analyzing in due diligence. Results will be available soon.
+                </CardContent>
+              </Card>
+            )}
+          </>
         )}
       </Tabs>
     </div>

@@ -14,6 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import {
   Activity,
+  ArrowRightLeft,
   Check,
   CheckCircle2,
   CircleHelp,
@@ -24,6 +25,7 @@ import {
   RefreshCw,
   ShieldCheck,
   Sparkles,
+  Target,
   TrendingUp,
   XCircle,
 } from "lucide-react";
@@ -228,6 +230,42 @@ export function formatEvent(event: DealEvent): FormattedEvent {
         label: "Thesis regenerated",
         detail: readString(p, "source"),
         tone: "default",
+      };
+    case "matching.completed": {
+      const matches = readNumber(p, "matchesFound") ?? 0;
+      const candidates = readNumber(p, "candidatesEvaluated") ?? 0;
+      const trigger = readString(p, "triggerSource")?.replace(/_/g, " ");
+      return {
+        icon: <Target className="h-3.5 w-3.5" />,
+        label: "Investor matching completed",
+        detail: `${matches}/${candidates} matched${trigger ? ` · ${trigger}` : ""}`,
+        tone: matches > 0 ? "good" : "neutral",
+      };
+    }
+    case "matching.failed":
+      return {
+        icon: <XCircle className="h-3.5 w-3.5" />,
+        label: "Investor matching failed",
+        detail: readString(p, "triggerSource")?.replace(/_/g, " "),
+        tone: "bad",
+      };
+    case "stage.changed": {
+      const to = readString(p, "to");
+      const from = readString(p, "from");
+      const reason = readString(p, "passReason");
+      return {
+        icon: <ArrowRightLeft className="h-3.5 w-3.5" />,
+        label: `Stage: ${from ?? "–"} → ${to ?? "–"}`,
+        detail: reason,
+        tone: to === "passed" || to === "closed" ? "bad" : to === "engaged" ? "good" : "neutral",
+      };
+    }
+    case "founder.replied":
+      return {
+        icon: <MessageSquare className="h-3.5 w-3.5" />,
+        label: "Founder replied",
+        detail: readString(p, "channel"),
+        tone: "neutral",
       };
     default:
       return {

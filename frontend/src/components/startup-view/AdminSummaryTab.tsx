@@ -27,6 +27,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import { formatDistanceToNow, format } from "date-fns";
 import { extractKpiMetrics, formatIndustry, formatValuationLabel } from "@/lib/kpi-metrics";
 import { KpiGrid } from "@/components/startup-view/KpiGrid";
 
@@ -35,6 +36,7 @@ interface AdminSummaryTabProps {
   thesisAlignment?: {
     thesisFitScore: number;
     rationale: string;
+    matchedAt?: string | null;
   } | null;
   evaluation?: Evaluation;
   weights?: ScoringWeights | null;
@@ -607,6 +609,15 @@ export function AdminSummaryTab({
               </div>
               {thesisAlignment.rationale && (
                 <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">{thesisAlignment.rationale}</p>
+              )}
+              {thesisAlignment.matchedAt && (
+                <time
+                  dateTime={thesisAlignment.matchedAt}
+                  className="text-[11px] text-muted-foreground/70"
+                  title={format(new Date(thesisAlignment.matchedAt), "MMM d, yyyy h:mm a")}
+                >
+                  Matched {formatDistanceToNow(new Date(thesisAlignment.matchedAt), { addSuffix: true })}
+                </time>
               )}
             </div>
           </div>

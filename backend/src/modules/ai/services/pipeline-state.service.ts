@@ -17,6 +17,17 @@ import { AiDebugLogService } from "./ai-debug-log.service";
 
 const nanoid = customAlphabet("abcdefghijklmnopqrstuvwxyz0123456789", 16);
 
+const ALL_PIPELINE_PHASES: PipelinePhase[] = [
+  PipelinePhase.CLASSIFICATION,
+  PipelinePhase.EXTRACTION,
+  PipelinePhase.ENRICHMENT,
+  PipelinePhase.SCRAPING,
+  PipelinePhase.SCREENING,
+  PipelinePhase.RESEARCH,
+  PipelinePhase.EVALUATION,
+  PipelinePhase.SYNTHESIS,
+];
+
 const PipelineStateSchema = z.object({
   pipelineRunId: z.string(),
   startupId: z.string(),
@@ -199,7 +210,8 @@ export class PipelineStateService implements OnModuleDestroy {
     expectedStartupId?: string,
   ): Promise<PipelineState> {
     return this.withStateMutationLock(async () => {
-      const parsed = PipelineStateSchema.safeParse(snapshot);
+      const normalizedSnapshot = this.normalizeLegacySnapshot(snapshot);
+      const parsed = PipelineStateSchema.safeParse(normalizedSnapshot);
       if (!parsed.success) {
         throw new Error(
           `Invalid pipeline state snapshot: ${parsed.error.message}`,
@@ -216,6 +228,56 @@ export class PipelineStateService implements OnModuleDestroy {
       await this.persist(state);
       return state;
     });
+  }
+
+  private normalizeLegacySnapshot(snapshot: unknown): unknown {
+    if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) {
+      return snapshot;
+    }
+
+    const normalized = structuredClone(snapshot) as Record<string, unknown>;
+    const phases =
+      normalized.phases &&
+      typeof normalized.phases === "object" &&
+      !Array.isArray(normalized.phases)
+        ? (normalized.phases as Record<string, unknown>)
+        : {};
+
+    for (const phase of ALL_PIPELINE_PHASES) {
+      if (!phases[phase] || typeof phases[phase] !== "object") {
+        phases[phase] = { status: PhaseStatus.PENDING };
+      }
+    }
+    normalized.phases = phases;
+
+    const telemetry =
+      normalized.telemetry &&
+      typeof normalized.telemetry === "object" &&
+      !Array.isArray(normalized.telemetry)
+        ? (normalized.telemetry as Record<string, unknown>)
+        : {};
+    const telemetryPhases =
+      telemetry.phases &&
+      typeof telemetry.phases === "object" &&
+      !Array.isArray(telemetry.phases)
+        ? (telemetry.phases as Record<string, unknown>)
+        : {};
+
+    for (const phase of ALL_PIPELINE_PHASES) {
+      if (!telemetryPhases[phase] || typeof telemetryPhases[phase] !== "object") {
+        telemetryPhases[phase] = {
+          phase,
+          agentCount: 0,
+          successCount: 0,
+          failedCount: 0,
+        };
+      }
+    }
+
+    telemetry.phases = telemetryPhases;
+    normalized.telemetry = telemetry;
+
+    return normalized;
   }
 
   async updatePhase(

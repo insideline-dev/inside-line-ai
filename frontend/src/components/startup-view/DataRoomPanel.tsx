@@ -342,8 +342,8 @@ function AgentsTooltipGroup({
       </div>
       {agents.length > 0 ? (
         <ul className="space-y-0.5 pl-3.5 text-[11px] text-muted-foreground">
-          {agents.map((name) => (
-            <li key={name} className="truncate">
+          {agents.map((name, idx) => (
+            <li key={`${name}-${idx}`} className="truncate">
               {name}
             </li>
           ))}

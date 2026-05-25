@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundEx
 import { desc, eq, inArray } from "drizzle-orm";
 import { DrizzleService } from "../../database";
 import { UserRole } from "../../auth/entities/auth.schema";
-import { startup } from "../startup/entities/startup.schema";
+import { PrivateInvestorPipelineStatus, startup } from "../startup/entities/startup.schema";
 import { screeningDecision } from "../ai/entities/screening-decision.schema";
 import {
   screeningDecisionOverride,
@@ -108,6 +108,13 @@ export class ScreeningOverrideService {
         .update(screeningDecision)
         .set({ classification: "advance" })
         .where(eq(screeningDecision.id, decision.id));
+
+      await this.drizzle.db
+        .update(startup)
+        .set({
+          privateInvestorPipelineStatus: PrivateInvestorPipelineStatus.REVIEWING,
+        })
+        .where(eq(startup.id, input.startupId));
 
       void this.openQuestions
         .dismissTriageDecisionQuestions(input.startupId)

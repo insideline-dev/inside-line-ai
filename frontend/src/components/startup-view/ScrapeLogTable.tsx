@@ -70,10 +70,10 @@ export function ScrapeLogTable({
                   {formatChars(homepageChars)}
                 </td>
               </tr>
-              {sorted.map((page) => {
+              {sorted.map((page, idx) => {
                 const chars = page.content?.length ?? 0;
                 return (
-                  <tr key={page.url}>
+                  <tr key={`${page.url}-${idx}`}>
                     <td className="px-2 py-1 font-mono max-w-[180px] truncate">
                       {pathFromUrl(page.url, websiteUrl)}
                     </td>

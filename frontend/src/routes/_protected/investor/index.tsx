@@ -53,6 +53,7 @@ import {
   getInvestorControllerGetPipelineQueryKey,
 } from "@/api/generated/investor/investor";
 import { AnalysisProgressBar } from "@/components/AnalysisProgressBar";
+import { cn } from "@/lib/utils";
 import {
   useStartupControllerFindAll,
   useStartupControllerUpdate,
@@ -285,6 +286,10 @@ function mapPrivateStartupStatus(status: string, pipelineStatus?: Status | null)
   }
 }
 
+function isPrivateDealAnalyzing(status: string): boolean {
+  return status === "submitted" || status === "analyzing";
+}
+
 function mergeStartups(pipeline: PipelineData | null, privateStartups: PrivateStartup[]) {
   const matchItems: PipelineCardItem[] = pipeline
     ? STATUSES.flatMap((status) =>
@@ -325,7 +330,7 @@ function mergeStartups(pipeline: PipelineData | null, privateStartups: PrivateSt
       matchId: null,
       startupId: s.id,
       pipelineStatus: mapPrivateStartupStatus(s.status, s.privateInvestorPipelineStatus ?? null),
-      isAnalyzing: s.status === "submitted" || s.status === "analyzing",
+      isAnalyzing: isPrivateDealAnalyzing(s.status),
       isPrivate: true,
       isSaved: false,
     }));
@@ -441,6 +446,7 @@ function PipelineCard({
   const hasThesisScore = typeof item.thesisFitScore === "number";
   const canRunMatching = Boolean(onRunMatching);
   const canBookmark = Boolean(onToggleBookmark && item.matchId);
+  const isDisabled = item.isAnalyzing;
 
   const handleRunMatching = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -454,15 +460,8 @@ function PipelineCard({
     if (onToggleBookmark) onToggleBookmark(item.startupId);
   };
 
-  return (
-    <Card className="group relative h-full flex flex-col overflow-hidden border-border/70 transition-all hover:border-primary/40 hover:shadow-md">
-      <Link
-        to="/investor/startup/$id"
-        params={{ id: item.startupId }}
-        className="flex h-full flex-col"
-        onContextMenu={(e) => e.preventDefault()}
-      >
-        <CardContent className="flex h-full flex-col gap-4 p-4">
+  const content = (
+    <CardContent className="flex h-full flex-col gap-4 p-4">
           {/* Header: status + quick actions */}
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 flex-wrap">
@@ -567,7 +566,7 @@ function PipelineCard({
           <div className="mt-auto flex items-center justify-between gap-2 border-t pt-3 text-xs text-muted-foreground">
             <span>{formatDate(item.createdAt)}</span>
             <div className="flex items-center gap-1">
-              {canRunMatching && hasThesisScore && (
+              {canRunMatching && hasThesisScore && !isDisabled && (
                 <Button
                   variant="ghost"
                   size="icon"
@@ -585,12 +584,39 @@ function PipelineCard({
                 </Button>
               )}
               <span className="font-medium text-foreground/80 group-hover:text-primary">
-                {item.pipelineStatus === "reviewing" ? "Review Analysis" : "View Analysis"}
+                {isDisabled
+                  ? "Results available soon"
+                  : item.pipelineStatus === "reviewing"
+                    ? "Review Analysis"
+                    : "View Analysis"}
               </span>
             </div>
           </div>
         </CardContent>
-      </Link>
+  );
+
+  return (
+    <Card
+      className={cn(
+        "group relative h-full flex flex-col overflow-hidden border-border/70 transition-all",
+        isDisabled
+          ? "cursor-not-allowed opacity-80"
+          : "hover:border-primary/40 hover:shadow-md",
+      )}
+      aria-disabled={isDisabled}
+    >
+      {isDisabled ? (
+        <div className="flex h-full flex-col">{content}</div>
+      ) : (
+        <Link
+          to="/investor/startup/$id"
+          params={{ id: item.startupId }}
+          className="flex h-full flex-col"
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          {content}
+        </Link>
+      )}
     </Card>
   );
 }
@@ -920,7 +946,7 @@ function KanbanCard({
   }
 
   function handleClick() {
-    if (dragMovedRef.current) return;
+    if (dragMovedRef.current || item.isAnalyzing) return;
     navigate({ to: "/investor/startup/$id", params: { id: item.startupId } });
   }
 
@@ -1037,6 +1063,11 @@ function KanbanCard({
               {item.stage && (
                 <p className="text-xs text-muted-foreground truncate">
                   {formatStageLabel(item.stage)}
+                </p>
+              )}
+              {item.isAnalyzing && (
+                <p className="text-xs text-muted-foreground truncate">
+                  Results will be available soon.
                 </p>
               )}
             </div>

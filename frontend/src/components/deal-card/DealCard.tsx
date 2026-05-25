@@ -209,6 +209,7 @@ export function DealCard({ startupId, className, startup: startupProp }: DealCar
 
   const stage = formatStage(startup.stage);
   const sector = startup.sectorIndustryGroup ?? startup.industry ?? null;
+  const isAnalyzing = startup.status === "submitted" || startup.status === "analyzing";
   const lensTiles = buildLensTiles(decision);
   const dealbreakers = evaluateDealbreakers(startup, thesis);
   const hasHardDealbreaker = hasHardViolation(dealbreakers);
@@ -438,6 +439,12 @@ export function DealCard({ startupId, className, startup: startupProp }: DealCar
           </p>
         )}
 
+        {isAnalyzing && (
+          <div className="rounded-md border border-sky-300/60 bg-sky-50 px-3 py-2 text-sm text-sky-900">
+            <span className="font-medium">Analyzing.</span> Results will be available soon.
+          </div>
+        )}
+
         {/* Actions */}
         <div className="flex flex-wrap items-center justify-end gap-2 border-t pt-3">
           {/* DS-E10-F4-S1 — share-safe screening PDF. Disabled while no
@@ -466,6 +473,7 @@ export function DealCard({ startupId, className, startup: startupProp }: DealCar
             size="sm"
             onClick={() => setCloseOpen(true)}
             data-testid="deal-card-close-deal"
+            disabled={isAnalyzing}
           >
             <CheckCheck className="mr-1.5 h-4 w-4" />
             {latestDecision ? `${capitalize(latestDecision.verdict)}d` : "Close out"}

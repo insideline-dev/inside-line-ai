@@ -1,0 +1,20 @@
+{
+  "name": "Maven (YC W26)",
+  "tagline": "Payments infrastructure for voice AI agents",
+  "website": "https://trymaven.com/",
+  "industry": "payments_infrastructure",
+  "stage": "pre_seed",
+  "fundingTarget": 3000000,
+  "location": "Unknown",
+  "contactName": "karim nassereddine",
+  "contactEmail": "karim@insideline.ai",
+  "teamSize": 1,
+  "description": "Payments infrastructure enabling voice AI agents to securely collect payments during live phone calls — 'Stripe Checkout for phone calls'. PCI-compliant. Seed round 3M on 30M post - SAFE.",
+  "raiseType": "safe",
+  "valuation": 30000000,
+  "valuationType": "post_money",
+  "files": [
+    "Maven_memo.pdf"
+  ],
+  "originalScore": 73.3
+}

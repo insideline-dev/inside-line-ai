@@ -7,7 +7,7 @@ import {
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { eq, and, desc, sql, inArray, or, isNull } from 'drizzle-orm';
 import { DrizzleService } from '../../database';
 import { NotificationService } from '../../notification';
 import { UserAuthService } from '../../auth/user-auth.service';
@@ -33,7 +33,15 @@ import {
   buildScreeningInputV1,
   normalizeScreeningIntakeCandidate,
 } from '../startup/screening-intake-normalization';
-import { SubmitToPortal, GetSubmissionsQuery } from './dto';
+import { SubmitToPortal, GetSubmissionsQuery, PreviewMatches } from './dto';
+import type { PreviewMatchesResult } from './dto';
+import { investorThesis, investorProfile } from '../investor/entities';
+import { user, UserRole } from '../../auth/entities/auth.schema';
+import {
+  canonicalizeGeographicFocus,
+  geographySelectionMatchesStartupPath,
+  normalizeStartupPathFromLocation,
+} from '../geography';
 import { NotificationType } from '../../notification/entities';
 import { PipelineService } from '../ai/services/pipeline.service';
 import { AiConfigService } from '../ai/services/ai-config.service';
@@ -195,7 +203,7 @@ export class SubmissionService {
       // DS-E1-F2-S2: founder picks distribution. 'this_fund_only' marks the
       // deal private so cross-matching keeps it scoped to the portal owner;
       // 'all_aligned' (default) leaves it cross-matchable.
-      isPrivate: dto.distributionMode === 'this_fund_only',
+      isPrivate: dto.distributionMode === 'this_fund_only' || dto.distributionMode === 'select_investors',
       stage: dto.stage,
       fundingTarget: dto.fundingTarget,
       teamSize: dto.teamSize,
@@ -242,6 +250,10 @@ export class SubmissionService {
             pitchDeckUrl: dto.pitchDeckUrl,
             demoUrl: dto.demoUrl,
             status: canonical.stageGate.status,
+            selectedInvestorIds:
+              dto.distributionMode === 'select_investors' && dto.selectedInvestorIds?.length
+                ? dto.selectedInvestorIds
+                : null,
             submittedAt: new Date(),
           })
           .returning();
@@ -514,5 +526,97 @@ export class SubmissionService {
       .orderBy(desc(portalSubmissionAudit.createdAt))
       .limit(limit);
     return rows;
+  }
+
+  async previewMatches(
+    portalId: string,
+    dto: PreviewMatches,
+  ): Promise<PreviewMatchesResult> {
+    const [portalData] = await this.drizzle.db
+      .select()
+      .from(portal)
+      .where(eq(portal.id, portalId))
+      .limit(1);
+
+    if (!portalData) {
+      throw new NotFoundException('Portal not found');
+    }
+
+    const startupGeoPath = normalizeStartupPathFromLocation(dto.location);
+    const startupIndustry = dto.industry.trim().toLowerCase();
+    const startupStage = dto.stage.trim().toLowerCase();
+
+    const candidates = await this.drizzle.db
+      .select({
+        userId: user.id,
+        fundName: investorProfile.fundName,
+        industries: investorThesis.industries,
+        stages: investorThesis.stages,
+        checkSizeMin: investorThesis.checkSizeMin,
+        checkSizeMax: investorThesis.checkSizeMax,
+        geographicFocus: investorThesis.geographicFocus,
+        geographicFocusNodes: investorThesis.geographicFocusNodes,
+        thesisSummary: investorThesis.thesisSummary,
+      })
+      .from(user)
+      .leftJoin(investorThesis, eq(investorThesis.userId, user.id))
+      .leftJoin(investorProfile, eq(investorProfile.userId, user.id))
+      .where(
+        and(
+          inArray(user.role, [UserRole.INVESTOR, UserRole.ADMIN]),
+          or(
+            isNull(investorThesis.id),
+            eq(investorThesis.isActive, true),
+          ),
+        ),
+      );
+
+    const totalCandidates = candidates.length;
+
+    const matched = candidates.filter((c) => {
+      const industries = c.industries ?? [];
+      const stages = c.stages ?? [];
+
+      const industryOk =
+        industries.length === 0 ||
+        industries.some((inv) => inv.trim().toLowerCase() === startupIndustry);
+
+      const stageOk =
+        stages.length === 0 ||
+        stages.some((s) => s.trim().toLowerCase() === startupStage);
+
+      const checkMin = c.checkSizeMin;
+      const checkMax = c.checkSizeMax;
+      const checkSizeOk =
+        (typeof checkMin !== 'number' || dto.fundingTarget >= checkMin) &&
+        (typeof checkMax !== 'number' || dto.fundingTarget <= checkMax);
+
+      const normalizedGeoFocus = canonicalizeGeographicFocus({
+        geographicFocusNodes: c.geographicFocusNodes,
+        geographicFocus: c.geographicFocus,
+      });
+      const geographyOk = geographySelectionMatchesStartupPath(
+        normalizedGeoFocus,
+        startupGeoPath,
+      );
+
+      return industryOk && stageOk && checkSizeOk && geographyOk;
+    });
+
+    return {
+      totalCandidates,
+      investors: matched
+        .filter((c) => c.fundName)
+        .map((c) => ({
+          id: c.userId,
+          fundName: c.fundName!,
+          thesisSummary: c.thesisSummary ?? null,
+          industries: c.industries ?? [],
+          stages: c.stages ?? [],
+          checkSizeMin: c.checkSizeMin ?? null,
+          checkSizeMax: c.checkSizeMax ?? null,
+          geographicFocus: c.geographicFocus ?? [],
+        })),
+    };
   }
 }

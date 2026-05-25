@@ -3,3 +3,4 @@ export * from './update-portal.dto';
 export * from './get-portals-query.dto';
 export * from './get-submissions-query.dto';
 export * from './submit-to-portal.dto';
+export * from './preview-matches.dto';

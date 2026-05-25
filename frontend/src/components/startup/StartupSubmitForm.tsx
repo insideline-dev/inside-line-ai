@@ -11,7 +11,7 @@ import {
   useStartupControllerFindOne,
   useStartupControllerRegisterDataRoomFilesBulk,
 } from "@/api/generated/startups/startups";
-import { usePortalControllerSubmitToPortal } from "@/api/generated/portal/portal";
+import { usePortalControllerSubmitToPortal, usePortalControllerPreviewMatches } from "@/api/generated/portal/portal";
 import { useStorageControllerGetUploadUrl } from "@/api/generated/storage/storage";
 import type {
   CreateStartupDto,
@@ -65,7 +65,8 @@ import { TwoLevelIndustrySelector } from "@/components/TwoLevelIndustrySelector"
 import { CurrencyInput } from "@/components/CurrencyInput";
 import { CountryCodeSelector } from "@/components/CountryCodeSelector";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Upload, Globe, FileText, Building2, MapPin, Loader2, CheckCircle, Users, Plus, Trash2, Linkedin, TrendingUp, Package, Video, Image, User, Mail, Phone, History, Info, Save, Cloud, CloudOff } from "lucide-react";
+import { Upload, Globe, FileText, Building2, MapPin, Loader2, CheckCircle, Users, Plus, Trash2, Linkedin, TrendingUp, Package, Video, Image, User, Mail, Phone, History, Info, Save, Cloud, CloudOff, Search } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 
 // Define base schema shape for type inference
 const baseFormSchema = z.object({
@@ -330,8 +331,10 @@ export function StartupSubmitForm({
   const [startupId, setStartupId] = useState<string | null>(draftIdProp ?? null);
   // DS-E1-F2-S2 — founder picks how widely their submission travels.
   const [distributionMode, setDistributionMode] = useState<
-    "all_aligned" | "this_fund_only"
+    "all_aligned" | "this_fund_only" | "select_investors"
   >("all_aligned");
+  const [selectedInvestorIds, setSelectedInvestorIds] = useState<Set<string>>(new Set());
+  const previewMatchesMutation = usePortalControllerPreviewMatches();
   const registeredFilePathsRef = useRef<Set<string>>(new Set());
   const hasRestoredDraftRef = useRef(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
@@ -596,6 +599,10 @@ export function StartupSubmitForm({
           founderEmail,
           founderName: normalizeOptionalText(data.contactName),
           distributionMode,
+          selectedInvestorIds:
+            distributionMode === "select_investors" && selectedInvestorIds.size > 0
+              ? Array.from(selectedInvestorIds)
+              : undefined,
         };
 
         await portalSubmitMutation.mutateAsync({
@@ -2081,18 +2088,23 @@ export function StartupSubmitForm({
                 Choose how widely your submission travels.
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="grid gap-3 sm:grid-cols-2">
+            <CardContent className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-3">
                 {[
                   {
                     value: "all_aligned" as const,
                     title: "Open to all aligned funds",
-                    body: "Inside Line will match your company to any investor whose thesis fits. Higher chance of meetings.",
+                    body: "Match to any investor whose thesis fits.",
                   },
                   {
                     value: "this_fund_only" as const,
-                    title: "Only share with this fund",
-                    body: "Keep this submission private to the fund whose link you used. No cross-matching.",
+                    title: "Only this fund",
+                    body: "Keep private to this fund. No cross-matching.",
+                  },
+                  {
+                    value: "select_investors" as const,
+                    title: "Control matching",
+                    body: "Preview and select which investors see your deal.",
                   },
                 ].map((option) => {
                   const selected = distributionMode === option.value;
@@ -2100,7 +2112,30 @@ export function StartupSubmitForm({
                     <button
                       key={option.value}
                       type="button"
-                      onClick={() => setDistributionMode(option.value)}
+                      onClick={() => {
+                        setDistributionMode(option.value);
+                        if (option.value === "select_investors" && portalSlug) {
+                          const formValues = form.getValues();
+                          const industry = formValues.sectorIndustry || formValues.sectorIndustryGroup || "general";
+                          const stage = formValues.stage;
+                          const location = formValues.location;
+                          const fundingTarget = formValues.fundingTarget ? Math.round(Number(formValues.fundingTarget)) : 0;
+                          if (industry && stage && location && fundingTarget > 0) {
+                            previewMatchesMutation.mutate({
+                              slug: portalSlug,
+                              data: {
+                                industry,
+                                stage: stage as any,
+                                location,
+                                fundingTarget,
+                              },
+                            });
+                          }
+                        }
+                        if (option.value !== "select_investors") {
+                          setSelectedInvestorIds(new Set());
+                        }
+                      }}
                       data-testid={`distribution-${option.value}`}
                       className={`text-left rounded-xl border p-4 transition-colors ${
                         selected
@@ -2108,12 +2143,154 @@ export function StartupSubmitForm({
                           : "hover:bg-muted/40"
                       }`}
                     >
-                      <p className="font-semibold">{option.title}</p>
-                      <p className="text-sm text-muted-foreground mt-1">{option.body}</p>
+                      <p className="font-semibold text-sm">{option.title}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{option.body}</p>
                     </button>
                   );
                 })}
               </div>
+
+              {distributionMode === "select_investors" && (
+                <div className="space-y-3">
+                  {previewMatchesMutation.isPending && (
+                    <div className="flex items-center justify-center py-8 text-muted-foreground">
+                      <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                      Finding matching investors...
+                    </div>
+                  )}
+
+                  {previewMatchesMutation.isError && (
+                    <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-4 text-sm text-destructive">
+                      <p className="font-medium">Could not load investor matches</p>
+                      <p className="mt-1 text-xs">
+                        Make sure you've filled in your industry, stage, location, and round size, then try selecting "Control matching" again.
+                      </p>
+                    </div>
+                  )}
+
+                  {previewMatchesMutation.isSuccess && (() => {
+                    const result = previewMatchesMutation.data?.data as unknown as {
+                      investors: Array<{
+                        id: string;
+                        fundName: string;
+                        thesisSummary: string | null;
+                        industries: string[];
+                        stages: string[];
+                        checkSizeMin: number | null;
+                        checkSizeMax: number | null;
+                        geographicFocus: string[];
+                      }>;
+                      totalCandidates: number;
+                    };
+                    const investors = result?.investors ?? [];
+
+                    if (investors.length === 0) {
+                      return (
+                        <div className="rounded-lg border bg-muted/30 p-6 text-center text-sm text-muted-foreground">
+                          <Search className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                          <p className="font-medium">No matching investors found</p>
+                          <p className="mt-1 text-xs">
+                            No investors on the platform currently match your industry, stage, and location.
+                            Consider selecting "Open to all aligned funds" instead.
+                          </p>
+                        </div>
+                      );
+                    }
+
+                    const allSelected = investors.every((inv) => selectedInvestorIds.has(inv.id));
+
+                    return (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-medium">
+                            {investors.length} investor{investors.length !== 1 ? "s" : ""} match your profile
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (allSelected) {
+                                setSelectedInvestorIds(new Set());
+                              } else {
+                                setSelectedInvestorIds(new Set(investors.map((inv) => inv.id)));
+                              }
+                            }}
+                            className="text-xs text-primary hover:underline"
+                          >
+                            {allSelected ? "Deselect all" : "Select all"}
+                          </button>
+                        </div>
+                        <div className="grid gap-2">
+                          {investors.map((investor) => {
+                            const isChecked = selectedInvestorIds.has(investor.id);
+                            const formatAmount = (n: number | null) => {
+                              if (n === null) return null;
+                              if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
+                              if (n >= 1_000) return `$${(n / 1_000).toFixed(0)}K`;
+                              return `$${n}`;
+                            };
+                            const checkRange = [
+                              formatAmount(investor.checkSizeMin),
+                              formatAmount(investor.checkSizeMax),
+                            ].filter(Boolean).join(" – ");
+
+                            return (
+                              <label
+                                key={investor.id}
+                                className={`flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${
+                                  isChecked
+                                    ? "border-primary/50 bg-primary/5"
+                                    : "hover:bg-muted/40"
+                                }`}
+                              >
+                                <Checkbox
+                                  checked={isChecked}
+                                  onCheckedChange={(checked) => {
+                                    setSelectedInvestorIds((prev) => {
+                                      const next = new Set(prev);
+                                      if (checked) {
+                                        next.add(investor.id);
+                                      } else {
+                                        next.delete(investor.id);
+                                      }
+                                      return next;
+                                    });
+                                  }}
+                                  className="mt-0.5"
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-medium text-sm">{investor.fundName}</p>
+                                  {investor.thesisSummary && (
+                                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
+                                      {investor.thesisSummary}
+                                    </p>
+                                  )}
+                                  <div className="flex flex-wrap gap-1.5 mt-1.5">
+                                    {investor.industries.slice(0, 3).map((ind) => (
+                                      <Badge key={ind} variant="secondary" className="text-[10px] px-1.5 py-0">
+                                        {ind}
+                                      </Badge>
+                                    ))}
+                                    {checkRange && (
+                                      <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                                        {checkRange}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </div>
+                              </label>
+                            );
+                          })}
+                        </div>
+                        {selectedInvestorIds.size > 0 && (
+                          <p className="text-xs text-muted-foreground">
+                            {selectedInvestorIds.size} investor{selectedInvestorIds.size !== 1 ? "s" : ""} selected
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
             </CardContent>
           </Card>
         )}

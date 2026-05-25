@@ -2867,6 +2867,39 @@
         ]
       }
     },
+    "/portals/apply/{slug}/preview-matches": {
+      "post": {
+        "operationId": "PortalController_previewMatches",
+        "parameters": [
+          {
+            "name": "slug",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewMatchesDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Portal"
+        ]
+      }
+    },
     "/scout/investors": {
       "get": {
         "operationId": "ScoutController_getInvestors",
@@ -10045,6 +10078,46 @@
           }
         }
       },
+      "PreviewMatchesDto": {
+        "type": "object",
+        "properties": {
+          "industry": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "pre_seed",
+              "seed",
+              "series_a",
+              "series_b",
+              "series_c",
+              "series_d",
+              "series_e",
+              "series_f_plus"
+            ]
+          },
+          "location": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "fundingTarget": {
+            "type": "integer",
+            "exclusiveMinimum": true,
+            "maximum": 9007199254740991,
+            "minimum": 0
+          }
+        },
+        "required": [
+          "industry",
+          "stage",
+          "location",
+          "fundingTarget"
+        ]
+      },
       "SubmitToPortalDto": {
         "type": "object",
         "properties": {
@@ -10124,8 +10197,17 @@
             "type": "string",
             "enum": [
               "all_aligned",
-              "this_fund_only"
+              "this_fund_only",
+              "select_investors"
             ]
+          },
+          "selectedInvestorIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
           }
         },
         "required": [
@@ -15425,6 +15507,9 @@
                 "usedFallback"
               ]
             }
+          },
+          "thesisFit": {
+            "nullable": true
           }
         },
         "required": [

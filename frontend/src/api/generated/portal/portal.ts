@@ -29,6 +29,7 @@ import type {
   PortalControllerFindAllParams,
   PortalControllerGetSubmissionsParams,
   PortalControllerListSubmissionAuditParams,
+  PreviewMatchesDto,
   SubmitToPortalDto,
   UpdatePortalDto
 } from '.././model';
@@ -1056,5 +1057,82 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getPortalControllerSubmitToPortalMutationOptions(options), queryClient);
+    }
+    export type portalControllerPreviewMatchesResponse201 = {
+  data: void
+  status: 201
+}
+    
+export type portalControllerPreviewMatchesResponseSuccess = (portalControllerPreviewMatchesResponse201) & {
+  headers: Headers;
+};
+;
+
+export type portalControllerPreviewMatchesResponse = (portalControllerPreviewMatchesResponseSuccess)
+
+export const getPortalControllerPreviewMatchesUrl = (slug: string,) => {
+
+
+  
+
+  return `/portals/apply/${slug}/preview-matches`
+}
+
+export const portalControllerPreviewMatches = async (slug: string,
+    previewMatchesDto: PreviewMatchesDto, options?: RequestInit): Promise<portalControllerPreviewMatchesResponse> => {
+  
+  return customFetch<portalControllerPreviewMatchesResponse>(getPortalControllerPreviewMatchesUrl(slug),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      previewMatchesDto,)
+  }
+);}
+
+
+
+
+export const getPortalControllerPreviewMatchesMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof portalControllerPreviewMatches>>, TError,{slug: string;data: BodyType<PreviewMatchesDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof portalControllerPreviewMatches>>, TError,{slug: string;data: BodyType<PreviewMatchesDto>}, TContext> => {
+
+const mutationKey = ['portalControllerPreviewMatches'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof portalControllerPreviewMatches>>, {slug: string;data: BodyType<PreviewMatchesDto>}> = (props) => {
+          const {slug,data} = props ?? {};
+
+          return  portalControllerPreviewMatches(slug,data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PortalControllerPreviewMatchesMutationResult = NonNullable<Awaited<ReturnType<typeof portalControllerPreviewMatches>>>
+    export type PortalControllerPreviewMatchesMutationBody = BodyType<PreviewMatchesDto>
+    export type PortalControllerPreviewMatchesMutationError = ErrorType<unknown>
+
+    export const usePortalControllerPreviewMatches = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof portalControllerPreviewMatches>>, TError,{slug: string;data: BodyType<PreviewMatchesDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof portalControllerPreviewMatches>>,
+        TError,
+        {slug: string;data: BodyType<PreviewMatchesDto>},
+        TContext
+      > => {
+      return useMutation(getPortalControllerPreviewMatchesMutationOptions(options), queryClient);
     }
     

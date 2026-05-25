@@ -45,6 +45,7 @@ interface StartupMatchInput {
    * is evaluated — no cross-investor matching.
    */
   restrictToInvestorId?: string;
+  restrictToInvestorIds?: string[];
 }
 
 interface InvestorCandidate {
@@ -142,7 +143,12 @@ export class InvestorMatchingService {
           eq(user.id, input.restrictToInvestorId),
           inArray(user.role, [UserRole.INVESTOR, UserRole.ADMIN]),
         )
-      : candidateConditions;
+      : input.restrictToInvestorIds?.length
+        ? and(
+            inArray(user.id, input.restrictToInvestorIds),
+            inArray(user.role, [UserRole.INVESTOR, UserRole.ADMIN]),
+          )
+        : candidateConditions;
 
     let candidates = await this.drizzle.db
       .select(selectFields)
@@ -180,7 +186,9 @@ export class InvestorMatchingService {
       );
     }
 
-    const firstFilterPassed = input.restrictToInvestorId
+    const hasExplicitRestriction = !!(input.restrictToInvestorId || input.restrictToInvestorIds?.length);
+
+    const firstFilterPassed = hasExplicitRestriction
       ? candidates
       : candidates.filter(
           (candidate) =>

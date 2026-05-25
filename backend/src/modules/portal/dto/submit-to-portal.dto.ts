@@ -26,8 +26,17 @@ export const SubmitToPortalSchema = z.object({
    * fan it out to other investors. When 'all_aligned' (default) the deal is
    * eligible for cross-matching to any investor whose thesis fits.
    */
-  distributionMode: z.enum(['all_aligned', 'this_fund_only']).optional(),
-});
+  distributionMode: z.enum(['all_aligned', 'this_fund_only', 'select_investors']).optional(),
+  selectedInvestorIds: z.array(z.string().uuid()).optional(),
+}).refine(
+  (data) =>
+    data.distributionMode !== 'select_investors' ||
+    (data.selectedInvestorIds && data.selectedInvestorIds.length > 0),
+  {
+    message: 'At least one investor must be selected when using select_investors mode',
+    path: ['selectedInvestorIds'],
+  },
+);
 
 export type SubmitToPortal = z.infer<typeof SubmitToPortalSchema>;
 export class SubmitToPortalDto extends createZodDto(SubmitToPortalSchema) {}

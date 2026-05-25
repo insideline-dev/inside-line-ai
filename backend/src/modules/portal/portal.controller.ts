@@ -29,6 +29,7 @@ import {
   GetPortalsQueryDto,
   GetSubmissionsQueryDto,
   SubmitToPortalDto,
+  PreviewMatchesDto,
 } from './dto';
 import { extractClientIp } from './utils/submission-canonical';
 
@@ -152,6 +153,16 @@ export class PortalController {
   @Get('apply/:slug')
   async getPortalBySlug(@Param('slug') slug: string) {
     return this.portalService.findBySlug(slug);
+  }
+
+  @Public()
+  @Post('apply/:slug/preview-matches')
+  async previewMatches(
+    @Param('slug') slug: string,
+    @Body() dto: PreviewMatchesDto,
+  ) {
+    const portalData = await this.portalService.findBySlug(slug);
+    return this.submissionService.previewMatches(portalData.id, dto);
   }
 
   @Public()

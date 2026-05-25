@@ -56,4 +56,5 @@ export interface SubmitToPortalDto {
    */
   founderName?: string;
   distributionMode?: SubmitToPortalDtoDistributionMode;
+  selectedInvestorIds?: string[];
 }

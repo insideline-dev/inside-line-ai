@@ -301,6 +301,8 @@ export * from './previewAiPipelineContextRequestDto';
 export * from './previewAiPipelineContextRequestDtoStage';
 export * from './previewAiPromptRequestDto';
 export * from './previewAiPromptRequestDtoStage';
+export * from './previewMatchesDto';
+export * from './previewMatchesDtoStage';
 export * from './quickCreateStartupDto';
 export * from './quickCreateStartupDtoStage';
 export * from './quickCreateStartupDtoTeamMembersItem';

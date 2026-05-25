@@ -21,6 +21,7 @@ import {
   startupEvaluation,
 } from "../../analysis/entities";
 import type { SynthesisResult } from "../interfaces/phase-results.interface";
+import { DealEventService } from "../../startup/deal-event.service";
 import { InvestorMatchingService } from "./investor-matching.service";
 
 type MatchingTriggerSource = "approval" | "manual" | "retry" | "pipeline_completion" | "thesis_update";
@@ -69,6 +70,7 @@ export class StartupMatchingPipelineService {
     private queue: QueueService,
     private investorMatching: InvestorMatchingService,
     private notificationService: NotificationService,
+    private dealEvents: DealEventService,
   ) {}
 
   async queueStartupMatching(
@@ -223,12 +225,16 @@ export class StartupMatchingPipelineService {
         );
       }
 
-      const restrictToInvestorId =
-        await this.resolveRestrictToInvestorId(startupRecord);
-      const forceIncludeInvestorId = await this.resolveForceIncludeInvestorId(
-        jobData.userId,
-        restrictToInvestorId,
-      );
+      const selectedInvestorIds = startupRecord.selectedInvestorIds;
+      const restrictToInvestorId = selectedInvestorIds?.length
+        ? undefined
+        : await this.resolveRestrictToInvestorId(startupRecord);
+      const forceIncludeInvestorId = selectedInvestorIds?.length
+        ? undefined
+        : await this.resolveForceIncludeInvestorId(
+            jobData.userId,
+            restrictToInvestorId,
+          );
 
       const matching = await this.investorMatching.matchStartup({
         startupId: jobData.startupId,
@@ -243,6 +249,7 @@ export class StartupMatchingPipelineService {
         synthesis: synthesis as SynthesisResult,
         forceIncludeInvestorId,
         restrictToInvestorId,
+        restrictToInvestorIds: selectedInvestorIds ?? undefined,
       });
 
       let notificationsSent = 0;
@@ -288,6 +295,17 @@ export class StartupMatchingPipelineService {
         })
         .where(eq(analysisJob.id, jobData.analysisJobId));
 
+      void this.dealEvents.record({
+        startupId: jobData.startupId,
+        actorUserId: jobData.userId,
+        type: "matching.completed",
+        payload: {
+          triggerSource: jobData.triggerSource,
+          candidatesEvaluated: matching.candidatesEvaluated,
+          matchesFound: matching.matches.length,
+        },
+      });
+
       return result;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -299,6 +317,17 @@ export class StartupMatchingPipelineService {
           errorMessage: message,
         })
         .where(eq(analysisJob.id, jobData.analysisJobId));
+
+      void this.dealEvents.record({
+        startupId: jobData.startupId,
+        actorUserId: jobData.userId,
+        type: "matching.failed",
+        payload: {
+          triggerSource: jobData.triggerSource,
+          error: message,
+        },
+      });
+
       throw error;
     }
   }
@@ -424,6 +453,7 @@ export class StartupMatchingPipelineService {
     fundingTarget: number;
     location: string;
     geoPath: string[] | null;
+    selectedInvestorIds: string[] | null;
   }> {
     const [found] = await this.drizzle.db
       .select({
@@ -437,6 +467,7 @@ export class StartupMatchingPipelineService {
         fundingTarget: startup.fundingTarget,
         location: startup.location,
         geoPath: startup.geoPath,
+        selectedInvestorIds: startup.selectedInvestorIds,
       })
       .from(startup)
       .where(eq(startup.id, startupId))
@@ -452,6 +483,7 @@ export class StartupMatchingPipelineService {
       submittedByRole: found.submittedByRole as UserRole,
       sectorIndustryGroup: found.sectorIndustryGroup ?? null,
       geoPath: found.geoPath ?? null,
+      selectedInvestorIds: (found.selectedInvestorIds as string[] | null) ?? null,
     };
   }
 

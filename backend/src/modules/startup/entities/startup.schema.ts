@@ -159,6 +159,7 @@ export const startup = pgTable(
     sourcePath: startupSourcePathEnum('source_path'),
     scoutId: uuid('scout_id').references(() => user.id),
     isPrivate: boolean('is_private').default(false),
+    selectedInvestorIds: jsonb('selected_investor_ids').$type<string[]>(),
 
     // Basic info
     name: text('name').notNull(),

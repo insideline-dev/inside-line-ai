@@ -21,4 +21,5 @@ export interface ScreeningOutputResponseDto {
   overall: ScreeningOutputResponseDtoOverall;
   handoff: ScreeningOutputResponseDtoHandoff;
   lenses: ScreeningOutputResponseDtoLensesItem[];
+  thesisFit?: unknown | null;
 }

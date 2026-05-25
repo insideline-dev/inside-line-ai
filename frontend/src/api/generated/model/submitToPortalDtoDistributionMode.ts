@@ -12,4 +12,5 @@ export type SubmitToPortalDtoDistributionMode = typeof SubmitToPortalDtoDistribu
 export const SubmitToPortalDtoDistributionMode = {
   all_aligned: 'all_aligned',
   this_fund_only: 'this_fund_only',
+  select_investors: 'select_investors',
 } as const;

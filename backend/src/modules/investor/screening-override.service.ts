@@ -14,6 +14,7 @@ import { CalibrationRecomputeService } from "./calibration-recompute.service";
 import { OpenQuestionService } from "../dd/open-question.service";
 import { PipelineService } from "../ai/services/pipeline.service";
 import { PipelinePhase } from "../ai/interfaces/pipeline.interface";
+import { DealEventService } from "../startup/deal-event.service";
 
 export interface ScreeningOverrideActor {
   id: string;
@@ -51,6 +52,7 @@ export class ScreeningOverrideService {
     private calibrationRecompute: CalibrationRecomputeService,
     private openQuestions: OpenQuestionService,
     private pipelineService: PipelineService,
+    private dealEvents: DealEventService,
   ) {}
 
   async createOverride(input: ScreeningOverrideInput): Promise<ScreeningOverrideAuditEntry> {
@@ -130,11 +132,36 @@ export class ScreeningOverrideService {
 
   /**
    * Trigger DD pipeline (research → evaluation → synthesis) after an advance override.
-   * Starts from RESEARCH which depends on SCREENING (already completed).
-   * Never falls back to startPipeline — that would re-run screening.
+   * Prefer continuing from RESEARCH. If the startup is old and its cached
+   * pipeline state is gone, restart the full pipeline from the beginning so
+   * the deal gets re-screened instead of failing.
    */
-  private async triggerDdPipeline(startupId: string, _actorId: string): Promise<void> {
-    await this.pipelineService.rerunFromPhase(startupId, PipelinePhase.RESEARCH);
+  private async triggerDdPipeline(startupId: string, actorId: string): Promise<void> {
+    let path: "rerun_from_research" | "fresh_full_pipeline" =
+      "rerun_from_research";
+
+    try {
+      await this.pipelineService.rerunFromPhase(startupId, PipelinePhase.RESEARCH);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const isStateMissing = /not found/i.test(message);
+      if (!isStateMissing) {
+        throw err;
+      }
+
+      await this.pipelineService.startPipeline(startupId, actorId);
+      path = "fresh_full_pipeline";
+    }
+
+    void this.dealEvents.record({
+      startupId,
+      actorUserId: actorId,
+      type: "due_diligence.started",
+      payload: {
+        trigger: "screening_override_advance",
+        path,
+      },
+    });
   }
 
   async getOverridesForDecisionIds(

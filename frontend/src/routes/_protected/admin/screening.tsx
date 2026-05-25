@@ -1,10 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useCallback, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, Inbox, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { customFetch } from "@/api/client";
 import { StageNav } from "@/components/investor/StageNav";
 import { ScreeningDealCard } from "@/components/investor/ScreeningDealCard";
+import { ScreeningAdvanceDialog } from "@/components/investor/ScreeningAdvanceDialog";
+import { ScreeningPassDialog } from "@/components/investor/ScreeningPassDialog";
 import type { ThesisFitOutput } from "@/types/thesis-fit";
 import type {
   LensScore,
@@ -88,31 +91,64 @@ export const Route = createFileRoute("/_protected/admin/screening")({
 });
 
 function AdminScreeningPage() {
+  const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({
     queryKey: ["admin", "screening"],
     queryFn: fetchAdminScreeningQueue,
     staleTime: 30_000,
   });
+
+  const invalidateStageQueries = () => {
+    queryClient.invalidateQueries({ queryKey: ["investor", "screening"] });
+    queryClient.invalidateQueries({ queryKey: ["investor", "pipeline"] });
+    queryClient.invalidateQueries({ queryKey: ["admin", "screening"] });
+    queryClient.invalidateQueries({ queryKey: ["startupController"] });
+  };
+
+  const advanceMutation = useMutation({
+    mutationFn: ({ startupId, reasonTags, notes }: { startupId: string; reasonTags?: string[]; notes?: string }) =>
+      customFetch<{ ok: boolean; startupId: string; verdict: "advance"; note: string }>(
+        `/investor/screening/${startupId}/advance`,
+        { method: "POST", body: JSON.stringify({ reasonTags, notes }) },
+      ),
+    onSuccess: (res) => {
+      toast.success("Advanced to Due Diligence", { description: res.note });
+      invalidateStageQueries();
+    },
+    onError: (err) =>
+      toast.error("Advance failed", { description: (err as Error).message }),
+  });
+
+  const passMutation = useMutation({
+    mutationFn: ({ startupId, reasonTags, notes }: { startupId: string; reasonTags?: string[]; notes?: string }) =>
+      customFetch<{ ok: boolean; startupId: string; verdict: "reject" }>(
+        `/investor/screening/${startupId}/pass`,
+        { method: "POST", body: JSON.stringify({ reasonTags, notes }) },
+      ),
+    onSuccess: () => {
+      toast.success("Marked as passed — moved to rejected archive.");
+      invalidateStageQueries();
+    },
+    onError: (err) =>
+      toast.error("Pass failed", { description: (err as Error).message }),
+  });
+
   const rows = useMemo<ScreeningRow[]>(
     () => (Array.isArray(data) ? data.map(mapBackendRow) : []),
     [data],
   );
   const { activeRows, rejectedRows } = useMemo(() => {
-    // Show only REVIEW in the active queue; ADVANCED deals belong on
-    // the DD tab. REJECTED deals live in the collapsed archive.
     const active = rows.filter((r) => r.verdict === "review");
     const rejected = rows.filter((r) => r.verdict === "reject");
     return { activeRows: active, rejectedRows: rejected };
   }, [rows]);
 
+  const [advancingId, setAdvancingId] = useState<string | null>(null);
+  const [passingId, setPassingId] = useState<string | null>(null);
   const [showRejected, setShowRejected] = useState(false);
 
-  // Admin click → live pipeline view for that startup
-  const openLivePipeline = (id: string) => {
-    // Navigate via window.location since we're outside a single Link click.
-    // Could also use TanStack Router programmatically.
-    window.location.href = `/admin/screening/${id}`;
-  };
+  const handleAdvance = useCallback((id: string) => setAdvancingId(id), []);
+  const handlePass = useCallback((id: string) => setPassingId(id), []);
 
   return (
     <div className="flex flex-col gap-4">
@@ -153,7 +189,9 @@ function AdminScreeningPage() {
                   submittedAt: row.submittedAt,
                   dealbreakerNote: row.dealbreakerNote,
                 }}
-                onOpen={openLivePipeline}
+                onPass={handlePass}
+                onAdvance={handleAdvance}
+                onOpen={(id) => { window.location.href = `/admin/screening/${id}`; }}
               />
               <Link
                 to="/admin/screening/$id"
@@ -199,13 +237,35 @@ function AdminScreeningPage() {
                     submittedAt: row.submittedAt,
                     dealbreakerNote: row.dealbreakerNote,
                   }}
-                  onOpen={openLivePipeline}
+                  onOpen={(id) => { window.location.href = `/admin/screening/${id}`; }}
                 />
               ))}
             </div>
           )}
         </div>
       )}
+
+      <ScreeningAdvanceDialog
+        open={advancingId !== null}
+        onOpenChange={(open) => { if (!open) setAdvancingId(null); }}
+        isSubmitting={advanceMutation.isPending}
+        onSubmit={(input) => {
+          if (!advancingId) return;
+          advanceMutation.mutate({ startupId: advancingId, reasonTags: input.reasonTags, notes: input.notes });
+          setAdvancingId(null);
+        }}
+      />
+
+      <ScreeningPassDialog
+        open={passingId !== null}
+        onOpenChange={(open) => { if (!open) setPassingId(null); }}
+        isSubmitting={passMutation.isPending}
+        onSubmit={(input) => {
+          if (!passingId) return;
+          passMutation.mutate({ startupId: passingId, reasonTags: input.reasonTags, notes: input.notes });
+          setPassingId(null);
+        }}
+      />
     </div>
   );
 }

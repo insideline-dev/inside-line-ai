@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, Inbox, Loader2 } from "lucide-react";
@@ -8,6 +8,9 @@ import { StageNav } from "@/components/investor/StageNav";
 import { ScreeningDealCard } from "@/components/investor/ScreeningDealCard";
 import { ScreeningAdvanceDialog } from "@/components/investor/ScreeningAdvanceDialog";
 import { ScreeningPassDialog } from "@/components/investor/ScreeningPassDialog";
+import { AnalysisProgressBar } from "@/components/AnalysisProgressBar";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import type {
   LensScore,
   ScreeningVerdict,
@@ -81,6 +84,15 @@ function mapBackendRow(row: BackendScreeningRow): ScreeningRow {
   };
 }
 
+interface ProcessingStartup {
+  id: string;
+  name: string;
+  status: string;
+  stage?: string;
+  industry?: string;
+  createdAt: string;
+}
+
 function ScreeningPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -88,6 +100,12 @@ function ScreeningPage() {
     queryKey: ["investor", "screening"],
     queryFn: fetchScreeningQueue,
     staleTime: 30_000,
+  });
+
+  const { data: myStartupsRaw } = useQuery({
+    queryKey: ["investor", "my-startups-processing"],
+    queryFn: () => customFetch<{ data: ProcessingStartup[] }>("/startups?limit=100"),
+    staleTime: 10_000,
   });
 
   const invalidateStageQueries = () => {
@@ -180,12 +198,6 @@ function ScreeningPage() {
   const [showRejected, setShowRejected] = useState(true);
 
   const { activeRows, rejectedRows, advancedRowIds } = useMemo(() => {
-    // Screening tab shows only deals awaiting partner action.
-    //   - REVIEW: needs Pass/Advance
-    //   - REJECT: auto-rejected, lives in collapsed archive
-    //   - ADVANCE: deal has left screening; lives in the DD tab.
-    // Filtering out 'advance' here matches the plan's "ADVANCE → deal
-    // leaves Screening tab" behavior.
     const active = rows.filter((r) => r.verdict === "review");
     const rejected = rows.filter((r) => r.verdict === "reject");
     const advanced = new Set(
@@ -193,6 +205,18 @@ function ScreeningPage() {
     );
     return { activeRows: active, rejectedRows: rejected, advancedRowIds: advanced };
   }, [rows]);
+
+  const processingStartups = useMemo(() => {
+    const allStartups: ProcessingStartup[] =
+      Array.isArray(myStartupsRaw) ? myStartupsRaw
+        : (myStartupsRaw as { data?: ProcessingStartup[] } | undefined)?.data ?? [];
+    const screenedIds = new Set(sourceRows.map((r) => r.id));
+    return allStartups.filter(
+      (s) =>
+        (s.status === "submitted" || s.status === "analyzing") &&
+        !screenedIds.has(s.id),
+    );
+  }, [myStartupsRaw, sourceRows]);
 
   const handlePass = useCallback(
     (id: string) => {
@@ -210,7 +234,7 @@ function ScreeningPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <StageNav counts={{ screening: activeRows.length }} />
+      <StageNav counts={{ screening: activeRows.length + processingStartups.length }} />
 
       <div className="flex items-baseline justify-between">
         <h1 className="text-2xl font-semibold">Deal Screening</h1>
@@ -219,12 +243,49 @@ function ScreeningPage() {
         </span>
       </div>
 
+      {processingStartups.length > 0 && (
+        <div className="flex flex-col gap-3">
+          <h2 className="text-sm font-medium text-muted-foreground">
+            Processing ({processingStartups.length})
+          </h2>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {processingStartups.map((s) => (
+              <Card key={s.id} className="border-dashed">
+                <CardContent className="flex items-center gap-4 p-4">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
+                    <span className="text-sm font-semibold text-muted-foreground">
+                      {s.name.charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="min-w-0 flex-1 space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <Link
+                        to="/investor/startup/$id"
+                        params={{ id: s.id }}
+                        className="text-sm font-semibold hover:underline truncate"
+                      >
+                        {s.name}
+                      </Link>
+                      <Badge variant="outline" className="gap-1 text-[11px] shrink-0">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Analyzing
+                      </Badge>
+                    </div>
+                    <AnalysisProgressBar startupId={s.id} compact />
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
       {isLoading ? (
         <div className="flex items-center gap-2 rounded-md border border-border p-6 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
           Loading screening queue…
         </div>
-      ) : activeRows.length === 0 ? (
+      ) : activeRows.length === 0 && processingStartups.length === 0 ? (
         <div className="flex items-center gap-2 rounded-md border border-border p-6 text-sm text-muted-foreground">
           <Inbox className="h-4 w-4" />
           No deals in screening yet.

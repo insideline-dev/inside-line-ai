@@ -410,7 +410,7 @@ export class StartupService {
 
   async findAll(userId: string, query: GetStartupsQuery) {
     return this.drizzle.withRLS(userId, async (db) => {
-      const { page, limit, status, industry, stage, search } = query;
+      const { page, limit, status, industry, stage, search, excludePreScreening } = query;
       const offset = (page - 1) * limit;
 
       const conditions = [eq(startup.userId, userId)];
@@ -432,6 +432,13 @@ export class StartupService {
             ilike(startup.tagline, `%${escaped}%`),
             ilike(startup.description, `%${escaped}%`),
           )!,
+        );
+      }
+      if (excludePreScreening) {
+        conditions.push(
+          sql`(SELECT ${screeningDecision.classification} FROM ${screeningDecision}
+             WHERE ${screeningDecision.startupId} = ${startup.id}
+             ORDER BY ${screeningDecision.createdAt} DESC LIMIT 1) = 'advance'`,
         );
       }
 
@@ -1114,12 +1121,9 @@ export class StartupService {
     }
     if (excludePreScreening) {
       conditions.push(
-        sql`COALESCE(
-          (SELECT ${screeningDecision.classification} FROM ${screeningDecision}
+        sql`(SELECT ${screeningDecision.classification} FROM ${screeningDecision}
            WHERE ${screeningDecision.startupId} = ${startup.id}
-           ORDER BY ${screeningDecision.createdAt} DESC LIMIT 1),
-          'advance'
-        ) = 'advance'`,
+           ORDER BY ${screeningDecision.createdAt} DESC LIMIT 1) = 'advance'`,
       );
     }
 

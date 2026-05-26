@@ -1278,7 +1278,7 @@ function InvestorDashboard() {
   }, [pipeline, statusOverrides]);
 
   // ─ Private startups
-  const myStartupsResponse = useStartupControllerFindAll(undefined, {
+  const myStartupsResponse = useStartupControllerFindAll({ excludePreScreening: 'true' }, {
     query: {
       refetchInterval: (query) => {
         const rows = extractList<PrivateStartup>(query.state.data);

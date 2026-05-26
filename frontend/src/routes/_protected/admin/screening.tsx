@@ -8,6 +8,9 @@ import { StageNav } from "@/components/investor/StageNav";
 import { ScreeningDealCard } from "@/components/investor/ScreeningDealCard";
 import { ScreeningAdvanceDialog } from "@/components/investor/ScreeningAdvanceDialog";
 import { ScreeningPassDialog } from "@/components/investor/ScreeningPassDialog";
+import { AnalysisProgressBar } from "@/components/AnalysisProgressBar";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import type { ThesisFitOutput } from "@/types/thesis-fit";
 import type {
   LensScore,
@@ -90,12 +93,30 @@ export const Route = createFileRoute("/_protected/admin/screening")({
   component: AdminScreeningPage,
 });
 
+interface ProcessingStartup {
+  id: string;
+  name: string;
+  status: string;
+  stage?: string;
+  industry?: string;
+  createdAt: string;
+}
+
 function AdminScreeningPage() {
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({
     queryKey: ["admin", "screening"],
     queryFn: fetchAdminScreeningQueue,
     staleTime: 30_000,
+  });
+
+  const { data: allStartupsRaw } = useQuery({
+    queryKey: ["admin", "screening", "processing"],
+    queryFn: () =>
+      customFetch<{ data: ProcessingStartup[] }>(
+        "/admin/startups?limit=100&status=analyzing",
+      ),
+    staleTime: 10_000,
   });
 
   const invalidateStageQueries = () => {
@@ -143,6 +164,18 @@ function AdminScreeningPage() {
     return { activeRows: active, rejectedRows: rejected };
   }, [rows]);
 
+  const processingStartups = useMemo(() => {
+    const allStartups: ProcessingStartup[] =
+      Array.isArray(allStartupsRaw) ? allStartupsRaw
+        : (allStartupsRaw as { data?: ProcessingStartup[] } | undefined)?.data ?? [];
+    const screenedIds = new Set(rows.map((r) => r.id));
+    return allStartups.filter(
+      (s) =>
+        (s.status === "submitted" || s.status === "analyzing") &&
+        !screenedIds.has(s.id),
+    );
+  }, [allStartupsRaw, rows]);
+
   const [advancingId, setAdvancingId] = useState<string | null>(null);
   const [passingId, setPassingId] = useState<string | null>(null);
   const [showRejected, setShowRejected] = useState(false);
@@ -152,7 +185,7 @@ function AdminScreeningPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <StageNav surface="admin" counts={{ screening: activeRows.length }} />
+      <StageNav surface="admin" counts={{ screening: activeRows.length + processingStartups.length }} />
 
       <div className="flex items-baseline justify-between">
         <h1 className="text-2xl font-semibold">Deal Screening (Admin)</h1>
@@ -161,12 +194,49 @@ function AdminScreeningPage() {
         </span>
       </div>
 
+      {processingStartups.length > 0 && (
+        <div className="flex flex-col gap-3">
+          <h2 className="text-sm font-medium text-muted-foreground">
+            Processing ({processingStartups.length})
+          </h2>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {processingStartups.map((s) => (
+              <Card key={s.id} className="border-dashed">
+                <CardContent className="flex items-center gap-4 p-4">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
+                    <span className="text-sm font-semibold text-muted-foreground">
+                      {s.name.charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="min-w-0 flex-1 space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <Link
+                        to="/admin/startup/$id"
+                        params={{ id: s.id }}
+                        className="text-sm font-semibold hover:underline truncate"
+                      >
+                        {s.name}
+                      </Link>
+                      <Badge variant="outline" className="gap-1 text-[11px] shrink-0">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Analyzing
+                      </Badge>
+                    </div>
+                    <AnalysisProgressBar startupId={s.id} compact />
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
       {isLoading ? (
         <div className="flex items-center gap-2 rounded-md border border-border p-6 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
           Loading screening queue…
         </div>
-      ) : activeRows.length === 0 ? (
+      ) : activeRows.length === 0 && processingStartups.length === 0 ? (
         <div className="flex items-center gap-2 rounded-md border border-border p-6 text-sm text-muted-foreground">
           <Inbox className="h-4 w-4" />
           No deals currently in screening across the platform.

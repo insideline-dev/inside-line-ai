@@ -124,17 +124,13 @@ export class AnalyticsService {
       this.getTopIndustries(),
 
       // DD count: startups whose latest screening decision is 'advance'
-      // (or no screening decision — legacy startups that bypassed screening)
       this.drizzle.db
         .select({ count: count() })
         .from(startup)
         .where(
-          sql`COALESCE(
-            (SELECT ${screeningDecision.classification} FROM ${screeningDecision}
+          sql`(SELECT ${screeningDecision.classification} FROM ${screeningDecision}
              WHERE ${screeningDecision.startupId} = ${startup.id}
-             ORDER BY ${screeningDecision.createdAt} DESC LIMIT 1),
-            'advance'
-          ) = 'advance'`,
+             ORDER BY ${screeningDecision.createdAt} DESC LIMIT 1) = 'advance'`,
         ),
     ]);
 

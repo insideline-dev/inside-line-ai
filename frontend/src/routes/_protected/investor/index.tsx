@@ -83,11 +83,6 @@ import {
   X,
 } from "lucide-react";
 import type { PrivateInvestorPipelineStatus } from "@/types/startup";
-import {
-  useQuickDeckDrop,
-  DropZoneOverlay,
-  QuickSubmitDialog,
-} from "@/components/investor/QuickDeckSubmit";
 
 export const Route = createFileRoute("/_protected/investor/")({
   component: InvestorDashboard,
@@ -1260,9 +1255,6 @@ function InvestorDashboard() {
   const [draggingMatchId, setDraggingMatchId] = useState<string | null>(null);
   const [statusOverrides, setStatusOverrides] = useState<Record<string, Status>>({});
 
-  // ─ Quick deck drop
-  const { isDragOver, droppedFile, clearDroppedFile } = useQuickDeckDrop();
-
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -1592,14 +1584,6 @@ function InvestorDashboard() {
 
   return (
     <div className="space-y-6">
-      <DropZoneOverlay visible={isDragOver} />
-      {droppedFile && (
-        <QuickSubmitDialog
-          file={droppedFile}
-          open={!!droppedFile}
-          onClose={clearDroppedFile}
-        />
-      )}
       <StageNav counts={{ dd: (pipeline?.stats?.total ?? 0) }} />
       {inFlightDeals.length > 0 && (
         <div className="flex flex-col gap-2 rounded-md border border-sky-300 bg-sky-50 p-4 text-sky-900">

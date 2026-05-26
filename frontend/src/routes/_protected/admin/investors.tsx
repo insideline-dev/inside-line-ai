@@ -33,7 +33,14 @@ import {
   TrendingUp,
   ShieldAlert,
   Scale,
+  RefreshCw,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  useInvestorCalibration,
+  useRecomputeInvestorCalibration,
+  useInvestorCalibrationSocket,
+} from "@/lib/calibration/useCalibration";
 
 export const Route = createFileRoute("/_protected/admin/investors")({
   component: AdminInvestorsPage,
@@ -325,6 +332,7 @@ function AdminInvestorsPage() {
                     Matches ({detail.matches.length})
                   </TabsTrigger>
                   <TabsTrigger value="scoring">Scoring</TabsTrigger>
+                  <TabsTrigger value="calibration">Calibration</TabsTrigger>
                 </TabsList>
 
                 <ScrollArea className="flex-1">
@@ -631,12 +639,207 @@ function AdminInvestorsPage() {
                       </div>
                     )}
                   </TabsContent>
+
+                  {/* ---- Tab: Calibration ---- */}
+                  <TabsContent value="calibration" className="px-6 pb-6">
+                    <AdminCalibrationTab userId={selectedUserId} />
+                  </TabsContent>
                 </ScrollArea>
               </Tabs>
             </div>
           ) : null}
         </SheetContent>
       </Sheet>
+    </div>
+  );
+}
+
+function AdminCalibrationTab({ userId }: { userId: string | null }) {
+  const { data: snapshot, isLoading, error } = useInvestorCalibration(userId);
+  const recompute = useRecomputeInvestorCalibration(userId);
+
+  useInvestorCalibrationSocket(userId);
+
+  if (isLoading) {
+    return (
+      <div className="space-y-3 pt-2">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-24 w-full" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-4 text-sm text-destructive">
+        Failed to load calibration data.
+        {error.message && <p className="mt-1 text-xs opacity-70">{error.message}</p>}
+      </div>
+    );
+  }
+
+  const summary = snapshot?.summary;
+  const isRunning = snapshot?.status === "queued" || snapshot?.status === "running";
+
+  const rateColor = !summary?.alignmentRate
+    ? "text-muted-foreground"
+    : summary.alignmentRate >= 0.75
+      ? "text-emerald-700"
+      : summary.alignmentRate >= 0.5
+        ? "text-amber-700"
+        : "text-rose-700";
+
+  return (
+    <div className="space-y-4 pt-2">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-sm font-semibold">Calibration Snapshot</h3>
+          {snapshot?.computedAt && (
+            <p className="text-xs text-muted-foreground">
+              Last computed: {new Date(snapshot.computedAt).toLocaleString()}
+            </p>
+          )}
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={isRunning || recompute.isPending}
+          onClick={() => recompute.mutate()}
+        >
+          {isRunning ? (
+            <>
+              <RefreshCw className="mr-1 h-3.5 w-3.5 animate-spin" />
+              {snapshot?.status === "queued" ? "Queued..." : "Running..."}
+            </>
+          ) : recompute.isPending ? (
+            <>
+              <RefreshCw className="mr-1 h-3.5 w-3.5 animate-spin" />
+              Triggering...
+            </>
+          ) : (
+            <>
+              <RefreshCw className="mr-1 h-3.5 w-3.5" />
+              Recompute
+            </>
+          )}
+        </Button>
+      </div>
+
+      {snapshot?.lastError && (
+        <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          Last error: {snapshot.lastError}
+        </div>
+      )}
+
+      {recompute.isSuccess && (
+        <div className="rounded-md border border-emerald-300/60 bg-emerald-50/50 px-3 py-2 text-xs text-emerald-900">
+          Recompute {recompute.data.dedupedToExistingJob ? "already in progress" : "queued"} (job: {recompute.data.jobId.slice(0, 8)}...)
+        </div>
+      )}
+
+      {!summary ? (
+        <p className="text-sm text-muted-foreground">No calibration data available yet.</p>
+      ) : (
+        <>
+          <Card>
+            <CardContent className="pt-4 space-y-3">
+              <div className="flex items-center justify-between text-sm">
+                <span>Alignment Rate</span>
+                <span className={`font-semibold ${rateColor}`}>
+                  {summary.alignmentRate !== null
+                    ? `${Math.round(summary.alignmentRate * 100)}%`
+                    : "N/A"}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="rounded-md border border-emerald-200 bg-emerald-50 p-2">
+                  <div className="text-[10px] uppercase tracking-wide text-emerald-700">Aligned</div>
+                  <div className="text-lg font-semibold text-emerald-900">{summary.aligned}</div>
+                </div>
+                <div className="rounded-md border border-rose-200 bg-rose-50 p-2">
+                  <div className="text-[10px] uppercase tracking-wide text-rose-700">False Positive</div>
+                  <div className="text-lg font-semibold text-rose-900">{summary.falsePositive}</div>
+                </div>
+                <div className="rounded-md border border-rose-200 bg-rose-50 p-2">
+                  <div className="text-[10px] uppercase tracking-wide text-rose-700">False Negative</div>
+                  <div className="text-lg font-semibold text-rose-900">{summary.falseNegative}</div>
+                </div>
+                <div className="rounded-md border border-amber-200 bg-amber-50 p-2">
+                  <div className="text-[10px] uppercase tracking-wide text-amber-700">Soft Mismatch</div>
+                  <div className="text-lg font-semibold text-amber-900">{summary.softMismatch}</div>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {summary.decisionsWithTriage} of {summary.totalDecisions} decisions had triage classification
+              </p>
+            </CardContent>
+          </Card>
+
+          {summary.topOverrideReasons.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xs">Top Override Reasons</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-1.5">
+                  {summary.topOverrideReasons.map((r) => (
+                    <Badge key={r.reasonTag} variant="outline" className="capitalize text-[10px] gap-1">
+                      {r.reasonTag} <span className="text-muted-foreground">x{r.count}</span>
+                    </Badge>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {summary.lensDeltas.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xs">Lens Deltas (DD vs Screening)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {summary.lensDeltas.map((d) => (
+                    <div key={d.lensKey} className="flex items-center justify-between text-xs">
+                      <span className="capitalize font-medium">{d.lensKey}</span>
+                      <div className="flex gap-3 text-muted-foreground">
+                        <span>Mean: <span className={d.meanDelta > 0 ? "text-emerald-700" : "text-rose-700"}>{d.meanDelta > 0 ? "+" : ""}{d.meanDelta.toFixed(1)}</span></span>
+                        <span>|Δ|: {d.meanAbsDelta.toFixed(1)}</span>
+                        <span>{d.count} deal{d.count !== 1 ? "s" : ""}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {summary.recentMismatches.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xs">Recent Mismatches</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {summary.recentMismatches.slice(0, 5).map((m, i) => (
+                    <div key={`${m.startupId}-${i}`} className="flex items-center justify-between text-xs">
+                      <div>
+                        <span className="font-medium">{m.modelVerdict}</span>
+                        <span className="text-muted-foreground"> → </span>
+                        <span className="font-medium">{m.investorVerdict}</span>
+                        <Badge variant="outline" className="ml-2 text-[10px]">
+                          {m.mismatchType.replace(/_/g, " ")}
+                        </Badge>
+                      </div>
+                      <span className="text-muted-foreground">{new Date(m.decidedAt).toLocaleDateString()}</span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </>
+      )}
     </div>
   );
 }

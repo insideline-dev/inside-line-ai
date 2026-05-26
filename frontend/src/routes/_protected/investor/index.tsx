@@ -1261,7 +1261,7 @@ function InvestorDashboard() {
   const [statusOverrides, setStatusOverrides] = useState<Record<string, Status>>({});
 
   // ─ Quick deck drop
-  const { isDragOver, droppedFile, clearDroppedFile, dragHandlers } = useQuickDeckDrop();
+  const { isDragOver, droppedFile, clearDroppedFile } = useQuickDeckDrop();
 
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -1591,7 +1591,7 @@ function InvestorDashboard() {
   const inFlightDeals = pipeline?.inFlight ?? [];
 
   return (
-    <div className="space-y-6" {...dragHandlers}>
+    <div className="space-y-6">
       <DropZoneOverlay visible={isDragOver} />
       {droppedFile && (
         <QuickSubmitDialog

@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, type DragEvent } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Dialog,
@@ -43,65 +43,76 @@ type ExtractionResult = {
   extracted: boolean;
 };
 
-// ─── Drop Zone Overlay ──────────────────────────────────────────────────────
+// ─── Drop Zone ──────────────────────────────────────────────────────────────
+
+function hasFiles(e: globalThis.DragEvent): boolean {
+  return e.dataTransfer?.types?.includes("Files") ?? false;
+}
 
 export function useQuickDeckDrop() {
   const [isDragOver, setIsDragOver] = useState(false);
   const [droppedFile, setDroppedFile] = useState<File | null>(null);
   const dragCounterRef = useRef(0);
 
-  const handleDragEnter = useCallback((e: DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragCounterRef.current += 1;
-    if (e.dataTransfer.types.includes("Files")) {
-      setIsDragOver(true);
-    }
-  }, []);
+  useEffect(() => {
+    const onDragEnter = (e: globalThis.DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      dragCounterRef.current += 1;
+      if (dragCounterRef.current === 1) {
+        setIsDragOver(true);
+      }
+    };
 
-  const handleDragLeave = useCallback((e: DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragCounterRef.current -= 1;
-    if (dragCounterRef.current <= 0) {
+    const onDragOver = (e: globalThis.DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      if (e.dataTransfer) {
+        e.dataTransfer.dropEffect = "copy";
+      }
+    };
+
+    const onDragLeave = (e: globalThis.DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      dragCounterRef.current -= 1;
+      if (dragCounterRef.current <= 0) {
+        dragCounterRef.current = 0;
+        setIsDragOver(false);
+      }
+    };
+
+    const onDrop = (e: globalThis.DragEvent) => {
+      e.preventDefault();
       dragCounterRef.current = 0;
       setIsDragOver(false);
-    }
-  }, []);
 
-  const handleDragOver = useCallback((e: DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-  }, []);
+      if (!e.dataTransfer?.files.length) return;
+      const files = Array.from(e.dataTransfer.files);
+      const pdf = files.find((f) => f.type === "application/pdf");
+      if (pdf) {
+        setDroppedFile(pdf);
+      }
+    };
 
-  const handleDrop = useCallback((e: DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragCounterRef.current = 0;
-    setIsDragOver(false);
+    window.addEventListener("dragenter", onDragEnter);
+    window.addEventListener("dragover", onDragOver);
+    window.addEventListener("dragleave", onDragLeave);
+    window.addEventListener("drop", onDrop);
 
-    const files = Array.from(e.dataTransfer.files);
-    const pdf = files.find((f) => f.type === "application/pdf");
-    if (pdf) {
-      setDroppedFile(pdf);
-    }
+    return () => {
+      window.removeEventListener("dragenter", onDragEnter);
+      window.removeEventListener("dragover", onDragOver);
+      window.removeEventListener("dragleave", onDragLeave);
+      window.removeEventListener("drop", onDrop);
+    };
   }, []);
 
   const clearDroppedFile = useCallback(() => {
     setDroppedFile(null);
   }, []);
 
-  return {
-    isDragOver,
-    droppedFile,
-    clearDroppedFile,
-    dragHandlers: {
-      onDragEnter: handleDragEnter,
-      onDragLeave: handleDragLeave,
-      onDragOver: handleDragOver,
-      onDrop: handleDrop,
-    },
-  };
+  return { isDragOver, droppedFile, clearDroppedFile };
 }
 
 export function DropZoneOverlay({ visible }: { visible: boolean }) {

@@ -15,7 +15,7 @@ import {
 import { JwtAuthGuard } from '../../auth/guards';
 import { CurrentUser } from '../../auth/decorators';
 import { UserRole } from '../../auth/entities/auth.schema';
-import { StartupStage, PrivateInvestorPipelineStatus, startup } from '../startup/entities/startup.schema';
+import { StartupStage, PrivateInvestorPipelineStatus, DataGateStatus, startup } from '../startup/entities/startup.schema';
 import { DealEventService } from '../startup/deal-event.service';
 import { RolesGuard } from '../startup/guards';
 import { Roles } from '../startup/decorators/roles.decorator';
@@ -438,48 +438,16 @@ export class InvestorController {
       .update(startup)
       .set({
         privateInvestorPipelineStatus: PrivateInvestorPipelineStatus.REVIEWING,
+        dataGateStatus: DataGateStatus.PENDING,
       })
       .where(eq(startup.id, startupId));
-
-    // 3. Prefer continuing from RESEARCH (first DD phase). If the old
-    //    screening card no longer has cached pipeline state, restart the
-    //    full pipeline from the beginning so the deal gets re-screened and
-    //    rebuilt instead of hard-failing.
-    let path: 'rerun_from_research' | 'fresh_full_pipeline' =
-      'rerun_from_research';
-    try {
-      await this.pipelineCoreService.rerunFromPhase(
-        startupId,
-        PipelinePhase.RESEARCH,
-      );
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      const isStateMissing = /not found/i.test(message);
-      if (!isStateMissing) {
-        throw new NotFoundException(
-          `Could not start DD from screening — ${message}`,
-        );
-      }
-
-      try {
-        await this.pipelineCoreService.startPipeline(startupId, user.id);
-        path = 'fresh_full_pipeline';
-      } catch (fallbackErr) {
-        const fallbackMessage =
-          fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
-        throw new NotFoundException(
-          `Could not start DD from screening — ${fallbackMessage}`,
-        );
-      }
-    }
 
     void this.dealEvents.record({
       startupId,
       actorUserId: user.id,
-      type: 'due_diligence.started',
+      type: 'due_diligence.data_gate_entered',
       payload: {
         trigger: 'screening_advance',
-        path,
       },
     });
 
@@ -487,11 +455,8 @@ export class InvestorController {
       ok: true,
       startupId,
       verdict: 'advance' as const,
-      path,
-      note:
-        path === 'rerun_from_research'
-          ? 'Research + evaluation + synthesis queued; deal will move to DD when complete.'
-          : 'No cached pipeline state was found, so the deal was restarted from the beginning and will be re-screened.',
+      path: 'data_gate' as const,
+      note: 'Deal moved to Data Gates. Investor can skip or wait for documents before DD pipeline starts.',
     };
   }
 

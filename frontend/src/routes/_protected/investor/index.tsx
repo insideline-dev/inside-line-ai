@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef, type DragEvent } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@/api/client";
 import { format } from "date-fns";
 import { Card, CardContent } from "@/components/ui/card";
@@ -19,6 +19,12 @@ import { StageNav } from "@/components/investor/StageNav";
 import { CalibrationCard } from "@/components/investor/CalibrationCard";
 import { useFilterStore } from "@/stores";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { SearchAndFilters, defaultFilters, type FilterState, STAGES, REGIONS, SOURCE_OPTIONS } from "@/components/SearchAndFilters";
 import {
   ContextMenu,
@@ -70,6 +76,7 @@ import {
   Columns3,
   FileSearch,
   FileText,
+  MessageSquare,
   Lock,
   Loader2,
   Search,
@@ -146,6 +153,7 @@ type PrivateStartup = {
   normalizedRegion?: string;
   logoUrl?: string | null;
   privateInvestorPipelineStatus?: Status | null;
+  dataGateStatus?: "pending" | "skipped" | "complete" | null;
   overallScore: number;
   status: string;
   createdAt: string;
@@ -167,6 +175,7 @@ type PipelineCardItem = {
   isAnalyzing: boolean;
   isPrivate: boolean;
   isSaved?: boolean;
+  dataGateStatus?: "pending" | "skipped" | "complete" | null;
 };
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -336,6 +345,7 @@ function mergeStartups(pipeline: PipelineData | null, privateStartups: PrivateSt
       isAnalyzing: isPrivateDealAnalyzing(s.status),
       isPrivate: true,
       isSaved: false,
+      dataGateStatus: s.dataGateStatus,
     }));
 
   const allItems = [...matchItems, ...privateItems];
@@ -1249,6 +1259,186 @@ function CloseDealDialog({
 
 type DDSubTab = "data-gates" | "analyzed" | "engaged";
 
+type DataGateInfo = {
+  dataGateStatus: string | null;
+  openQuestions: Array<{ id: string; summary: string; status: string }>;
+  missingMaterials: string[];
+  requiredDocTypes: string[];
+  presentDocTypes: string[];
+};
+
+const DOC_TYPE_LABELS: Record<string, string> = {
+  pitch_deck: "Pitch Deck",
+  financial: "Financials",
+  cap_table: "Cap Table",
+  legal: "Legal Documents",
+  technical_product: "Technical / Product",
+  business_plan: "Business Plan",
+  market_research: "Market Research",
+  contract: "Contracts",
+  team_hr: "Team / HR",
+};
+
+function DataGateCard({
+  item,
+  onSkip,
+  isSkipping,
+}: {
+  item: PipelineCardItem;
+  onSkip: (startupId: string) => void;
+  isSkipping: boolean;
+}) {
+  const { data: gateData } = useQuery({
+    queryKey: ["data-gates", item.startupId],
+    queryFn: () => customFetch<DataGateInfo>(`/startups/${item.startupId}/data-gates`),
+    staleTime: 30_000,
+  });
+
+  const openCount = gateData?.openQuestions?.filter((q) => q.status === "open").length ?? 0;
+
+  return (
+    <Card className="overflow-hidden">
+      <CardContent className="p-4 space-y-4">
+        <div className="flex items-start gap-3">
+          <Avatar className="h-10 w-10 shrink-0 rounded-lg border bg-muted/40">
+            {item.logoUrl ? (
+              <AvatarImage src={item.logoUrl} alt={item.displayName} className="object-contain" />
+            ) : null}
+            <AvatarFallback className="rounded-lg text-xs font-medium">
+              {item.displayName.charAt(0).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+          <div className="min-w-0 flex-1">
+            <Link
+              to="/investor/startup/$id"
+              params={{ id: item.startupId }}
+              className="font-semibold hover:underline"
+            >
+              {item.displayName}
+            </Link>
+            <div className="flex flex-wrap gap-1.5 mt-1">
+              {item.stage && (
+                <Badge variant="outline" className="text-[11px] capitalize">
+                  {formatStageLabel(item.stage)}
+                </Badge>
+              )}
+              {item.industry && (
+                <Badge variant="secondary" className="text-[11px]">
+                  {item.industry}
+                </Badge>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {gateData && (
+          <div className="space-y-2">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Required Documents
+            </p>
+            <div className="space-y-1">
+              {gateData.requiredDocTypes.map((docType) => {
+                const present = gateData.presentDocTypes.includes(docType);
+                return (
+                  <div key={docType} className="flex items-center gap-2 text-sm">
+                    {present ? (
+                      <Check className="h-4 w-4 text-green-600 shrink-0" />
+                    ) : (
+                      <X className="h-4 w-4 text-muted-foreground/40 shrink-0" />
+                    )}
+                    <span className={present ? "text-foreground" : "text-muted-foreground"}>
+                      {DOC_TYPE_LABELS[docType] ?? docType}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {openCount > 0 && (
+          <Link
+            to="/investor/startup/$id"
+            params={{ id: item.startupId }}
+            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+          >
+            <AlertTriangle className="h-3.5 w-3.5" />
+            {openCount} open question{openCount !== 1 ? "s" : ""}
+          </Link>
+        )}
+
+        <div className="flex items-center gap-2 pt-1">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onSkip(item.startupId)}
+            disabled={isSkipping}
+          >
+            {isSkipping ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+            Skip to Analysis
+          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="sm" disabled>
+                  <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
+                  Request via Clara
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Coming soon</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function DataGatesView({ items }: { items: PipelineCardItem[] }) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const skipMutation = useMutation({
+    mutationFn: (startupId: string) =>
+      customFetch(`/startups/${startupId}/data-gates/skip`, { method: "POST" }),
+    onSuccess: () => {
+      toast.success("Data gate skipped — DD pipeline starting");
+      queryClient.invalidateQueries({ queryKey: getInvestorControllerGetPipelineQueryKey() });
+      queryClient.invalidateQueries({ queryKey: getStartupControllerFindAllQueryKey() });
+    },
+    onError: () => {
+      toast.error("Failed to skip data gate");
+    },
+  });
+
+  if (items.length === 0) {
+    return (
+      <Card className="border-dashed">
+        <CardContent className="flex flex-col items-center gap-2 py-12 text-center text-muted-foreground">
+          <FileText className="h-8 w-8 opacity-60" />
+          <h3 className="text-lg font-semibold text-foreground">No deals in Data Gates</h3>
+          <p className="text-sm">
+            When you advance a deal from Screening, it will appear here for document review before analysis.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+      {items.map((item) => (
+        <DataGateCard
+          key={item.startupId}
+          item={item}
+          onSkip={(id) => skipMutation.mutate(id)}
+          isSkipping={skipMutation.isPending && skipMutation.variables === item.startupId}
+        />
+      ))}
+    </div>
+  );
+}
+
 function InvestorDashboard() {
   const [ddSubTab, setDdSubTab] = useState<DDSubTab>("analyzed");
   const [viewMode, setViewMode] = useState<ViewMode>("list");
@@ -1433,10 +1623,20 @@ function InvestorDashboard() {
     [pipeline, myStartups, statusOverrides],
   );
 
+  const dataGateItems = useMemo(
+    () => allItems.filter((item) => item.dataGateStatus === "pending"),
+    [allItems],
+  );
+
+  const analyzedItems = useMemo(
+    () => allItems.filter((item) => item.dataGateStatus !== "pending"),
+    [allItems],
+  );
+
   const thesisAxis = useFilterStore((s) => s.thesisAxis);
 
   const filteredItems = useMemo(() => {
-    const base = filterPipelineItems(allItems, search, filters, activeTab);
+    const base = filterPipelineItems(analyzedItems, search, filters, activeTab);
     if (!thesisAxis) return base;
     return base.filter((item) =>
       matchesThesisAxis(
@@ -1444,7 +1644,7 @@ function InvestorDashboard() {
         thesisAxis,
       ),
     );
-  }, [allItems, search, filters, activeTab, thesisAxis]);
+  }, [analyzedItems, search, filters, activeTab, thesisAxis]);
 
   const filteredGrouped = useMemo(() => {
     if (filters.source === "matched" && pipelineItemsByStatus) {
@@ -1469,7 +1669,7 @@ function InvestorDashboard() {
       ) as Record<Status, PipelineCardItem[]>;
     }
 
-    const baseFiltered = filterPipelineItems(allItems, search, filters, "all");
+    const baseFiltered = filterPipelineItems(analyzedItems, search, filters, "all");
     if (activeTab === "all") {
       return Object.fromEntries(
         STATUSES.map((s) => [s, baseFiltered.filter((item) => item.pipelineStatus === s)]),
@@ -1488,13 +1688,13 @@ function InvestorDashboard() {
     return Object.fromEntries(
       STATUSES.map((s) => [s, s === activeTab ? baseFiltered.filter((item) => item.pipelineStatus === s) : []]),
     ) as Record<Status, PipelineCardItem[]>;
-  }, [allItems, search, filters, activeTab, pipelineItemsByStatus]);
+  }, [analyzedItems, search, filters, activeTab, pipelineItemsByStatus]);
 
   const tabCounts = useMemo(() => {
     const source = filters.source ?? "all";
-    const items = source === "my_submissions" ? allItems.filter(i => i.isPrivate)
-      : source === "matched" ? allItems.filter(i => !i.isPrivate)
-      : allItems;
+    const items = source === "my_submissions" ? analyzedItems.filter(i => i.isPrivate)
+      : source === "matched" ? analyzedItems.filter(i => !i.isPrivate)
+      : analyzedItems;
     return {
       all: items.length,
       new: items.filter(i => i.pipelineStatus === "new").length,
@@ -1603,16 +1803,7 @@ function InvestorDashboard() {
         </TabsList>
 
         <TabsContent value="data-gates" className="mt-6">
-          <Card className="border-dashed">
-            <CardContent className="flex flex-col items-center gap-2 py-12 text-center text-muted-foreground">
-              <FileText className="h-8 w-8 opacity-60" />
-              <h3 className="text-lg font-semibold text-foreground">Data Gates</h3>
-              <p className="text-sm">
-                Post-screening hold for missing materials and open questions before the DD pipeline runs.
-              </p>
-              <p className="text-xs">Coming in the next increment.</p>
-            </CardContent>
-          </Card>
+          <DataGatesView items={dataGateItems} />
         </TabsContent>
 
         <TabsContent value="engaged" className="mt-6">

@@ -168,6 +168,10 @@ export const investorThesis = pgTable(
     websiteScrapedAt: timestamp('website_scraped_at', { withTimezone: true }),
     portfolioGeneratedAt: timestamp('portfolio_generated_at', { withTimezone: true }),
 
+    // Data Gates settings
+    requiredDocTypes: text('required_doc_types').array().default(['pitch_deck', 'financial']),
+    autoAdvanceDataGate: boolean('auto_advance_data_gate').default(false).notNull(),
+
     // Active status
     isActive: boolean('is_active').default(true).notNull(),
 

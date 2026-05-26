@@ -36,6 +36,7 @@ import { DraftService } from './draft.service';
 import { PdfService } from './pdf.service';
 import { PdfRenderService } from './pdf/pdf-render.service';
 import { DataRoomService } from './data-room.service';
+import { DataGateService } from './data-gate.service';
 import { InvestorInterestService } from './investor-interest.service';
 import { MeetingService } from './meeting.service';
 import { DealEventService } from './deal-event.service';
@@ -81,6 +82,7 @@ export class StartupController {
     private pdfService: PdfService,
     private pdfRenderService: PdfRenderService,
     private dataRoomService: DataRoomService,
+    private dataGateService: DataGateService,
     private interestService: InvestorInterestService,
     private meetingService: MeetingService,
     private dealEvents: DealEventService,
@@ -583,6 +585,37 @@ export class StartupController {
   async adminDelete(@Param('id') id: string) {
     await this.startupService.adminDelete(id);
     return { success: true, message: 'Startup deleted' };
+  }
+
+  // ============ DATA GATES ENDPOINTS ============
+
+  @Get(':id/data-gates')
+  @Roles(UserRole.INVESTOR, UserRole.ADMIN)
+  async getDataGates(
+    @Param('id') id: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.dataGateService.getDataGateInfo(id, user.id, user.role);
+  }
+
+  @Post(':id/data-gates/skip')
+  @Roles(UserRole.INVESTOR, UserRole.ADMIN)
+  async skipDataGate(
+    @Param('id') id: string,
+    @CurrentUser() user: User,
+  ) {
+    await this.dataGateService.skip(id, user.id);
+    return { ok: true, startupId: id, dataGateStatus: 'skipped' };
+  }
+
+  @Post(':id/data-gates/complete')
+  @Roles(UserRole.INVESTOR, UserRole.ADMIN)
+  async completeDataGate(
+    @Param('id') id: string,
+    @CurrentUser() user: User,
+  ) {
+    await this.dataGateService.complete(id, user.id);
+    return { ok: true, startupId: id, dataGateStatus: 'complete' };
   }
 
   // ============ PUBLIC ENDPOINTS ============

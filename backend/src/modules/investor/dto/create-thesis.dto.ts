@@ -39,6 +39,8 @@ export const CreateThesisSchema = z.object({
   // subsequent saves until the explicit "Regenerate from structured
   // params" action is invoked.
   thesisSummary: z.string().max(2000).optional(),
+  requiredDocTypes: z.array(z.string()).optional(),
+  autoAdvanceDataGate: z.boolean().optional(),
   skipRematching: z.boolean().optional(),
   regenerateSummary: z.boolean().optional(),
 }).refine(

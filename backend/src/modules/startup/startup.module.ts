@@ -9,6 +9,7 @@ import { StartupService } from './startup.service';
 import { DraftService } from './draft.service';
 import { PdfService } from './pdf.service';
 import { DataRoomService } from './data-room.service';
+import { DataGateService } from './data-gate.service';
 import { InvestorInterestService } from './investor-interest.service';
 import { MeetingService } from './meeting.service';
 import { StartupIntakeService } from './startup-intake.service';
@@ -35,6 +36,7 @@ import { DdModule } from '../dd/dd.module';
     PdfRenderService,
     PrintTokenService,
     DataRoomService,
+    DataGateService,
     InvestorInterestService,
     MeetingService,
     StartupIntakeService,
@@ -48,6 +50,7 @@ import { DdModule } from '../dd/dd.module';
     PdfRenderService,
     PrintTokenService,
     DataRoomService,
+    DataGateService,
     InvestorInterestService,
     MeetingService,
     StartupIntakeService,

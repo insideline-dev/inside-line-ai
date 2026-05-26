@@ -10,6 +10,7 @@ import { DrizzleService } from "../../database";
 import { DealEventService } from "../startup/deal-event.service";
 import { startup, StartupStatus } from "../startup/entities/startup.schema";
 import { DataRoomService } from "../startup/data-room.service";
+import { DataGateService } from "../startup/data-gate.service";
 import { PipelineService } from "../ai/services/pipeline.service";
 import { StartupMatchingPipelineService } from "../ai/services/startup-matching-pipeline.service";
 import { ScreeningProcessor } from "../ai/processors/screening.processor";
@@ -30,6 +31,7 @@ export class DealTriggerProcessor implements OnModuleInit {
     private readonly drizzle: DrizzleService,
     private readonly dealEvents: DealEventService,
     private readonly dataRoom: DataRoomService,
+    private readonly dataGateService: DataGateService,
     @Optional() private readonly pipeline?: PipelineService,
     @Optional() private readonly startupMatching?: StartupMatchingPipelineService,
     @Optional() private readonly screeningProcessor?: ScreeningProcessor,
@@ -79,6 +81,15 @@ export class DealTriggerProcessor implements OnModuleInit {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.warn(
         `Data room reclassify after doc upload failed for ${payload.startupId}: ${msg}`,
+      );
+    }
+
+    try {
+      await this.dataGateService.checkAutoAdvance(payload.startupId);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(
+        `Data gate auto-advance check failed for ${payload.startupId}: ${msg}`,
       );
     }
 

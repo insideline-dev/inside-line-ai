@@ -97,6 +97,18 @@ export const startupSourcePathEnum = pgEnum('startup_source_path', [
   StartupSourcePath.ADMIN_CSV,
 ]);
 
+export enum DataGateStatus {
+  PENDING = 'pending',
+  SKIPPED = 'skipped',
+  COMPLETE = 'complete',
+}
+
+export const dataGateStatusEnum = pgEnum('data_gate_status', [
+  DataGateStatus.PENDING,
+  DataGateStatus.SKIPPED,
+  DataGateStatus.COMPLETE,
+]);
+
 export enum TRL {
   IDEA = 'idea',
   MVP = 'mvp',
@@ -187,6 +199,7 @@ export const startup = pgTable(
     // Status workflow
     status: startupStatusEnum('status').default(StartupStatus.DRAFT).notNull(),
     privateInvestorPipelineStatus: privateInvestorPipelineStatusEnum('private_investor_pipeline_status'),
+    dataGateStatus: dataGateStatusEnum('data_gate_status'),
 
     // Media URLs
     pitchDeckUrl: text('pitch_deck_url'),

@@ -20,6 +20,8 @@ export interface ThesisFormData {
   fundSize: number | null;
   /** DS-E4-F4-S1 — structured exclusion rules. */
   dealBreakers: string[];
+  requiredDocTypes: string[];
+  autoAdvanceDataGate: boolean;
 }
 
 export interface ThesisGenerationProgressInput {
@@ -178,5 +180,7 @@ export function buildThesisSavePayload(formData: ThesisFormData) {
     fundSize: formData.fundSize,
     dealBreakers:
       formData.dealBreakers.length > 0 ? formData.dealBreakers : undefined,
+    requiredDocTypes: formData.requiredDocTypes,
+    autoAdvanceDataGate: formData.autoAdvanceDataGate,
   };
 }

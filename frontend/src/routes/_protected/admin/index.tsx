@@ -319,9 +319,10 @@ function AdminDashboard() {
               <FileText className="h-8 w-8 opacity-60" />
               <h3 className="text-lg font-semibold text-foreground">Data Gates</h3>
               <p className="text-sm">
-                Post-screening hold for missing materials and open questions before the DD pipeline runs.
+                Deals waiting for missing documents before the DD pipeline runs.
+                Investors can skip or request docs via Clara.
               </p>
-              <p className="text-xs">Coming in the next increment.</p>
+              <p className="text-xs">Admin global view coming soon — use the investor view to manage individual deals.</p>
             </CardContent>
           </Card>
         </TabsContent>

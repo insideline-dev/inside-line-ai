@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Briefcase,
@@ -14,6 +15,7 @@ import {
   ChevronRight,
   DollarSign,
   Globe,
+  FileText,
   Lightbulb,
   Loader2,
   Save,
@@ -167,6 +169,8 @@ function InvestorThesisPage() {
     website: "",
     fundSize: null,
     dealBreakers: [],
+    requiredDocTypes: ["pitch_deck", "financial"],
+    autoAdvanceDataGate: false,
   });
   const [expandedGeographyNodes, setExpandedGeographyNodes] = useState<string[]>([]);
   const parentNodeMap = useMemo(() => buildParentNodeMap(taxonomyNodes), [taxonomyNodes]);
@@ -215,6 +219,10 @@ function InvestorThesisPage() {
         dealBreakers: Array.isArray(t.dealBreakers)
           ? t.dealBreakers.filter((v): v is string => typeof v === "string")
           : [],
+        requiredDocTypes: Array.isArray(t.requiredDocTypes)
+          ? t.requiredDocTypes.filter((v): v is string => typeof v === "string")
+          : ["pitch_deck", "financial"],
+        autoAdvanceDataGate: typeof t.autoAdvanceDataGate === "boolean" ? t.autoAdvanceDataGate : false,
       };
       setFormData(next);
       baselineRef.current = JSON.stringify(next);
@@ -849,6 +857,69 @@ function InvestorThesisPage() {
                 No geography taxonomy available.
               </p>
             )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Data Gates
+            </CardTitle>
+            <CardDescription>
+              Control which documents are required before the DD pipeline starts.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <p className="text-sm font-medium mb-2">Required document types</p>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                {[
+                  { id: "pitch_deck", label: "Pitch Deck" },
+                  { id: "financial", label: "Financials" },
+                  { id: "cap_table", label: "Cap Table" },
+                  { id: "legal", label: "Legal Documents" },
+                  { id: "technical_product", label: "Technical / Product" },
+                  { id: "business_plan", label: "Business Plan" },
+                  { id: "market_research", label: "Market Research" },
+                ].map((dt) => (
+                  <div
+                    key={dt.id}
+                    className="flex items-center space-x-2 rounded-md border border-border/60 p-3 hover:bg-muted/40"
+                  >
+                    <Checkbox
+                      id={`dt-${dt.id}`}
+                      checked={formData.requiredDocTypes.includes(dt.id)}
+                      onCheckedChange={(checked) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          requiredDocTypes: checked
+                            ? [...prev.requiredDocTypes, dt.id]
+                            : prev.requiredDocTypes.filter((t) => t !== dt.id),
+                        }))
+                      }
+                    />
+                    <Label htmlFor={`dt-${dt.id}`} className="cursor-pointer font-normal">
+                      {dt.label}
+                    </Label>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center justify-between rounded-md border p-3">
+              <div>
+                <p className="text-sm font-medium">Auto-advance</p>
+                <p className="text-xs text-muted-foreground">
+                  Automatically start the DD pipeline when all required documents are present.
+                </p>
+              </div>
+              <Switch
+                checked={formData.autoAdvanceDataGate}
+                onCheckedChange={(checked) =>
+                  setFormData((prev) => ({ ...prev, autoAdvanceDataGate: checked }))
+                }
+              />
+            </div>
           </CardContent>
         </Card>
 

@@ -54,6 +54,9 @@ export const DEAL_EVENT_TYPES = [
   // conversation that's linked to a deal.
   "stage.changed",
   "founder.replied",
+  "due_diligence.data_gate_entered",
+  "due_diligence.data_gate_skipped",
+  "due_diligence.data_gate_complete",
 ] as const;
 
 export type DealEventType = (typeof DEAL_EVENT_TYPES)[number];

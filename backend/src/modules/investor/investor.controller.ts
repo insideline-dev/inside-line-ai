@@ -117,11 +117,7 @@ export class InvestorController {
     @CurrentUser() user: User,
     @Body() dto: CreateThesisDto,
   ) {
-    const thesis = await this.thesisService.upsert(user.id, dto);
-    if (!dto.skipRematching) {
-      void this.matchService.regenerateMatches(user.id).catch(() => {});
-    }
-    return thesis;
+    return this.thesisService.upsert(user.id, dto);
   }
 
   @Post('thesis/generate-summary')

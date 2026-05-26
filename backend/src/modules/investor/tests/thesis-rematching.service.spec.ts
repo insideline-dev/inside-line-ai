@@ -40,10 +40,12 @@ const mockThesis = {
 };
 
 const approvedStartups = [
-  { id: "startup-approved-1" },
-  { id: "startup-approved-2" },
-  { id: "startup-approved-3" },
+  { startupId: "startup-approved-1" },
+  { startupId: "startup-approved-2" },
+  { startupId: "startup-approved-3" },
 ];
+const existingMatches = [{ startupId: "startup-existing-match" }];
+const ownedVisibleStartups = [{ startupId: "startup-private-1" }];
 
 describe("ThesisService - re-matching after thesis update", () => {
   let service: ThesisService;
@@ -113,13 +115,32 @@ describe("ThesisService - re-matching after thesis update", () => {
     // Chain update().set().where().returning() → returns updated thesis
     withRlsDb.update.mockReturnValue({ set: jest.fn().mockReturnValue({ where: jest.fn().mockReturnValue({ returning: jest.fn().mockResolvedValue([{ ...mockThesis, notes: "Updated" }]) }) }) });
 
-    // The outer drizzle.db (used for approved startups query, outside withRLS)
+    // The outer drizzle.db issues three queries:
+    // 1) existing startup_match rows for this investor
+    // 2) investor-owned visible startups with evaluation
+    // 3) approved startups with evaluation
     const outerDb = {
-      select: jest.fn().mockReturnValue({
-        from: jest.fn().mockReturnValue({
-          where: jest.fn().mockResolvedValue(approvedStartups),
+      select: jest
+        .fn()
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockResolvedValue(existingMatches),
+          }),
+        })
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            innerJoin: jest.fn().mockReturnValue({
+              where: jest.fn().mockResolvedValue(ownedVisibleStartups),
+            }),
+          }),
+        })
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            innerJoin: jest.fn().mockReturnValue({
+              where: jest.fn().mockResolvedValue(approvedStartups),
+            }),
+          }),
         }),
-      }),
     };
 
     const drizzle = {
@@ -134,13 +155,13 @@ describe("ThesisService - re-matching after thesis update", () => {
     // Give time for the async fire-and-forget rematching to complete
     await new Promise((r) => setTimeout(r, 100));
 
-    expect(startupMatchingService.queueStartupMatching).toHaveBeenCalledTimes(
-      approvedStartups.length,
-    );
+    expect(startupMatchingService.queueStartupMatching).toHaveBeenCalledTimes(5);
     expect(startupMatchingService.queueStartupMatching).toHaveBeenCalledWith(
       expect.objectContaining({
         triggerSource: "thesis_update",
         requestedBy: mockUserId,
+        targetInvestorId: mockUserId,
+        requireApproved: false,
       }),
     );
   });
@@ -239,11 +260,12 @@ describe("ThesisService - AI summary generation", () => {
       industries: ["fintech"],
       stages: ["seed"],
       thesisNarrative: "Focus on early stage B2B",
+      regenerateSummary: true,
     });
 
     expect(generateTextMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        prompt: expect.stringContaining("Generate a concise, professional investment thesis summary"),
+        prompt: expect.stringContaining("Generate a professional investment thesis summary for this fund based on all available data."),
       }),
     );
   });

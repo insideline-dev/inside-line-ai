@@ -17,11 +17,13 @@ import { DealDecisionService } from '../deal-decision.service';
 import { StartupMatchingPipelineService } from '../../ai/services/startup-matching-pipeline.service';
 import { ScreeningQueueService } from '../screening-queue.service';
 import { ScreeningCalibrationService } from '../screening-calibration.service';
+import { ScreeningOverrideService } from '../screening-override.service';
 import { ScreeningProcessor } from '../../ai/processors/screening.processor';
 import { PipelineService } from '../../ai/services/pipeline.service';
 import { ProgressTrackerService } from '../../ai/orchestrator/progress-tracker.service';
 import { PipelineStateService } from '../../ai/services/pipeline-state.service';
 import { DrizzleService } from '../../../database';
+import { DealEventService } from '../../startup/deal-event.service';
 import { UserRole } from '../../../auth/entities/auth.schema';
 
 describe('InvestorController', () => {
@@ -212,6 +214,10 @@ describe('InvestorController', () => {
           useValue: { listForInvestor: jest.fn() },
         },
         {
+          provide: ScreeningOverrideService,
+          useValue: { createOverride: jest.fn() },
+        },
+        {
           provide: ScreeningProcessor,
           useValue: { runScreening: jest.fn() },
         },
@@ -233,6 +239,10 @@ describe('InvestorController', () => {
         {
           provide: PipelineStateService,
           useValue: { getPhaseResult: jest.fn().mockResolvedValue(null) },
+        },
+        {
+          provide: DealEventService,
+          useValue: { record: jest.fn() },
         },
       ],
     }).compile();
@@ -305,7 +315,7 @@ describe('InvestorController', () => {
         notes: 'Test thesis',
       };
 
-      it('should create or update thesis and queue match regeneration', async () => {
+      it('should create or update thesis via ThesisService only', async () => {
         thesisService.upsert.mockResolvedValue(mockThesis);
 
         const result = await controller.createOrUpdateThesis(
@@ -318,9 +328,7 @@ describe('InvestorController', () => {
           mockUser.id,
           createDto,
         );
-        expect(matchService.regenerateMatches).toHaveBeenCalledWith(
-          mockUser.id,
-        );
+        expect(matchService.regenerateMatches).not.toHaveBeenCalled();
       });
     });
 
@@ -429,14 +437,14 @@ describe('InvestorController', () => {
         );
       });
 
-      it('should throw NotFoundException when match does not exist', async () => {
+      it('should return null when match does not exist', async () => {
         matchService.findOne.mockRejectedValue(
           new NotFoundException('Match not found'),
         );
 
         await expect(
           controller.getMatchDetails(mockUser, 'invalid-id'),
-        ).rejects.toThrow(NotFoundException);
+        ).resolves.toBeNull();
       });
     });
 

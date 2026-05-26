@@ -91,6 +91,7 @@ export interface AiMatchingJobData extends BaseJobData {
   startupId: string;
   analysisJobId: string;
   triggerSource: "approval" | "manual" | "retry" | "pipeline_completion" | "thesis_update";
+  targetInvestorId?: string;
 }
 
 export type AiPipelineJobData =

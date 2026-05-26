@@ -6,12 +6,13 @@ import {
   NotFoundException,
   Optional,
 } from '@nestjs/common';
-import { desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, or, sql } from 'drizzle-orm';
 import { DrizzleService } from '../../database';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../database/schema';
 import {
   investorThesis,
+  startupMatch,
 } from './entities/investor.schema';
 import { investorDealbreakerRuleVersion } from './entities/dealbreaker-rule-version.schema';
 import { investorEvent } from './entities/investor-event.schema';
@@ -27,7 +28,9 @@ import {
   getInvestorGeographyTaxonomy,
   mapNodeIdsToLabels,
 } from '../geography';
+import { UserRole } from '../../auth/entities/auth.schema';
 import { startup, StartupStatus } from '../startup/entities/startup.schema';
+import { startupEvaluation } from '../analysis/entities';
 import { StartupMatchingPipelineService } from '../ai/services/startup-matching-pipeline.service';
 import { AiProviderService } from '../ai/providers/ai-provider.service';
 import { ModelPurpose } from '../ai/interfaces/pipeline.interface';
@@ -419,37 +422,85 @@ export class ThesisService {
   private async triggerRematching(investorUserId: string): Promise<void> {
     if (!this.startupMatching) return;
 
-    const approvedStartups = await this.drizzle.db
-      .select({ id: startup.id })
-      .from(startup)
-      .where(eq(startup.status, StartupStatus.APPROVED));
+    const targetStartupIds = await this.listRematchTargetStartupIds(investorUserId);
 
-    if (approvedStartups.length === 0) {
-      this.logger.log(`No approved startups to re-match after thesis update for investor ${investorUserId}`);
+    if (targetStartupIds.length === 0) {
+      this.logger.log(
+        `No visible evaluated startups to re-match after thesis update for investor ${investorUserId}`,
+      );
       return;
     }
 
-    this.logger.log(`Triggering re-matching for ${approvedStartups.length} approved startups after thesis update for investor ${investorUserId}`);
+    this.logger.log(
+      `Triggering targeted re-matching for ${targetStartupIds.length} startups after thesis update for investor ${investorUserId}`,
+    );
 
-    // Process in batches to avoid overwhelming the queue
-    for (let i = 0; i < approvedStartups.length; i += THESIS_SUMMARY_BATCH_SIZE) {
-      const batch = approvedStartups.slice(i, i + THESIS_SUMMARY_BATCH_SIZE);
+    for (let i = 0; i < targetStartupIds.length; i += THESIS_SUMMARY_BATCH_SIZE) {
+      const batch = targetStartupIds.slice(i, i + THESIS_SUMMARY_BATCH_SIZE);
       await Promise.all(
-        batch.map((s) =>
+        batch.map((startupId) =>
           this.startupMatching!.queueStartupMatching({
-            startupId: s.id,
+            startupId,
             requestedBy: investorUserId,
+            targetInvestorId: investorUserId,
             triggerSource: 'thesis_update',
             requireApproved: false,
           }).catch((err: unknown) => {
             const msg = err instanceof Error ? err.message : String(err);
-            this.logger.warn(`Failed to queue re-matching for startup ${s.id}: ${msg}`);
+            this.logger.warn(
+              `Failed to queue targeted re-matching for startup ${startupId}: ${msg}`,
+            );
           }),
         ),
       );
     }
 
-    this.logger.log(`Re-matching queued for ${approvedStartups.length} startups after thesis update`);
+    this.logger.log(
+      `Targeted re-matching queued for ${targetStartupIds.length} startups after thesis update`,
+    );
+  }
+
+  private async listRematchTargetStartupIds(
+    investorUserId: string,
+  ): Promise<string[]> {
+    const existingMatchRows = await this.drizzle.db
+      .select({ startupId: startupMatch.startupId })
+      .from(startupMatch)
+      .where(eq(startupMatch.investorId, investorUserId));
+
+    const ownedVisibleRows = await this.drizzle.db
+      .select({ startupId: startup.id })
+      .from(startup)
+      .innerJoin(
+        startupEvaluation,
+        eq(startupEvaluation.startupId, startup.id),
+      )
+      .where(
+        and(
+          eq(startup.userId, investorUserId),
+          eq(startup.submittedByRole, UserRole.INVESTOR),
+          inArray(startup.status, [
+            StartupStatus.APPROVED,
+            StartupStatus.PENDING_REVIEW,
+            StartupStatus.ANALYZING,
+          ]),
+        ),
+      );
+
+    const approvedRows = await this.drizzle.db
+      .select({ startupId: startup.id })
+      .from(startup)
+      .innerJoin(
+        startupEvaluation,
+        eq(startupEvaluation.startupId, startup.id),
+      )
+      .where(eq(startup.status, StartupStatus.APPROVED));
+
+    return [...new Set([
+      ...existingMatchRows.map((row) => row.startupId),
+      ...ownedVisibleRows.map((row) => row.startupId),
+      ...approvedRows.map((row) => row.startupId),
+    ])];
   }
 
   private async generateAiSummaryWithFallback(thesis: Record<string, unknown>): Promise<string> {

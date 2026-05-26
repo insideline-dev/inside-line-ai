@@ -31,6 +31,7 @@ export interface QueueStartupMatchingParams {
   requestedBy: string;
   triggerSource: MatchingTriggerSource;
   requireApproved?: boolean;
+  targetInvestorId?: string;
 }
 
 export interface QueueStartupMatchingResult {
@@ -107,6 +108,7 @@ export class StartupMatchingPipelineService {
           startupId: params.startupId,
           analysisJobId: createdJob.id,
           triggerSource: params.triggerSource,
+          targetInvestorId: params.targetInvestorId,
           userId: params.requestedBy,
           priority: 2,
         },
@@ -226,10 +228,10 @@ export class StartupMatchingPipelineService {
       }
 
       const selectedInvestorIds = startupRecord.selectedInvestorIds;
-      const restrictToInvestorId = selectedInvestorIds?.length
-        ? undefined
-        : await this.resolveRestrictToInvestorId(startupRecord);
-      const forceIncludeInvestorId = selectedInvestorIds?.length
+      const restrictToInvestorId =
+        jobData.targetInvestorId ??
+        await this.resolveRestrictToInvestorId(startupRecord);
+      const forceIncludeInvestorId = jobData.targetInvestorId
         ? undefined
         : await this.resolveForceIncludeInvestorId(
             jobData.userId,

@@ -6,7 +6,6 @@ import {
   ArrowLeft,
   Check,
   CheckCircle2,
-  ExternalLink,
   ShieldAlert,
   Sparkles,
   History,
@@ -16,11 +15,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { CitedText } from "@/components/CitedText";
 import { FitChips } from "@/components/investor/FitChips";
 import { StartupFavicon } from "@/components/investor/StartupFavicon";
 import { ScoreRing } from "@/components/analysis/ScoreRing";
@@ -119,93 +114,31 @@ function FitTable({ fit }: { fit: ThesisFitOutput }) {
   );
 }
 
-function EvidenceSourceLabel({ evidence }: { evidence: ScreeningEvidence }) {
-  const label =
-    evidence.sourceType === "deck_page" && evidence.pageNumber
-      ? `Pitch deck • page ${evidence.pageNumber}`
-      : evidence.sourceLabel ?? evidence.sourceRef ?? evidence.source ?? null;
-
-  if (!label) return null;
-
-  return (
-    <span className="text-[11px] text-muted-foreground">
-      {label}
-    </span>
-  );
-}
-
-function LensEvidenceClaim({
-  evidence,
-  onDeckPageSelect,
-}: {
-  evidence: ScreeningEvidence;
-  onDeckPageSelect: (pageNumber: number) => void;
-}) {
-  const href = evidence.url ?? evidence.source;
-
-  if (
-    evidence.sourceType === "deck_page" &&
-    typeof evidence.pageNumber === "number"
-  ) {
-    return (
-      <button
-        type="button"
-        className="text-left text-sm leading-relaxed text-foreground hover:underline"
-        onClick={() => onDeckPageSelect(evidence.pageNumber!)}
-      >
-        {evidence.claim}
-      </button>
-    );
-  }
-
-  if (href && /^https?:\/\//.test(href)) {
-    return (
-      <a
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-start gap-1 text-sm leading-relaxed text-foreground hover:underline"
-      >
-        <span>{evidence.claim}</span>
-        <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-60" />
-      </a>
-    );
-  }
-
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className="text-left text-sm leading-relaxed text-foreground hover:underline"
-        >
-          {evidence.claim}
-        </button>
-      </PopoverTrigger>
-      <PopoverContent align="start" className="w-80 p-3">
-        <div className="space-y-2">
-          <div className="text-sm font-medium">{evidence.claim}</div>
-          <EvidenceSourceLabel evidence={evidence} />
-          {evidence.quote && (
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              {evidence.quote}
-            </p>
-          )}
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
+function evidenceToSources(
+  evidence: ScreeningEvidence[],
+): Array<{ label: string; url: string }> {
+  return evidence.map((e) => {
+    const label =
+      e.sourceType === "deck_page" && e.pageNumber
+        ? `Pitch deck · page ${e.pageNumber}`
+        : e.sourceLabel ?? e.source ?? e.claim.slice(0, 60);
+    const url = e.url ?? "";
+    return { label, url };
+  });
 }
 
 function LensWriteup({
   lens,
   detail,
-  onDeckPageSelect,
 }: {
   lens: LensScore;
   detail?: ScreeningLensV1;
-  onDeckPageSelect: (pageNumber: number) => void;
 }) {
+  const sources = useMemo(
+    () => evidenceToSources(detail?.evidence ?? []),
+    [detail?.evidence],
+  );
+
   return (
     <Card>
       <CardContent className="flex flex-col gap-3 p-4">
@@ -224,33 +157,17 @@ function LensWriteup({
           <span className="text-xl font-bold tabular-nums">{lens.score}</span>
         </div>
         {lens.rationale ? (
-          <p className="whitespace-pre-line text-sm leading-relaxed text-foreground/90">
-            {lens.rationale}
-          </p>
+          <CitedText
+            text={lens.rationale}
+            sources={sources}
+            className="text-sm leading-relaxed text-foreground/90"
+          />
         ) : lens.note ? (
           <p className="text-sm text-muted-foreground">{lens.note}</p>
         ) : (
           <p className="text-sm italic text-muted-foreground">
             No rationale recorded for this lens.
           </p>
-        )}
-        {detail && detail.evidence.length > 0 && (
-          <div className="space-y-2 rounded-md border border-border/60 bg-muted/20 p-3">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Source-linked claims
-            </div>
-            <ul className="space-y-2">
-              {detail.evidence.map((evidence, idx) => (
-                <li key={`${detail.key}-${idx}`} className="space-y-1">
-                  <LensEvidenceClaim
-                    evidence={evidence}
-                    onDeckPageSelect={onDeckPageSelect}
-                  />
-                  <EvidenceSourceLabel evidence={evidence} />
-                </li>
-              ))}
-            </ul>
-          </div>
         )}
       </CardContent>
     </Card>
@@ -520,7 +437,6 @@ export function ScreeningDetailBody({
                   key={lens.key}
                   lens={lens}
                   detail={lensDetails.get(lens.key)}
-                  onDeckPageSelect={setDeckPage}
                 />
               ))
             )}

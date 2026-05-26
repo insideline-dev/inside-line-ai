@@ -1,13 +1,13 @@
 import { AlertTriangle, CheckCircle2, AlertCircle, XCircle, CircleHelp, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { CitedText } from "@/components/CitedText";
 import { ScoreRing } from "@/components/analysis/ScoreRing";
 import { cn } from "@/lib/utils";
 import { PrintLayout, PrintCover, PrintPage } from "./PrintLayout";
 import type { Startup } from "@/types/startup";
 import type { FitAxis, FitStatus, ThesisFitOutput } from "@/types/thesis-fit";
 import type {
-  ScreeningEvidence,
   ScreeningHandoffIssueV1,
   ScreeningLensV1,
   ScreeningOutputV1,
@@ -221,16 +221,6 @@ function FitTablePrint({ fit }: { fit: ThesisFitOutput }) {
   );
 }
 
-function EvidenceSourceLabel({ evidence }: { evidence: ScreeningEvidence }) {
-  const label =
-    evidence.sourceType === "deck_page" && evidence.pageNumber
-      ? `Pitch deck • page ${evidence.pageNumber}`
-      : evidence.sourceLabel ?? evidence.sourceRef ?? evidence.source ?? null;
-
-  if (!label) return null;
-  return <span className="text-[11px] text-muted-foreground">{label}</span>;
-}
-
 function LensWriteupPrint({ lens }: { lens: PrintLens }) {
   return (
     <Card>
@@ -251,31 +241,15 @@ function LensWriteupPrint({ lens }: { lens: PrintLens }) {
         </div>
 
         {lens.rationale ? (
-          <p className="whitespace-pre-line text-sm leading-relaxed text-foreground/90">
-            {lens.rationale}
-          </p>
+          <CitedText
+            text={lens.rationale}
+            stripCitations
+            className="text-sm leading-relaxed text-foreground/90"
+          />
         ) : (
           <p className="text-sm italic text-muted-foreground">
             No rationale recorded for this lens.
           </p>
-        )}
-
-        {lens.detail && lens.detail.evidence.length > 0 && (
-          <div className="space-y-2 rounded-md border border-border/60 bg-muted/20 p-3">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Source-linked claims
-            </div>
-            <ul className="space-y-2">
-              {lens.detail.evidence.map((ev, idx) => (
-                <li key={`${lens.key}-ev-${idx}`} className="space-y-1">
-                  <span className="text-sm leading-relaxed text-foreground">
-                    {ev.claim}
-                  </span>
-                  <EvidenceSourceLabel evidence={ev} />
-                </li>
-              ))}
-            </ul>
-          </div>
         )}
       </CardContent>
     </Card>

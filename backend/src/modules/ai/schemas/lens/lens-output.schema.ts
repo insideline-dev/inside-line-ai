@@ -46,10 +46,9 @@ export const LensInputSchema = z.object({
   stage: z.string().optional().default(""),
   contextNotes: z.string().optional().default(""),
   /**
-   * Pre-formatted investor thesis text (one bullet per criterion). v2 lens
-   * prompts make this a required input — without thesis the lens cannot
-   * answer "is this worth THIS investor's time?". Empty string when no
-   * thesis is on file; the prompt is calibrated to handle that case.
+   * Pre-formatted investor thesis text. Market/team/traction lenses do NOT
+   * use this — they evaluate purely on startup quality. Kept in the schema
+   * for other lens types that may need it (e.g. thesis-fit lens).
    */
   investorThesis: z.string().optional().default(""),
   /**

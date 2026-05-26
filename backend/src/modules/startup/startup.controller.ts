@@ -41,6 +41,9 @@ import { MeetingService } from './meeting.service';
 import { DealEventService } from './deal-event.service';
 import { OpenQuestionService } from '../dd/open-question.service';
 import { UpdateOpenQuestionDto } from '../dd/dto/open-question.dto';
+import { PdfTextExtractorService } from '../ai/services/pdf-text-extractor.service';
+import { FieldExtractorService } from '../ai/services/field-extractor.service';
+import { StorageService } from '../../storage';
 import { RolesGuard } from './guards';
 import { Roles } from './decorators/roles.decorator';
 import {
@@ -81,6 +84,9 @@ export class StartupController {
     private meetingService: MeetingService,
     private dealEvents: DealEventService,
     private openQuestions: OpenQuestionService,
+    private pdfTextExtractor: PdfTextExtractorService,
+    private fieldExtractor: FieldExtractorService,
+    private storageService: StorageService,
   ) {}
 
   // ============ OWNER ENDPOINTS (FOUNDER/INVESTOR) ============
@@ -89,6 +95,49 @@ export class StartupController {
   @Roles(UserRole.FOUNDER, UserRole.INVESTOR, UserRole.ADMIN)
   async create(@CurrentUser() user: User, @Body() dto: CreateStartupDto) {
     return this.startupService.create(user.id, dto, user.role);
+  }
+
+  @Post('extract-deck-metadata')
+  @Roles(UserRole.INVESTOR, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Extract company name + website from an uploaded pitch deck' })
+  async extractDeckMetadata(
+    @Body() body: { storageKey: string },
+  ) {
+    if (!body.storageKey) {
+      throw new BadRequestException('storageKey is required');
+    }
+
+    try {
+      const downloadUrl = await this.storageService.getDownloadUrl(body.storageKey, 300);
+      const response = await fetch(downloadUrl, {
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (!response.ok) {
+        throw new Error(`Failed to fetch PDF: HTTP ${response.status}`);
+      }
+      const buffer = Buffer.from(await response.arrayBuffer());
+      const pdfResult = await this.pdfTextExtractor.extractText(buffer);
+
+      if (!pdfResult.hasContent) {
+        return { companyName: null, website: null, extracted: false };
+      }
+
+      const fields = await this.fieldExtractor.extractFields(pdfResult.text);
+
+      return {
+        companyName: fields.companyName || null,
+        website: fields.website || null,
+        industry: fields.industry || null,
+        stage: fields.stage || null,
+        description: fields.description || null,
+        extracted: true,
+      };
+    } catch (error) {
+      this.logger.warn(
+        `Deck metadata extraction failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return { companyName: null, website: null, extracted: false };
+    }
   }
 
   @Get()

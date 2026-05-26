@@ -222,6 +222,8 @@ import { OpenAiTextGenerationService } from "./services/openai-text-generation.s
     ScreeningTriageModule,
     ScreeningProcessor,
     ScreeningCascadeService,
+    FieldExtractorService,
+    PdfTextExtractorService,
   ],
 })
 export class AiModule {}

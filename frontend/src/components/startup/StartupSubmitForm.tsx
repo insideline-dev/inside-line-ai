@@ -65,7 +65,7 @@ import { TwoLevelIndustrySelector } from "@/components/TwoLevelIndustrySelector"
 import { CurrencyInput } from "@/components/CurrencyInput";
 import { CountryCodeSelector } from "@/components/CountryCodeSelector";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Upload, Globe, FileText, Building2, MapPin, Loader2, CheckCircle, Users, Plus, Trash2, Linkedin, TrendingUp, Package, Video, Image, User, Mail, Phone, History, Info, Save, Cloud, CloudOff, Search } from "lucide-react";
+import { Upload, Globe, FileText, Building2, MapPin, Loader2, CheckCircle, Users, Plus, Trash2, Linkedin, TrendingUp, Package, Video, Image, User, Mail, Phone, History, Info, Save, Cloud, CloudOff, Search, RefreshCw } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 
 // Define base schema shape for type inference
@@ -493,13 +493,43 @@ export function StartupSubmitForm({
   const watchedWebsite = form.watch("website");
   const watchedStage = form.watch("stage");
   const watchedSector = form.watch("sectorIndustryGroup");
+  const watchedSectorIndustry = form.watch("sectorIndustry");
   const watchedLocation = form.watch("location");
+  const watchedFundingTarget = form.watch("fundingTarget");
 
   useEffect(() => {
     if (shouldSaveDraft && !isLoadingDraft && watchedName) {
       debouncedSave();
     }
   }, [watchedName, watchedTagline, watchedDescription, watchedWebsite, watchedStage, watchedSector, watchedLocation, shouldSaveDraft, isLoadingDraft, debouncedSave]);
+
+  const previewFieldsReady =
+    !!(watchedSectorIndustry || watchedSector) &&
+    !!watchedStage &&
+    !!watchedLocation &&
+    !!watchedFundingTarget &&
+    Number(watchedFundingTarget) > 0;
+
+  useEffect(() => {
+    if (
+      distributionMode === "select_investors" &&
+      portalSlug &&
+      previewFieldsReady &&
+      !previewMatchesMutation.isPending
+    ) {
+      const industry = watchedSectorIndustry || watchedSector || "general";
+      previewMatchesMutation.mutate({
+        slug: portalSlug,
+        data: {
+          industry,
+          stage: watchedStage as any,
+          location: watchedLocation,
+          fundingTarget: Math.round(Number(watchedFundingTarget)),
+        },
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [distributionMode, previewFieldsReady, portalSlug]);
 
   // Also trigger save when files/team change
   useEffect(() => {
@@ -2114,24 +2144,6 @@ export function StartupSubmitForm({
                       type="button"
                       onClick={() => {
                         setDistributionMode(option.value);
-                        if (option.value === "select_investors" && portalSlug) {
-                          const formValues = form.getValues();
-                          const industry = formValues.sectorIndustry || formValues.sectorIndustryGroup || "general";
-                          const stage = formValues.stage;
-                          const location = formValues.location;
-                          const fundingTarget = formValues.fundingTarget ? Math.round(Number(formValues.fundingTarget)) : 0;
-                          if (industry && stage && location && fundingTarget > 0) {
-                            previewMatchesMutation.mutate({
-                              slug: portalSlug,
-                              data: {
-                                industry,
-                                stage: stage as any,
-                                location,
-                                fundingTarget,
-                              },
-                            });
-                          }
-                        }
                         if (option.value !== "select_investors") {
                           setSelectedInvestorIds(new Set());
                         }
@@ -2152,23 +2164,58 @@ export function StartupSubmitForm({
 
               {distributionMode === "select_investors" && (
                 <div className="space-y-3">
-                  {previewMatchesMutation.isPending && (
+                  {!previewFieldsReady && (
+                    <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
+                      <p className="font-medium">Complete your startup details first</p>
+                      <p className="mt-1 text-xs">
+                        Fill in your{" "}
+                        {[
+                          !(watchedSectorIndustry || watchedSector) && "industry",
+                          !watchedStage && "stage",
+                          !watchedLocation && "location",
+                          !(watchedFundingTarget && Number(watchedFundingTarget) > 0) && "round size",
+                        ].filter(Boolean).join(", ")}{" "}
+                        to see matching investors.
+                      </p>
+                    </div>
+                  )}
+
+                  {previewFieldsReady && previewMatchesMutation.isPending && (
                     <div className="flex items-center justify-center py-8 text-muted-foreground">
                       <Loader2 className="w-5 h-5 animate-spin mr-2" />
                       Finding matching investors...
                     </div>
                   )}
 
-                  {previewMatchesMutation.isError && (
+                  {previewFieldsReady && previewMatchesMutation.isError && (
                     <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-4 text-sm text-destructive">
                       <p className="font-medium">Could not load investor matches</p>
                       <p className="mt-1 text-xs">
-                        Make sure you've filled in your industry, stage, location, and round size, then try selecting "Control matching" again.
+                        Something went wrong. Try refreshing the matches below.
                       </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const industry = watchedSectorIndustry || watchedSector || "general";
+                          previewMatchesMutation.mutate({
+                            slug: portalSlug!,
+                            data: {
+                              industry,
+                              stage: watchedStage as any,
+                              location: watchedLocation,
+                              fundingTarget: Math.round(Number(watchedFundingTarget)),
+                            },
+                          });
+                        }}
+                        className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        Retry
+                      </button>
                     </div>
                   )}
 
-                  {previewMatchesMutation.isSuccess && (() => {
+                  {previewFieldsReady && previewMatchesMutation.isSuccess && (() => {
                     const result = previewMatchesMutation.data?.data as unknown as {
                       investors: Array<{
                         id: string;
@@ -2205,19 +2252,40 @@ export function StartupSubmitForm({
                           <p className="text-sm font-medium">
                             {investors.length} investor{investors.length !== 1 ? "s" : ""} match your profile
                           </p>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (allSelected) {
-                                setSelectedInvestorIds(new Set());
-                              } else {
-                                setSelectedInvestorIds(new Set(investors.map((inv) => inv.id)));
-                              }
-                            }}
-                            className="text-xs text-primary hover:underline"
-                          >
-                            {allSelected ? "Deselect all" : "Select all"}
-                          </button>
+                          <div className="flex items-center gap-3">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const industry = watchedSectorIndustry || watchedSector || "general";
+                                previewMatchesMutation.mutate({
+                                  slug: portalSlug!,
+                                  data: {
+                                    industry,
+                                    stage: watchedStage as any,
+                                    location: watchedLocation,
+                                    fundingTarget: Math.round(Number(watchedFundingTarget)),
+                                  },
+                                });
+                              }}
+                              className="text-xs text-muted-foreground hover:text-primary inline-flex items-center gap-1"
+                            >
+                              <RefreshCw className="w-3 h-3" />
+                              Refresh
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (allSelected) {
+                                  setSelectedInvestorIds(new Set());
+                                } else {
+                                  setSelectedInvestorIds(new Set(investors.map((inv) => inv.id)));
+                                }
+                              }}
+                              className="text-xs text-primary hover:underline"
+                            >
+                              {allSelected ? "Deselect all" : "Select all"}
+                            </button>
+                          </div>
                         </div>
                         <div className="grid gap-2">
                           {investors.map((investor) => {

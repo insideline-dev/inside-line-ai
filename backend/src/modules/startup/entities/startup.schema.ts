@@ -201,6 +201,7 @@ export const startup = pgTable(
     privateInvestorPipelineStatus: privateInvestorPipelineStatusEnum('private_investor_pipeline_status'),
     dataGateStatus: dataGateStatusEnum('data_gate_status'),
     docRequestedAt: timestamp('doc_requested_at'),
+    lastExtractionAt: timestamp('last_extraction_at'),
 
     // Media URLs
     pitchDeckUrl: text('pitch_deck_url'),

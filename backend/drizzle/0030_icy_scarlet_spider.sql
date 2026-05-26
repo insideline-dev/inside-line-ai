@@ -1,0 +1,1 @@
+ALTER TABLE "startups" ADD COLUMN "last_extraction_at" timestamp;

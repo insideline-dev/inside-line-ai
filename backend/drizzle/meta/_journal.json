@@ -211,6 +211,13 @@
       "when": 1779820862631,
       "tag": "0029_daily_grey_gargoyle",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1779821380550,
+      "tag": "0030_icy_scarlet_spider",
+      "breakpoints": true
     }
   ]
 }

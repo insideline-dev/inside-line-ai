@@ -1425,6 +1425,18 @@ export class PipelineService {
           );
         }
       }
+
+      try {
+        await this.drizzle.db
+          .update(startup)
+          .set({ lastExtractionAt: new Date() })
+          .where(eq(startup.id, startupId));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.warn(
+          `[Pipeline] Failed to update lastExtractionAt for ${startupId}: ${message}`,
+        );
+      }
     }
 
     if (phase === PipelinePhase.SCRAPING) {

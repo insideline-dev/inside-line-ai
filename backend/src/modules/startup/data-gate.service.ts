@@ -1,5 +1,5 @@
 import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, gt, sql } from 'drizzle-orm';
 import { DrizzleService } from '../../database';
 import { startup, DataGateStatus } from './entities/startup.schema';
 import { dataRoom } from './entities/data-room.schema';
@@ -176,6 +176,28 @@ export class DataGateService {
     }
   }
 
+  private async hasNewDocsSinceExtraction(startupId: string): Promise<boolean> {
+    const [row] = await this.drizzle.db
+      .select({ lastExtractionAt: startup.lastExtractionAt })
+      .from(startup)
+      .where(eq(startup.id, startupId))
+      .limit(1);
+
+    if (!row?.lastExtractionAt) return true;
+
+    const [result] = await this.drizzle.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(dataRoom)
+      .where(
+        and(
+          eq(dataRoom.startupId, startupId),
+          gt(dataRoom.uploadedAt, row.lastExtractionAt),
+        ),
+      );
+
+    return (result?.count ?? 0) > 0;
+  }
+
   private async triggerDdPipeline(
     startupId: string,
     userId: string,
@@ -185,11 +207,17 @@ export class DataGateService {
       return;
     }
 
+    const needsReExtraction = await this.hasNewDocsSinceExtraction(startupId);
+    const startPhase = needsReExtraction
+      ? PipelinePhase.CLASSIFICATION
+      : PipelinePhase.RESEARCH;
+
+    this.logger.log(
+      `[DataGate] Starting DD pipeline for ${startupId} from ${startPhase}${needsReExtraction ? ' (new documents detected — re-extracting)' : ''}`,
+    );
+
     try {
-      await this.pipelineCoreService.rerunFromPhase(
-        startupId,
-        PipelinePhase.RESEARCH,
-      );
+      await this.pipelineCoreService.rerunFromPhase(startupId, startPhase);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       const isStateMissing = /not found/i.test(message);

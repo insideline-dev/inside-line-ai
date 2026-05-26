@@ -14,3 +14,4 @@ export { AdminSummaryTab } from "./AdminSummaryTab";
 export { DataRoomPanel } from "./DataRoomPanel";
 export { ScreeningSummaryCard } from "./ScreeningSummaryCard";
 export { FundingHistoryBlock } from "./FundingHistoryBlock";
+export { ScreeningInsightsTab } from "./ScreeningInsightsTab";

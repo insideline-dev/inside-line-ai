@@ -40,6 +40,7 @@ import {
   MarketTabContent,
   FinancialsTabContent,
   DataRoomPanel,
+  ScreeningInsightsTab,
 } from "@/components/startup-view";
 import { DealActivityTimeline } from "@/components/startup-view/DealActivityTimeline";
 import { useToast } from "@/hooks/use-toast";
@@ -54,6 +55,7 @@ export const Route = createFileRoute("/_protected/investor/startup/$id")({
 type InvestorStartupTab =
   | "summary"
   | "memo"
+  | "screening"
   | "market"
   | "product"
   | "team"
@@ -268,6 +270,7 @@ function InvestorStartupDetailPage() {
             <>
               <TabsTrigger value="summary" className="w-full sm:w-auto">Summary</TabsTrigger>
               <TabsTrigger value="memo" className="w-full sm:w-auto">Memo</TabsTrigger>
+              <TabsTrigger value="screening" className="w-full sm:w-auto">Screening</TabsTrigger>
               <TabsTrigger value="market" className="w-full sm:w-auto">Market</TabsTrigger>
               <TabsTrigger value="product" className="w-full sm:w-auto">Product</TabsTrigger>
               <TabsTrigger value="team" className="w-full sm:w-auto">Team</TabsTrigger>
@@ -307,6 +310,10 @@ function InvestorStartupDetailPage() {
                 evaluation={evaluation}
                 weights={weights}
               />
+            </TabsContent>
+
+            <TabsContent value="screening" className="mt-6">
+              <ScreeningInsightsTab startupId={id} />
             </TabsContent>
 
             <TabsContent value="market" className="mt-6">

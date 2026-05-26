@@ -9,7 +9,7 @@ import { ScoreRing } from "@/components/analysis/ScoreRing";
 import { AnalysisProgressBar } from "@/components/AnalysisProgressBar";
 import { useAdminControllerGetStats, useAdminControllerGetAllStartups } from "@/api/generated/admin/admin";
 import type { AdminControllerGetAllStartupsStatus } from "@/api/generated/model";
-import { Clock, Sparkles, CheckCircle, XCircle, Users, Target, Building2, Eye } from "lucide-react";
+import { Clock, Sparkles, CheckCircle, XCircle, Users, Target, Building2, Eye, FileText, Handshake } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { StageNav } from "@/components/investor/StageNav";
@@ -181,7 +181,10 @@ function AdminStartupRow({ startup }: { startup: StartupItem }) {
   );
 }
 
+type DDSubTab = "data-gates" | "analyzed" | "engaged";
+
 function AdminDashboard() {
+  const [ddSubTab, setDdSubTab] = useState<DDSubTab>("analyzed");
   const prevAnalyzingCountRef = useRef<number>(0);
   const [activeTab, setActiveTab] = useState("all");
   const [page, setPage] = useState(1);
@@ -298,6 +301,46 @@ function AdminDashboard() {
   return (
     <div className="space-y-6">
       <StageNav surface="admin" />
+
+      {/* ─── DD Sub-stage Tabs ─── */}
+      <Tabs value={ddSubTab} onValueChange={(v) => setDdSubTab(v as DDSubTab)}>
+        <TabsList>
+          <TabsTrigger value="data-gates">Data Gates</TabsTrigger>
+          <TabsTrigger value="analyzed">Analyzed</TabsTrigger>
+          <TabsTrigger value="engaged">
+            <Handshake className="mr-1.5 h-4 w-4" />
+            Engaged
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="data-gates" className="mt-6">
+          <Card className="border-dashed">
+            <CardContent className="flex flex-col items-center gap-2 py-12 text-center text-muted-foreground">
+              <FileText className="h-8 w-8 opacity-60" />
+              <h3 className="text-lg font-semibold text-foreground">Data Gates</h3>
+              <p className="text-sm">
+                Post-screening hold for missing materials and open questions before the DD pipeline runs.
+              </p>
+              <p className="text-xs">Coming in the next increment.</p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="engaged" className="mt-6">
+          <Card className="border-dashed">
+            <CardContent className="flex flex-col items-center gap-2 py-12 text-center text-muted-foreground">
+              <Handshake className="h-8 w-8 opacity-60" />
+              <h3 className="text-lg font-semibold text-foreground">DD / Engaged</h3>
+              <p className="text-sm">
+                Deals investors are actively reviewing within Due Diligence.
+              </p>
+              <p className="text-xs">Deals moved here manually from the Analyzed board.</p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="analyzed" className="mt-6 space-y-6">
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Due Diligence</h1>
@@ -399,6 +442,9 @@ function AdminDashboard() {
             )}
           </TabsContent>
         ))}
+      </Tabs>
+
+        </TabsContent>
       </Tabs>
     </div>
   );

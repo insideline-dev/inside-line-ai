@@ -52,7 +52,7 @@ function stagesFor(surface: "investor" | "admin"): StageDef[] {
     },
     {
       key: "contracting",
-      label: "Contracting",
+      label: "Engaged",
       to: `${root}/contracting`,
       matches: (p) => p.startsWith(`${root}/contracting`),
     },

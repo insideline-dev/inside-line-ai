@@ -18,7 +18,7 @@ import {
 import { StageNav } from "@/components/investor/StageNav";
 import { CalibrationCard } from "@/components/investor/CalibrationCard";
 import { useFilterStore } from "@/stores";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SearchAndFilters, defaultFilters, type FilterState, STAGES, REGIONS, SOURCE_OPTIONS } from "@/components/SearchAndFilters";
 import {
   ContextMenu,
@@ -69,6 +69,7 @@ import {
   List,
   Columns3,
   FileSearch,
+  FileText,
   Lock,
   Loader2,
   Search,
@@ -80,6 +81,7 @@ import {
   Bookmark,
   Wand2,
   AlertTriangle,
+  Handshake,
   X,
 } from "lucide-react";
 import type { PrivateInvestorPipelineStatus } from "@/types/startup";
@@ -1245,7 +1247,10 @@ function CloseDealDialog({
 
 // ─── Main Component ──────────────────────────────────────────────────────────
 
+type DDSubTab = "data-gates" | "analyzed" | "engaged";
+
 function InvestorDashboard() {
+  const [ddSubTab, setDdSubTab] = useState<DDSubTab>("analyzed");
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<FilterState>(defaultFilters);
@@ -1584,7 +1589,47 @@ function InvestorDashboard() {
 
   return (
     <div className="space-y-6">
-      <StageNav counts={{ dd: (pipeline?.stats?.total ?? 0) }} />
+      <StageNav counts={{ dd: allItems.length }} />
+
+      {/* ─── DD Sub-stage Tabs ─── */}
+      <Tabs value={ddSubTab} onValueChange={(v) => setDdSubTab(v as DDSubTab)}>
+        <TabsList>
+          <TabsTrigger value="data-gates">Data Gates</TabsTrigger>
+          <TabsTrigger value="analyzed">Analyzed</TabsTrigger>
+          <TabsTrigger value="engaged">
+            <Handshake className="mr-1.5 h-4 w-4" />
+            Engaged
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="data-gates" className="mt-6">
+          <Card className="border-dashed">
+            <CardContent className="flex flex-col items-center gap-2 py-12 text-center text-muted-foreground">
+              <FileText className="h-8 w-8 opacity-60" />
+              <h3 className="text-lg font-semibold text-foreground">Data Gates</h3>
+              <p className="text-sm">
+                Post-screening hold for missing materials and open questions before the DD pipeline runs.
+              </p>
+              <p className="text-xs">Coming in the next increment.</p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="engaged" className="mt-6">
+          <Card className="border-dashed">
+            <CardContent className="flex flex-col items-center gap-2 py-12 text-center text-muted-foreground">
+              <Handshake className="h-8 w-8 opacity-60" />
+              <h3 className="text-lg font-semibold text-foreground">DD / Engaged</h3>
+              <p className="text-sm">
+                Deals you are actively reviewing within Due Diligence, before promoting to top-level Engaged.
+              </p>
+              <p className="text-xs">Move deals here manually from the Analyzed board.</p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="analyzed" className="mt-6 space-y-6">
+
       {inFlightDeals.length > 0 && (
         <div className="flex flex-col gap-2 rounded-md border border-sky-300 bg-sky-50 p-4 text-sky-900">
           <div className="flex items-center gap-2 font-semibold">
@@ -1835,6 +1880,9 @@ function InvestorDashboard() {
           isPending={updateStatus.isPending}
         />
       )}
+
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

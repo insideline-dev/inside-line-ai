@@ -1,4 +1,4 @@
-import { Injectable, Logger, Optional } from "@nestjs/common";
+import { Injectable, Logger, Optional, Inject } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { eq } from "drizzle-orm";
 import { marked } from "marked";
@@ -12,6 +12,7 @@ import { DrizzleService } from "../../database";
 import { user } from "../../auth/entities/auth.schema";
 import { startup } from "../startup/entities/startup.schema";
 import { DealEventService } from "../startup/deal-event.service";
+import { DataGateService } from "../startup/data-gate.service";
 import {
   isMissingWebsiteValue,
   isLikelyPlaceholderStage,
@@ -71,6 +72,7 @@ export class ClaraService {
     private copilotService: CopilotService,
     private pdfRenderService: PdfRenderService,
     @Optional() private dealEvents?: DealEventService,
+    @Optional() private dataGateService?: DataGateService,
   ) {
     this.claraInboxId = this.config.get<string>("CLARA_INBOX_ID") ?? null;
     this.adminUserId =
@@ -315,6 +317,13 @@ export class ClaraService {
         Boolean(conversation.startupId) &&
         (screeningFollowUp?.type === "screening_missing_materials" ||
           screeningFollowUpByContent);
+      const dataGateDocRequest = this.readDataGateDocRequestFromMemory(
+        ctx.conversationMemory,
+      );
+      const shouldResolveDataGateDocRequest =
+        Boolean(conversation.startupId) &&
+        dataGateDocRequest?.type === "data_gate_doc_request" &&
+        attachments.length > 0;
       const hasSubmissionAttachment = attachments.some((attachment) =>
         Boolean(attachment.isPitchDeck),
       );
@@ -630,6 +639,28 @@ export class ClaraService {
               );
             }
             handledScreeningFollowUp = true;
+          }
+        }
+
+        if (
+          !handledScreeningFollowUp &&
+          shouldResolveDataGateDocRequest &&
+          conversation.startupId &&
+          dataGateDocRequest
+        ) {
+          try {
+            await this.handleDataGateDocReply(
+              conversation,
+              ctx,
+              dataGateDocRequest,
+              fromName,
+            );
+            agentRuntime.replyHandled = true;
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            this.logger.error(
+              `[Clara] Data gate doc reply handling failed for thread ${threadId}: ${msg}`,
+            );
           }
         }
 
@@ -1609,6 +1640,145 @@ export class ClaraService {
     );
   }
 
+  async requestDocumentsForDataGate(
+    startupId: string,
+    missingDocTypes: string[],
+    founderEmailOverride?: string | null,
+  ): Promise<{ sentTo: string; requestedDocs: string[] }> {
+    if (!this.claraInboxId) {
+      throw new Error("Clara is not configured");
+    }
+
+    const [startupRecord] = await this.drizzle.db
+      .select({
+        id: startup.id,
+        userId: startup.userId,
+        name: startup.name,
+        contactEmail: startup.contactEmail,
+        contactName: startup.contactName,
+      })
+      .from(startup)
+      .where(eq(startup.id, startupId))
+      .limit(1);
+    if (!startupRecord) {
+      throw new Error(`Startup ${startupId} not found`);
+    }
+
+    let recipient: { email: string; name: string | null } | null = null;
+
+    if (founderEmailOverride?.trim()) {
+      const email = founderEmailOverride.trim().toLowerCase();
+      if (this.isValidEmail(email)) {
+        recipient = { email, name: startupRecord.contactName ?? null };
+      }
+    }
+
+    if (!recipient) {
+      recipient = await this.resolveMissingInfoRecipient({
+        userId: startupRecord.userId,
+        contactEmail: startupRecord.contactEmail,
+        contactName: startupRecord.contactName,
+      });
+    }
+
+    if (!recipient) {
+      throw new Error("no_founder_email");
+    }
+
+    const DOC_TYPE_LABELS: Record<string, string> = {
+      pitch_deck: "pitch deck / investor presentation",
+      financial: "financial statements or projections",
+      cap_table: "cap table",
+      legal: "legal documents (term sheet, incorporation docs, etc.)",
+      technical_product: "technical product documentation",
+      business_plan: "business plan",
+      market_research: "market research or analysis",
+    };
+
+    const docLabels = missingDocTypes
+      .map((dt) => DOC_TYPE_LABELS[dt] ?? dt.replace(/_/g, " "))
+      .filter(Boolean);
+
+    const greetingName = recipient.name ?? "there";
+    const emailText = [
+      `Hi ${greetingName},`,
+      "",
+      `Thank you for your submission of ${startupRecord.name}. To continue our review, we need the following documents:`,
+      ...docLabels.map((label) => `- ${label}`),
+      "",
+      "Please reply to this email with the files attached, and I'll process them right away.",
+      "",
+      "Best,",
+      "Clara",
+    ].join("\n");
+
+    const conversation =
+      await this.conversationService.findByStartupId(startupId);
+    let conv = conversation;
+
+    await this.sendConversationEmail({
+      conversation,
+      recipientEmail: recipient.email,
+      subject: `Documents needed for ${startupRecord.name} review`,
+      text: emailText,
+    });
+
+    if (!conv) {
+      conv = await this.conversationService.findOrCreate(
+        `data-gate-request-${startupId}`,
+        recipient.email,
+        recipient.name,
+        null,
+      );
+      await this.conversationService.linkStartup(conv.id, startupId);
+    }
+
+    const messageId = `data-gate-request-${startupId}-${Date.now()}`;
+    await this.conversationService.logMessage({
+      conversationId: conv.id,
+      messageId,
+      direction: MessageDirection.OUTBOUND,
+      fromEmail: "clara@agentmail.to",
+      subject: `Documents needed for ${startupRecord.name} review`,
+      bodyText: emailText,
+      processed: true,
+    });
+
+    await this.conversationService.updateStatus(
+      conv.id,
+      ConversationStatus.AWAITING_INFO,
+    );
+
+    await this.conversationService.updateContext(
+      conv.id,
+      this.mergeConversationContext(
+        conv.context as Record<string, unknown> | null | undefined,
+        {
+          dataGateDocRequest: {
+            type: "data_gate_doc_request",
+            startupId,
+            requestedDocTypes: missingDocTypes,
+            createdAt: new Date().toISOString(),
+          },
+        },
+      ),
+    );
+
+    await this.drizzle.db
+      .update(startup)
+      .set({ docRequestedAt: new Date() })
+      .where(eq(startup.id, startupId));
+
+    this.logger.log(
+      `[Clara] Sent data gate doc request for startup ${startupId} to ${recipient.email} (docs=${missingDocTypes.join(",")})`,
+    );
+
+    return {
+      sentTo: recipient.email,
+      requestedDocs: missingDocTypes,
+    };
+  }
+
   private normalizeMissingStartupFields(
     fields: string[],
   ): Array<"website" | "stage"> {
@@ -1682,6 +1852,157 @@ export class ClaraService {
     }
 
     return candidate as ScreeningFollowUpState;
+  }
+
+  private readDataGateDocRequestFromMemory(
+    memory: Record<string, unknown> | null | undefined,
+  ): { type: "data_gate_doc_request"; startupId: string; requestedDocTypes: string[] } | null {
+    const docRequest = memory?.dataGateDocRequest;
+    if (!docRequest || typeof docRequest !== "object" || Array.isArray(docRequest)) {
+      return null;
+    }
+    const candidate = docRequest as Record<string, unknown>;
+    if (
+      candidate.type !== "data_gate_doc_request" ||
+      !Array.isArray(candidate.requestedDocTypes)
+    ) {
+      return null;
+    }
+    return candidate as { type: "data_gate_doc_request"; startupId: string; requestedDocTypes: string[] };
+  }
+
+  private async handleDataGateDocReply(
+    conversation: ClaraConversationRecord,
+    ctx: MessageContext,
+    docRequest: { startupId: string; requestedDocTypes: string[] },
+    senderName: string | null,
+  ): Promise<void> {
+    const startupId = conversation.startupId ?? docRequest.startupId;
+
+    if (ctx.attachments.length > 0) {
+      const processedAttachments = await this.submissionService.processAttachmentsPublic(
+        ctx.inboxId,
+        ctx.messageId,
+        ctx.attachments,
+        this.adminUserId!,
+      );
+
+      const uploaded = processedAttachments.filter(
+        (a) => a.status === "uploaded" && a.storagePath,
+      );
+
+      if (uploaded.length > 0) {
+        await this.submissionService.registerAttachmentsToDataRoomPublic(
+          startupId,
+          this.adminUserId!,
+          uploaded,
+        );
+      }
+    }
+
+    let allPresent = false;
+    let stillMissing: string[] = docRequest.requestedDocTypes;
+
+    if (this.dataGateService) {
+      const gateInfo = await this.dataGateService.getDataGateInfo(
+        startupId,
+        this.adminUserId!,
+      );
+      stillMissing = gateInfo.missingMaterials;
+      allPresent = stillMissing.length === 0;
+
+      if (allPresent) {
+        await this.dataGateService.checkAutoAdvance(startupId);
+      }
+    }
+
+    const name = senderName ?? "there";
+    let replyText: string;
+    if (allPresent) {
+      replyText = [
+        `Thank you ${name}! We've received all the documents we needed for the review.`,
+        "",
+        "The due diligence analysis will begin shortly. We'll be in touch with the results.",
+      ].join("\n");
+
+      await this.conversationService.updateContext(
+        conversation.id,
+        this.mergeConversationContext(
+          conversation.context as Record<string, unknown> | null | undefined,
+          { dataGateDocRequest: null },
+        ),
+      );
+      await this.conversationService.updateStatus(
+        conversation.id,
+        ConversationStatus.PROCESSING,
+      );
+    } else {
+      const DOC_TYPE_LABELS: Record<string, string> = {
+        pitch_deck: "pitch deck / investor presentation",
+        financial: "financial statements or projections",
+        cap_table: "cap table",
+        legal: "legal documents",
+        technical_product: "technical product documentation",
+        business_plan: "business plan",
+        market_research: "market research or analysis",
+      };
+      const missingLabels = stillMissing.map(
+        (dt) => DOC_TYPE_LABELS[dt] ?? dt.replace(/_/g, " "),
+      );
+
+      replyText = [
+        `Thanks for sending those, ${name}!`,
+        "",
+        "We still need the following documents:",
+        ...missingLabels.map((label) => `- ${label}`),
+        "",
+        "Please reply with the remaining files and I'll continue right away.",
+      ].join("\n");
+
+      await this.conversationService.updateContext(
+        conversation.id,
+        this.mergeConversationContext(
+          conversation.context as Record<string, unknown> | null | undefined,
+          {
+            dataGateDocRequest: {
+              type: "data_gate_doc_request",
+              startupId,
+              requestedDocTypes: stillMissing,
+              createdAt: new Date().toISOString(),
+            },
+          },
+        ),
+      );
+    }
+
+    await this.claraChannel.reply({
+      channel: "email",
+      email: {
+        inboxId: ctx.inboxId,
+        inReplyToMessageId: ctx.messageId,
+      },
+      text: replyText,
+      html: this.toHtml(replyText),
+    });
+
+    await this.conversationService.logMessage({
+      conversationId: conversation.id,
+      messageId: `reply-${ctx.messageId}`,
+      direction: MessageDirection.OUTBOUND,
+      fromEmail: "clara@agentmail.to",
+      bodyText: replyText,
+      processed: true,
+    });
+
+    this.dealEvents?.record({
+      startupId,
+      type: "founder.replied",
+      payload: {
+        trigger: "data_gate_doc_reply",
+        attachmentsCount: ctx.attachments.length,
+        allDocsPresent: allPresent,
+      },
+    });
   }
 
   private formatClassifiedDocumentsList(

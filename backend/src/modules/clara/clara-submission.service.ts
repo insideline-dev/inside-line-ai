@@ -127,6 +127,23 @@ export class ClaraSubmissionService {
     }
   }
 
+  async processAttachmentsPublic(
+    inboxId: string,
+    messageId: string,
+    attachments: AttachmentMeta[],
+    adminUserId: string,
+  ): Promise<AttachmentMeta[]> {
+    return this.processAttachments(inboxId, messageId, attachments, adminUserId);
+  }
+
+  async registerAttachmentsToDataRoomPublic(
+    startupId: string,
+    ownerUserId: string,
+    attachments: AttachmentMeta[],
+  ): Promise<void> {
+    return this.registerAttachmentsToDataRoom(startupId, ownerUserId, attachments);
+  }
+
   async handleSubmission(
     ctx: MessageContext,
     adminUserId: string,

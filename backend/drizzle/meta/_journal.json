@@ -204,6 +204,13 @@
       "when": 1779819703888,
       "tag": "0028_worried_rumiko_fujikawa",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1779820862631,
+      "tag": "0029_daily_grey_gargoyle",
+      "breakpoints": true
     }
   ]
 }

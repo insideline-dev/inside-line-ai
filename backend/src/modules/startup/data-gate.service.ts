@@ -12,6 +12,7 @@ import { UserRole } from '../../auth/entities/auth.schema';
 
 export interface DataGateInfo {
   dataGateStatus: string | null;
+  docRequestedAt: string | null;
   openQuestions: Array<{ id: string; summary: string; status: string }>;
   missingMaterials: string[];
   requiredDocTypes: string[];
@@ -37,6 +38,7 @@ export class DataGateService {
     const [row] = await this.drizzle.db
       .select({
         dataGateStatus: startup.dataGateStatus,
+        docRequestedAt: startup.docRequestedAt,
         userId: startup.userId,
       })
       .from(startup)
@@ -87,6 +89,7 @@ export class DataGateService {
 
     return {
       dataGateStatus: row.dataGateStatus,
+      docRequestedAt: row.docRequestedAt?.toISOString() ?? null,
       openQuestions,
       missingMaterials,
       requiredDocTypes,

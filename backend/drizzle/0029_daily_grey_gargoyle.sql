@@ -1,0 +1,1 @@
+ALTER TABLE "startups" ADD COLUMN "doc_requested_at" timestamp;

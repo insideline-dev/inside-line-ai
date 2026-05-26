@@ -15,6 +15,7 @@ import {
   BadRequestException,
   NotFoundException,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
@@ -37,6 +38,7 @@ import { PdfService } from './pdf.service';
 import { PdfRenderService } from './pdf/pdf-render.service';
 import { DataRoomService } from './data-room.service';
 import { DataGateService } from './data-gate.service';
+import { ClaraService } from '../clara/clara.service';
 import { InvestorInterestService } from './investor-interest.service';
 import { MeetingService } from './meeting.service';
 import { DealEventService } from './deal-event.service';
@@ -83,6 +85,7 @@ export class StartupController {
     private pdfRenderService: PdfRenderService,
     private dataRoomService: DataRoomService,
     private dataGateService: DataGateService,
+    @Optional() private claraService: ClaraService,
     private interestService: InvestorInterestService,
     private meetingService: MeetingService,
     private dealEvents: DealEventService,
@@ -616,6 +619,38 @@ export class StartupController {
   ) {
     await this.dataGateService.complete(id, user.id);
     return { ok: true, startupId: id, dataGateStatus: 'complete' };
+  }
+
+  @Post(':id/data-gates/request-documents')
+  @Roles(UserRole.INVESTOR, UserRole.ADMIN)
+  async requestDocuments(
+    @Param('id') id: string,
+    @CurrentUser() user: User,
+    @Body() body?: { founderEmail?: string },
+  ) {
+    if (!this.claraService) {
+      throw new BadRequestException('Clara is not available');
+    }
+
+    const gateInfo = await this.dataGateService.getDataGateInfo(id, user.id, user.role);
+    if (gateInfo.missingMaterials.length === 0) {
+      return { success: true, sentTo: null, requestedDocs: [], note: 'No missing documents' };
+    }
+
+    try {
+      const result = await this.claraService.requestDocumentsForDataGate(
+        id,
+        gateInfo.missingMaterials,
+        body?.founderEmail,
+      );
+      return { success: true, ...result };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (message === 'no_founder_email') {
+        throw new BadRequestException({ error: 'no_founder_email', message: 'No founder email found. Please provide one.' });
+      }
+      throw err;
+    }
   }
 
   // ============ PUBLIC ENDPOINTS ============

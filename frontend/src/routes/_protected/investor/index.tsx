@@ -19,12 +19,6 @@ import { StageNav } from "@/components/investor/StageNav";
 import { CalibrationCard } from "@/components/investor/CalibrationCard";
 import { useFilterStore } from "@/stores";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { SearchAndFilters, defaultFilters, type FilterState, STAGES, REGIONS, SOURCE_OPTIONS } from "@/components/SearchAndFilters";
 import {
   ContextMenu,
@@ -1261,6 +1255,7 @@ type DDSubTab = "data-gates" | "analyzed" | "engaged";
 
 type DataGateInfo = {
   dataGateStatus: string | null;
+  docRequestedAt: string | null;
   openQuestions: Array<{ id: string; summary: string; status: string }>;
   missingMaterials: string[];
   requiredDocTypes: string[];
@@ -1283,18 +1278,28 @@ function DataGateCard({
   item,
   onSkip,
   isSkipping,
+  onRequestDocs,
+  isRequesting,
+  needsEmailInput,
 }: {
   item: PipelineCardItem;
   onSkip: (startupId: string) => void;
   isSkipping: boolean;
+  onRequestDocs: (startupId: string, founderEmail?: string) => Promise<void> | void;
+  isRequesting: boolean;
+  needsEmailInput?: boolean;
 }) {
+  const [founderEmail, setFounderEmail] = useState("");
+
   const { data: gateData } = useQuery({
     queryKey: ["data-gates", item.startupId],
     queryFn: () => customFetch<DataGateInfo>(`/startups/${item.startupId}/data-gates`),
     staleTime: 30_000,
+    refetchInterval: 15_000,
   });
 
   const openCount = gateData?.openQuestions?.filter((q) => q.status === "open").length ?? 0;
+  const alreadyRequested = Boolean(gateData?.docRequestedAt);
 
   return (
     <Card className="overflow-hidden">
@@ -1325,6 +1330,11 @@ function DataGateCard({
               {item.industry && (
                 <Badge variant="secondary" className="text-[11px]">
                   {item.industry}
+                </Badge>
+              )}
+              {alreadyRequested && (
+                <Badge variant="outline" className="text-[11px] text-amber-700 border-amber-300 bg-amber-50">
+                  Requested {formatDate(gateData!.docRequestedAt!)}
                 </Badge>
               )}
             </div>
@@ -1367,6 +1377,28 @@ function DataGateCard({
           </Link>
         )}
 
+        {needsEmailInput && (
+          <div className="flex items-center gap-2">
+            <Input
+              placeholder="founder@company.com"
+              value={founderEmail}
+              onChange={(e) => setFounderEmail(e.target.value)}
+              className="h-8 text-sm"
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!founderEmail.trim() || isRequesting}
+              onClick={() => {
+                onRequestDocs(item.startupId, founderEmail.trim());
+                setFounderEmail("");
+              }}
+            >
+              Send
+            </Button>
+          </div>
+        )}
+
         <div className="flex items-center gap-2 pt-1">
           <Button
             variant="outline"
@@ -1377,17 +1409,19 @@ function DataGateCard({
             {isSkipping ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
             Skip to Analysis
           </Button>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="sm" disabled>
-                  <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
-                  Request via Clara
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Coming soon</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={isRequesting || alreadyRequested}
+            onClick={() => onRequestDocs(item.startupId)}
+          >
+            {isRequesting ? (
+              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
+            )}
+            {alreadyRequested ? "Requested" : "Request via Clara"}
+          </Button>
         </div>
       </CardContent>
     </Card>
@@ -1411,6 +1445,40 @@ function DataGatesView({ items }: { items: PipelineCardItem[] }) {
     },
   });
 
+  const [emailPromptStartupId, setEmailPromptStartupId] = useState<string | null>(null);
+
+  const requestDocsMutation = useMutation({
+    mutationFn: ({ startupId, founderEmail }: { startupId: string; founderEmail?: string }) =>
+      customFetch<{ success: boolean; sentTo?: string; requestedDocs?: string[] }>(
+        `/startups/${startupId}/data-gates/request-documents`,
+        {
+          method: "POST",
+          body: JSON.stringify(founderEmail ? { founderEmail } : {}),
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    onSuccess: (data) => {
+      if (data.sentTo) {
+        toast.success(`Document request sent to ${data.sentTo}`);
+      }
+      setEmailPromptStartupId(null);
+      queryClient.invalidateQueries({ queryKey: ["data-gates"] });
+    },
+    onError: (error) => {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg.includes("no_founder_email")) {
+        setEmailPromptStartupId(requestDocsMutation.variables?.startupId ?? null);
+        toast.error("No founder email found — please enter one below");
+      } else {
+        toast.error("Failed to send document request");
+      }
+    },
+  });
+
+  const handleRequestDocs = (startupId: string, founderEmail?: string) => {
+    requestDocsMutation.mutate({ startupId, founderEmail });
+  };
+
   if (items.length === 0) {
     return (
       <Card className="border-dashed">
@@ -1433,6 +1501,9 @@ function DataGatesView({ items }: { items: PipelineCardItem[] }) {
           item={item}
           onSkip={(id) => skipMutation.mutate(id)}
           isSkipping={skipMutation.isPending && skipMutation.variables === item.startupId}
+          onRequestDocs={handleRequestDocs}
+          isRequesting={requestDocsMutation.isPending && requestDocsMutation.variables?.startupId === item.startupId}
+          needsEmailInput={emailPromptStartupId === item.startupId}
         />
       ))}
     </div>

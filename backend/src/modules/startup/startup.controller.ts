@@ -64,6 +64,7 @@ import {
   RegisterDataRoomFilesBulkDto,
   RespondInterestDto,
   ScheduleMeetingDto,
+  PreviewMatchesDto,
 } from './dto';
 import { Public } from '../../auth/decorators';
 
@@ -95,6 +96,13 @@ export class StartupController {
   @Roles(UserRole.FOUNDER, UserRole.INVESTOR, UserRole.ADMIN)
   async create(@CurrentUser() user: User, @Body() dto: CreateStartupDto) {
     return this.startupService.create(user.id, dto, user.role);
+  }
+
+  @Post('preview-matches')
+  @Roles(UserRole.FOUNDER)
+  @ApiOperation({ summary: 'Preview which investors match the given startup profile' })
+  async previewMatches(@Body() dto: PreviewMatchesDto) {
+    return this.startupService.previewMatches(dto);
   }
 
   @Post('extract-deck-metadata')

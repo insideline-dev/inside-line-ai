@@ -11,7 +11,7 @@ import {
   useStartupControllerFindOne,
   useStartupControllerRegisterDataRoomFilesBulk,
 } from "@/api/generated/startups/startups";
-import { usePortalControllerSubmitToPortal, usePortalControllerPreviewMatches } from "@/api/generated/portal/portal";
+import { usePortalControllerSubmitToPortal } from "@/api/generated/portal/portal";
 import { useStorageControllerGetUploadUrl } from "@/api/generated/storage/storage";
 import type {
   CreateStartupDto,
@@ -334,7 +334,22 @@ export function StartupSubmitForm({
     "all_aligned" | "this_fund_only" | "select_investors"
   >("all_aligned");
   const [selectedInvestorIds, setSelectedInvestorIds] = useState<Set<string>>(new Set());
-  const previewMatchesMutation = usePortalControllerPreviewMatches();
+  const previewMatchesMutation = useMutation({
+    mutationFn: (data: { industry: string; stage: string; location: string; fundingTarget: number }) =>
+      customFetch<{
+        investors: Array<{
+          id: string;
+          fundName: string;
+          thesisSummary: string | null;
+          industries: string[];
+          stages: string[];
+          checkSizeMin: number | null;
+          checkSizeMax: number | null;
+          geographicFocus: string[];
+        }>;
+        totalCandidates: number;
+      }>("/startups/preview-matches", { method: "POST", body: JSON.stringify(data) }),
+  });
   const registeredFilePathsRef = useRef<Set<string>>(new Set());
   const hasRestoredDraftRef = useRef(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
@@ -513,23 +528,19 @@ export function StartupSubmitForm({
   useEffect(() => {
     if (
       distributionMode === "select_investors" &&
-      portalSlug &&
       previewFieldsReady &&
       !previewMatchesMutation.isPending
     ) {
       const industry = watchedSectorIndustry || watchedSector || "general";
       previewMatchesMutation.mutate({
-        slug: portalSlug,
-        data: {
-          industry,
-          stage: watchedStage as any,
-          location: watchedLocation,
-          fundingTarget: Math.round(Number(watchedFundingTarget)),
-        },
+        industry,
+        stage: watchedStage as any,
+        location: watchedLocation,
+        fundingTarget: Math.round(Number(watchedFundingTarget)),
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [distributionMode, previewFieldsReady, portalSlug]);
+  }, [distributionMode, previewFieldsReady]);
 
   // Also trigger save when files/team change
   useEffect(() => {
@@ -628,11 +639,6 @@ export function StartupSubmitForm({
           demoUrl: demoVideoUrl,
           founderEmail,
           founderName: normalizeOptionalText(data.contactName),
-          distributionMode,
-          selectedInvestorIds:
-            distributionMode === "select_investors" && selectedInvestorIds.size > 0
-              ? Array.from(selectedInvestorIds)
-              : undefined,
         };
 
         await portalSubmitMutation.mutateAsync({
@@ -705,6 +711,11 @@ export function StartupSubmitForm({
           : undefined,
         // Keep backward-compatible field used in older flows.
         demoUrl: demoVideoUrl,
+        distributionMode: distributionMode !== "all_aligned" ? distributionMode : undefined,
+        selectedInvestorIds:
+          distributionMode === "select_investors" && selectedInvestorIds.size > 0
+            ? Array.from(selectedInvestorIds)
+            : undefined,
       } as CreateStartupDto;
 
       if (onSubmitStartup) {
@@ -2110,7 +2121,7 @@ export function StartupSubmitForm({
           </CardContent>
         </Card>
 
-        {isPortalSubmission && (
+        {userRole === "founder" && (
           <Card>
             <CardHeader>
               <CardTitle>Distribution</CardTitle>
@@ -2198,13 +2209,10 @@ export function StartupSubmitForm({
                         onClick={() => {
                           const industry = watchedSectorIndustry || watchedSector || "general";
                           previewMatchesMutation.mutate({
-                            slug: portalSlug!,
-                            data: {
-                              industry,
-                              stage: watchedStage as any,
-                              location: watchedLocation,
-                              fundingTarget: Math.round(Number(watchedFundingTarget)),
-                            },
+                            industry,
+                            stage: watchedStage as any,
+                            location: watchedLocation,
+                            fundingTarget: Math.round(Number(watchedFundingTarget)),
                           });
                         }}
                         className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
@@ -2216,19 +2224,7 @@ export function StartupSubmitForm({
                   )}
 
                   {previewFieldsReady && previewMatchesMutation.isSuccess && (() => {
-                    const result = previewMatchesMutation.data?.data as unknown as {
-                      investors: Array<{
-                        id: string;
-                        fundName: string;
-                        thesisSummary: string | null;
-                        industries: string[];
-                        stages: string[];
-                        checkSizeMin: number | null;
-                        checkSizeMax: number | null;
-                        geographicFocus: string[];
-                      }>;
-                      totalCandidates: number;
-                    };
+                    const result = previewMatchesMutation.data;
                     const investors = result?.investors ?? [];
 
                     if (investors.length === 0) {
@@ -2258,13 +2254,10 @@ export function StartupSubmitForm({
                               onClick={() => {
                                 const industry = watchedSectorIndustry || watchedSector || "general";
                                 previewMatchesMutation.mutate({
-                                  slug: portalSlug!,
-                                  data: {
-                                    industry,
-                                    stage: watchedStage as any,
-                                    location: watchedLocation,
-                                    fundingTarget: Math.round(Number(watchedFundingTarget)),
-                                  },
+                                  industry,
+                                  stage: watchedStage as any,
+                                  location: watchedLocation,
+                                  fundingTarget: Math.round(Number(watchedFundingTarget)),
                                 });
                               }}
                               className="text-xs text-muted-foreground hover:text-primary inline-flex items-center gap-1"

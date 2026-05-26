@@ -200,10 +200,7 @@ export class SubmissionService {
       raw: dto,
       sourcePath: StartupSourcePath.FOUNDER_SUBMITTED,
       status: StartupStatus.ANALYZING,
-      // DS-E1-F2-S2: founder picks distribution. 'this_fund_only' marks the
-      // deal private so cross-matching keeps it scoped to the portal owner;
-      // 'all_aligned' (default) leaves it cross-matchable.
-      isPrivate: dto.distributionMode === 'this_fund_only' || dto.distributionMode === 'select_investors',
+      isPrivate: false,
       stage: dto.stage,
       fundingTarget: dto.fundingTarget,
       teamSize: dto.teamSize,
@@ -250,10 +247,6 @@ export class SubmissionService {
             pitchDeckUrl: dto.pitchDeckUrl,
             demoUrl: dto.demoUrl,
             status: canonical.stageGate.status,
-            selectedInvestorIds:
-              dto.distributionMode === 'select_investors' && dto.selectedInvestorIds?.length
-                ? dto.selectedInvestorIds
-                : null,
             submittedAt: new Date(),
           })
           .returning();

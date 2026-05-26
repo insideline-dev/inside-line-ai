@@ -13,3 +13,4 @@ export * from './update-data-room-category.dto';
 export * from './register-data-room-file.dto';
 export * from './respond-interest.dto';
 export * from './schedule-meeting.dto';
+export * from './preview-matches.dto';

@@ -7,8 +7,8 @@ import {
   ConflictException,
   Optional,
 } from "@nestjs/common";
-import { eq, and, or, ilike, sql, desc, inArray } from "drizzle-orm";
-import { UserRole } from "../../auth/entities/auth.schema";
+import { eq, and, or, ilike, sql, desc, inArray, isNull } from "drizzle-orm";
+import { UserRole, user } from "../../auth/entities/auth.schema";
 import { DrizzleService } from "../../database";
 import { QueueService, QUEUE_NAMES } from "../../queue";
 import { StorageService, AssetType } from "../../storage";
@@ -60,7 +60,13 @@ import {
   startupEvaluation,
   type StartupEvaluation,
 } from "../analysis/entities/analysis.schema";
-import { deriveStartupGeography } from "../geography";
+import {
+  deriveStartupGeography,
+  normalizeStartupPathFromLocation,
+  canonicalizeGeographicFocus,
+  geographySelectionMatchesStartupPath,
+} from "../geography";
+import { investorThesis, investorProfile } from "../investor/entities";
 import { sanitizeNarrativeText } from "../ai/services/narrative-sanitizer";
 import {
   findCanonicalStartupDuplicate,
@@ -347,12 +353,15 @@ export class StartupService {
       const stageForInsert = dto.stage ?? StartupStage.PRE_SEED;
       const fundingTargetForInsert = dto.fundingTarget ?? 0;
 
+      const isPrivateByDistribution =
+        dto.distributionMode === 'this_fund_only' || dto.distributionMode === 'select_investors';
+
       // DS-E1-F4-S1: route every insert through the canonical V1 shape.
       const canonical = buildScreeningInputV1({
         raw: dto,
         sourcePath,
         status: StartupStatus.DRAFT,
-        isPrivate: options?.isPrivate ?? isInvestorSubmission,
+        isPrivate: options?.isPrivate ?? isPrivateByDistribution ?? isInvestorSubmission,
         stage: stageForInsert,
         fundingTarget: fundingTargetForInsert,
         teamSize: dto.teamSize,
@@ -372,6 +381,10 @@ export class StartupService {
           isPrivate: canonical.stageGate.isPrivate,
           slug,
           ...dto,
+          selectedInvestorIds:
+            dto.distributionMode === 'select_investors' && dto.selectedInvestorIds?.length
+              ? dto.selectedInvestorIds
+              : null,
           stage: canonical.round.stage ?? stageForInsert,
           fundingTarget: canonical.round.fundingTarget ?? fundingTargetForInsert,
           name: canonical.company.name,
@@ -2479,5 +2492,86 @@ export class StartupService {
     }
 
     return undefined;
+  }
+
+  async previewMatches(dto: {
+    industry: string;
+    stage: string;
+    location: string;
+    fundingTarget: number;
+  }) {
+    const startupGeoPath = normalizeStartupPathFromLocation(dto.location);
+    const startupIndustry = dto.industry.trim().toLowerCase();
+    const startupStage = dto.stage.trim().toLowerCase();
+
+    const candidates = await this.drizzle.db
+      .select({
+        userId: user.id,
+        fundName: investorProfile.fundName,
+        industries: investorThesis.industries,
+        stages: investorThesis.stages,
+        checkSizeMin: investorThesis.checkSizeMin,
+        checkSizeMax: investorThesis.checkSizeMax,
+        geographicFocus: investorThesis.geographicFocus,
+        geographicFocusNodes: investorThesis.geographicFocusNodes,
+        thesisSummary: investorThesis.thesisSummary,
+      })
+      .from(user)
+      .leftJoin(investorThesis, eq(investorThesis.userId, user.id))
+      .leftJoin(investorProfile, eq(investorProfile.userId, user.id))
+      .where(
+        and(
+          inArray(user.role, [UserRole.INVESTOR, UserRole.ADMIN]),
+          or(isNull(investorThesis.id), eq(investorThesis.isActive, true)),
+        ),
+      );
+
+    const totalCandidates = candidates.length;
+
+    const matched = candidates.filter((c) => {
+      const industries = c.industries ?? [];
+      const stages = c.stages ?? [];
+
+      const industryOk =
+        industries.length === 0 ||
+        industries.some((inv) => inv.trim().toLowerCase() === startupIndustry);
+
+      const stageOk =
+        stages.length === 0 ||
+        stages.some((s) => s.trim().toLowerCase() === startupStage);
+
+      const checkMin = c.checkSizeMin;
+      const checkMax = c.checkSizeMax;
+      const checkSizeOk =
+        (typeof checkMin !== "number" || dto.fundingTarget >= checkMin) &&
+        (typeof checkMax !== "number" || dto.fundingTarget <= checkMax);
+
+      const normalizedGeoFocus = canonicalizeGeographicFocus({
+        geographicFocusNodes: c.geographicFocusNodes,
+        geographicFocus: c.geographicFocus,
+      });
+      const geographyOk = geographySelectionMatchesStartupPath(
+        normalizedGeoFocus,
+        startupGeoPath,
+      );
+
+      return industryOk && stageOk && checkSizeOk && geographyOk;
+    });
+
+    return {
+      totalCandidates,
+      investors: matched
+        .filter((c) => c.fundName)
+        .map((c) => ({
+          id: c.userId,
+          fundName: c.fundName!,
+          thesisSummary: c.thesisSummary ?? null,
+          industries: c.industries ?? [],
+          stages: c.stages ?? [],
+          checkSizeMin: c.checkSizeMin ?? null,
+          checkSizeMax: c.checkSizeMax ?? null,
+          geographicFocus: c.geographicFocus ?? [],
+        })),
+    };
   }
 }

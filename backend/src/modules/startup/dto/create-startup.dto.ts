@@ -58,7 +58,17 @@ export const CreateStartupSchema = z.object({
   productDescription: z.string().max(10000).optional(),
   productScreenshots: z.array(z.string().max(1000)).max(20).optional(),
   demoUrl: z.string().url().optional(),
-});
+  distributionMode: z.enum(['all_aligned', 'this_fund_only', 'select_investors']).optional(),
+  selectedInvestorIds: z.array(z.string().uuid()).optional(),
+}).refine(
+  (data) =>
+    data.distributionMode !== 'select_investors' ||
+    (data.selectedInvestorIds && data.selectedInvestorIds.length > 0),
+  {
+    message: 'At least one investor must be selected when using select_investors mode',
+    path: ['selectedInvestorIds'],
+  },
+);
 
 export type CreateStartup = z.infer<typeof CreateStartupSchema>;
 export class CreateStartupDto extends createZodDto(CreateStartupSchema) {}

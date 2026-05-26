@@ -50,8 +50,6 @@ COPY --from=builder --chown=nestjs:nodejs /app/dist ./dist
 COPY --from=builder --chown=nestjs:nodejs /app/src/modules/ai/prompts/library ./src/modules/ai/prompts/library
 COPY --chown=nestjs:nodejs package.json ./
 
-RUN mkdir -p /app/logs && chown nestjs:nodejs /app/logs
-
 USER nestjs
 EXPOSE 8080
 

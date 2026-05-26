@@ -26,7 +26,6 @@ type ContextFileState = {
   filePath: string;
   stream: WriteStream;
   bytesWritten: number;
-  rotationPending: boolean;
 };
 
 export class AppFileLogger extends ConsoleLogger {
@@ -41,7 +40,6 @@ export class AppFileLogger extends ConsoleLogger {
   private sweepTimer: NodeJS.Timeout | null = null;
   private stream: WriteStream | null = null;
   private bytesWritten = 0;
-  private rotationPending = false;
   private readonly contextStreams = new Map<string, ContextFileState>();
   private readonly runStreams = new Map<string, ContextFileState>();
 
@@ -172,34 +170,38 @@ export class AppFileLogger extends ConsoleLogger {
   private readMaxFileBytes(): number {
     const raw = process.env.LOG_MAX_FILE_SIZE?.trim();
     if (!raw) {
-      return 50 * 1024 * 1024; // 50 MB default
+      return 10 * 1024 * 1024; // 10 MB default
     }
     const parsed = Number(raw);
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : 50 * 1024 * 1024;
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 10 * 1024 * 1024;
+  }
+
+  private isProduction(): boolean {
+    return process.env.NODE_ENV === "production";
   }
 
   private readFileLoggingEnabled(): boolean {
     const value = process.env.LOG_TO_FILE?.trim().toLowerCase();
     if (!value) {
-      return true;
+      return !this.isProduction();
     }
-    return !["false", "0", "no", "off"].includes(value);
+    return ["true", "1", "yes", "on"].includes(value);
   }
 
   private readContextFileLoggingEnabled(): boolean {
     const value = process.env.LOG_CONTEXT_FILES_ENABLED?.trim().toLowerCase();
     if (!value) {
-      return true;
+      return !this.isProduction();
     }
-    return !["false", "0", "no", "off"].includes(value);
+    return ["true", "1", "yes", "on"].includes(value);
   }
 
   private readRunFileLoggingEnabled(): boolean {
     const value = process.env.LOG_RUN_FILES_ENABLED?.trim().toLowerCase();
     if (!value) {
-      return true;
+      return !this.isProduction();
     }
-    return !["false", "0", "no", "off"].includes(value);
+    return ["true", "1", "yes", "on"].includes(value);
   }
 
   private writeToFile(
@@ -226,7 +228,7 @@ export class AppFileLogger extends ConsoleLogger {
       const line = `${JSON.stringify(entry)}\n`;
       this.stream.write(line);
       this.bytesWritten += Buffer.byteLength(line, "utf8");
-      this.scheduleRotationCheck();
+      this.checkRotation();
       this.writeToContextFile(entry, line);
       this.writeToRunFiles(entry, line);
     } catch (error) {
@@ -234,24 +236,20 @@ export class AppFileLogger extends ConsoleLogger {
     }
   }
 
-  private scheduleRotationCheck(): void {
-    if (this.rotationPending || this.bytesWritten < this.maxFileBytes) {
+  private checkRotation(): void {
+    if (this.bytesWritten < this.maxFileBytes) {
       return;
     }
-    this.rotationPending = true;
 
-    // Run rotation async — don't block the log call
-    rotateIfNeeded(this.filePath, this.maxFileBytes)
-      .then((rotated) => {
-        if (rotated) {
-          this.reopenStream();
-          this.bytesWritten = 0;
-        }
-      })
-      .catch(() => {})
-      .finally(() => {
-        this.rotationPending = false;
-      });
+    try {
+      const rotated = rotateIfNeeded(this.filePath, this.maxFileBytes);
+      if (rotated) {
+        this.reopenStream();
+        this.bytesWritten = 0;
+      }
+    } catch (error) {
+      super.error(`Log rotation failed for ${this.filePath}: ${String(error)}`);
+    }
   }
 
   private writeToContextFile(entry: LogEntry, line: string): void {
@@ -268,7 +266,7 @@ export class AppFileLogger extends ConsoleLogger {
     try {
       state.stream.write(line);
       state.bytesWritten += Buffer.byteLength(line, "utf8");
-      this.scheduleContextRotationCheck(contextKey, state);
+      this.checkContextRotation(contextKey, state);
     } catch (error) {
       super.error(
         `Failed to append context log entry (${contextKey}): ${String(error)}`,
@@ -286,28 +284,25 @@ export class AppFileLogger extends ConsoleLogger {
     );
   }
 
-  private scheduleContextRotationCheck(
+  private checkContextRotation(
     contextKey: string,
     state: ContextFileState,
   ): void {
-    if (state.rotationPending || state.bytesWritten < this.maxFileBytes) {
+    if (state.bytesWritten < this.maxFileBytes) {
       return;
     }
-    state.rotationPending = true;
 
-    rotateIfNeeded(state.filePath, this.maxFileBytes)
-      .then((rotated) => {
-        if (rotated) {
-          state.stream.end();
-          state.stream = this.createStream(state.filePath, "context log file");
-          state.bytesWritten = 0;
-          this.contextStreams.set(contextKey, state);
-        }
-      })
-      .catch(() => {})
-      .finally(() => {
-        state.rotationPending = false;
-      });
+    try {
+      const rotated = rotateIfNeeded(state.filePath, this.maxFileBytes);
+      if (rotated) {
+        state.stream.end();
+        state.stream = this.createStream(state.filePath, "context log file");
+        state.bytesWritten = 0;
+        this.contextStreams.set(contextKey, state);
+      }
+    } catch (error) {
+      super.error(`Context log rotation failed for ${contextKey}: ${String(error)}`);
+    }
   }
 
   private sanitizeContextForFilename(context: string): string {
@@ -376,7 +371,7 @@ export class AppFileLogger extends ConsoleLogger {
     try {
       state.stream.write(line);
       state.bytesWritten += Buffer.byteLength(line, "utf8");
-      this.scheduleScopedRotationCheck(streamMap, key, state, streamLabel);
+      this.checkScopedRotation(streamMap, key, state, streamLabel);
     } catch (error) {
       super.error(`Failed to append scoped log entry (${key}): ${String(error)}`);
     }
@@ -401,7 +396,6 @@ export class AppFileLogger extends ConsoleLogger {
         filePath,
         stream,
         bytesWritten,
-        rotationPending: false,
       };
       streamMap.set(key, state);
       return state;
@@ -411,30 +405,27 @@ export class AppFileLogger extends ConsoleLogger {
     }
   }
 
-  private scheduleScopedRotationCheck(
+  private checkScopedRotation(
     streamMap: Map<string, ContextFileState>,
     key: string,
     state: ContextFileState,
     streamLabel: string,
   ): void {
-    if (state.rotationPending || state.bytesWritten < this.maxFileBytes) {
+    if (state.bytesWritten < this.maxFileBytes) {
       return;
     }
-    state.rotationPending = true;
 
-    rotateIfNeeded(state.filePath, this.maxFileBytes)
-      .then((rotated) => {
-        if (rotated) {
-          state.stream.end();
-          state.stream = this.createStream(state.filePath, streamLabel);
-          state.bytesWritten = 0;
-          streamMap.set(key, state);
-        }
-      })
-      .catch(() => {})
-      .finally(() => {
-        state.rotationPending = false;
-      });
+    try {
+      const rotated = rotateIfNeeded(state.filePath, this.maxFileBytes);
+      if (rotated) {
+        state.stream.end();
+        state.stream = this.createStream(state.filePath, streamLabel);
+        state.bytesWritten = 0;
+        streamMap.set(key, state);
+      }
+    } catch (error) {
+      super.error(`Scoped log rotation failed for ${key}: ${String(error)}`);
+    }
   }
 
   private createStream(filePath: string, streamLabel: string): WriteStream {

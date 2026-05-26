@@ -8,7 +8,6 @@ import { ScoreRing } from "@/components/analysis/ScoreRing";
 import { FitChips } from "./FitChips";
 import { StartupFavicon } from "./StartupFavicon";
 import { cn } from "@/lib/utils";
-import { formatIndustry } from "@/lib/kpi-metrics";
 import type { ThesisFitOutput } from "@/types/thesis-fit";
 import type { LensScore, ScreeningVerdict } from "./screening-types";
 
@@ -90,23 +89,11 @@ export function ScreeningDealCard({
               <h3 className="truncate text-lg font-semibold leading-tight">
                 {data.companyName}
               </h3>
-              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                {data.industry && (
-                  <Badge variant="secondary" className="text-[11px]">
-                    {formatIndustry(data.industry)}
-                  </Badge>
-                )}
-                {data.stage && (
-                  <Badge variant="outline" className="capitalize text-[11px]">
-                    {data.stage.replace(/_/g, " ")}
-                  </Badge>
-                )}
-                {data.isAutoAdvanced && (
-                  <span className="text-[10px] italic text-emerald-700">
-                    auto-advanced
-                  </span>
-                )}
-              </div>
+              {data.isAutoAdvanced && (
+                <span className="mt-1 inline-block text-[10px] italic text-emerald-700">
+                  auto-advanced
+                </span>
+              )}
             </div>
           </div>
           <div className="shrink-0">

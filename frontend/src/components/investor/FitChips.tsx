@@ -13,11 +13,10 @@ interface FitChipsProps {
   className?: string;
 }
 
-const AXIS_LABEL: Record<keyof Omit<ThesisFitOutput, "overall" | "rationale">, string> = {
+const AXIS_LABEL: Record<string, string> = {
   geography: "geo",
   stage: "stage",
   sector: "sector",
-  checkSize: "check",
 };
 
 const STATUS_STYLES: Record<FitStatus, { icon: React.ElementType; color: string }> = {
@@ -62,9 +61,11 @@ export function FitChips({ fit, className }: FitChipsProps) {
 
   return (
     <div className={cn("flex flex-wrap items-center gap-1.5", className)}>
-      {(Object.keys(AXIS_LABEL) as Array<keyof typeof AXIS_LABEL>).map((axisKey) => (
-        <Chip key={axisKey} label={AXIS_LABEL[axisKey]} axis={fit[axisKey]} />
-      ))}
+      {(Object.keys(AXIS_LABEL) as Array<keyof typeof AXIS_LABEL>).map((axisKey) => {
+        const axis = fit[axisKey as keyof ThesisFitOutput] as FitAxis | undefined;
+        if (!axis) return null;
+        return <Chip key={axisKey} label={AXIS_LABEL[axisKey]} axis={axis} />;
+      })}
       <span className="ml-1 text-xs font-medium text-muted-foreground">
         {fit.overall}
       </span>

@@ -60,7 +60,9 @@ export const CreateStartupSchema = z.object({
   demoUrl: z.string().url().optional(),
   distributionMode: z.enum(['all_aligned', 'this_fund_only', 'select_investors']).optional(),
   selectedInvestorIds: z.array(z.string().uuid()).optional(),
-}).refine(
+});
+
+const CreateStartupRefinedSchema = CreateStartupSchema.refine(
   (data) =>
     data.distributionMode !== 'select_investors' ||
     (data.selectedInvestorIds && data.selectedInvestorIds.length > 0),
@@ -71,4 +73,4 @@ export const CreateStartupSchema = z.object({
 );
 
 export type CreateStartup = z.infer<typeof CreateStartupSchema>;
-export class CreateStartupDto extends createZodDto(CreateStartupSchema) {}
+export class CreateStartupDto extends createZodDto(CreateStartupRefinedSchema) {}

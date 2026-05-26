@@ -15,7 +15,7 @@ describe("calibration thresholds (DS-E11)", () => {
     expect(MATERIAL_DELTA_THRESHOLD_POINTS).toBe(15);
   });
 
-  it("F4: auto-trigger waits for >= 10 outcome events", () => {
-    expect(MIN_OUTCOME_EVENTS_FOR_AUTO_RECOMPUTE).toBe(10);
+  it("F4: auto-trigger waits for >= 3 outcome events", () => {
+    expect(MIN_OUTCOME_EVENTS_FOR_AUTO_RECOMPUTE).toBe(3);
   });
 });

@@ -22,7 +22,7 @@ export const CALIBRATION_RECOMPUTE_DEDUPE_WINDOW_MS = 10_000;
  * `DealDecisionService.record`) will enqueue a recompute. Manual admin
  * triggers pass `{ force: true }` to bypass this gate.
  */
-export const MIN_OUTCOME_EVENTS_FOR_AUTO_RECOMPUTE = 10;
+export const MIN_OUTCOME_EVENTS_FOR_AUTO_RECOMPUTE = 3;
 
 export interface CalibrationRecomputeJobPayload {
   investorId: string;

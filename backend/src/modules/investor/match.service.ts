@@ -11,6 +11,7 @@ import { startup, StartupStatus } from '../startup/entities/startup.schema';
 import { StartupMatchingPipelineService } from '../ai/services/startup-matching-pipeline.service';
 import { startupMatch, type MatchStatus } from './entities/investor.schema';
 import { DealEventService } from '../startup/deal-event.service';
+import { DealDecisionService } from './deal-decision.service';
 import { GetMatchesQuery, UpdateMatchStatus } from './dto';
 
 @Injectable()
@@ -21,6 +22,7 @@ export class MatchService {
     private drizzle: DrizzleService,
     private startupMatchingPipeline: StartupMatchingPipelineService,
     @Optional() private dealEvents?: DealEventService,
+    @Optional() private dealDecisions?: DealDecisionService,
   ) {}
 
   async findAll(investorId: string, query: GetMatchesQuery) {
@@ -232,6 +234,28 @@ export class MatchService {
               : {}),
           },
         });
+      }
+
+      // Record a calibration decision when the investor passes or closes.
+      if (this.dealDecisions && match.status !== dto.status) {
+        const verdict =
+          dto.status === "passed" ? "pass" as const
+          : dto.status === "closed" ? "advance" as const
+          : null;
+        if (verdict) {
+          void this.dealDecisions
+            .record(investorId, match.startupId, {
+              verdict,
+              reasonTags: dto.status === "passed" && dto.passReason
+                ? [dto.passReason]
+                : [],
+            })
+            .catch((err) => {
+              this.logger.warn(
+                `Calibration decision record failed for match ${matchId}: ${err instanceof Error ? err.message : err}`,
+              );
+            });
+        }
       }
 
       return updated;

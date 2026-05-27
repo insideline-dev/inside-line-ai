@@ -598,6 +598,7 @@ export class StartupController {
     @Param('id') id: string,
     @CurrentUser() user: User,
   ) {
+    await this.dataGateService.assertOwnership(id, user.id, user.role);
     return this.dataGateService.getDataGateInfo(id, user.id, user.role);
   }
 
@@ -607,6 +608,7 @@ export class StartupController {
     @Param('id') id: string,
     @CurrentUser() user: User,
   ) {
+    await this.dataGateService.assertOwnership(id, user.id, user.role);
     await this.dataGateService.skip(id, user.id);
     return { ok: true, startupId: id, dataGateStatus: 'skipped' };
   }
@@ -617,6 +619,7 @@ export class StartupController {
     @Param('id') id: string,
     @CurrentUser() user: User,
   ) {
+    await this.dataGateService.assertOwnership(id, user.id, user.role);
     await this.dataGateService.complete(id, user.id);
     return { ok: true, startupId: id, dataGateStatus: 'complete' };
   }
@@ -628,6 +631,7 @@ export class StartupController {
     @CurrentUser() user: User,
     @Body() body?: { founderEmail?: string },
   ) {
+    await this.dataGateService.assertOwnership(id, user.id, user.role);
     if (!this.claraService) {
       throw new BadRequestException('Clara is not available');
     }

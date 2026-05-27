@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import { Injectable, Logger, ForbiddenException, NotFoundException, Optional } from '@nestjs/common';
 import { eq, and, gt, sql } from 'drizzle-orm';
 import { DrizzleService } from '../../database';
 import { startup, DataGateStatus } from './entities/startup.schema';
@@ -29,6 +29,25 @@ export class DataGateService {
     private openQuestionService: OpenQuestionService,
     @Optional() private pipelineCoreService?: PipelineService,
   ) {}
+
+  async assertOwnership(
+    startupId: string,
+    userId: string,
+    role?: UserRole,
+  ): Promise<void> {
+    if (role === UserRole.ADMIN) return;
+
+    const [row] = await this.drizzle.db
+      .select({ userId: startup.userId })
+      .from(startup)
+      .where(eq(startup.id, startupId))
+      .limit(1);
+
+    if (!row) throw new NotFoundException(`Startup ${startupId} not found`);
+    if (row.userId !== userId) {
+      throw new ForbiddenException('You do not have access to this startup');
+    }
+  }
 
   async getDataGateInfo(
     startupId: string,
@@ -98,10 +117,13 @@ export class DataGateService {
   }
 
   async skip(startupId: string, userId: string): Promise<void> {
-    await this.drizzle.db
+    const [updated] = await this.drizzle.db
       .update(startup)
       .set({ dataGateStatus: DataGateStatus.SKIPPED })
-      .where(eq(startup.id, startupId));
+      .where(eq(startup.id, startupId))
+      .returning({ id: startup.id });
+
+    if (!updated) throw new NotFoundException(`Startup ${startupId} not found`);
 
     void this.dealEvents.record({
       startupId,
@@ -114,10 +136,13 @@ export class DataGateService {
   }
 
   async complete(startupId: string, userId: string): Promise<void> {
-    await this.drizzle.db
+    const [updated] = await this.drizzle.db
       .update(startup)
       .set({ dataGateStatus: DataGateStatus.COMPLETE })
-      .where(eq(startup.id, startupId));
+      .where(eq(startup.id, startupId))
+      .returning({ id: startup.id });
+
+    if (!updated) throw new NotFoundException(`Startup ${startupId} not found`);
 
     void this.dealEvents.record({
       startupId,
@@ -169,10 +194,36 @@ export class DataGateService {
     const allPresent = requiredDocTypes.every((req) => presentCategories.has(req));
 
     if (allPresent) {
+      const [advanced] = await this.drizzle.db
+        .update(startup)
+        .set({ dataGateStatus: DataGateStatus.COMPLETE })
+        .where(
+          and(
+            eq(startup.id, startupId),
+            eq(startup.dataGateStatus, DataGateStatus.PENDING),
+          ),
+        )
+        .returning({ id: startup.id });
+
+      if (!advanced) {
+        this.logger.debug(
+          `[DataGate] Auto-advance skipped for ${startupId} — already advanced by another thread`,
+        );
+        return;
+      }
+
       this.logger.log(
         `[DataGate] Auto-advancing startup ${startupId} — all required doc types present`,
       );
-      await this.complete(startupId, row.userId);
+
+      void this.dealEvents.record({
+        startupId,
+        actorUserId: row.userId,
+        type: 'due_diligence.data_gate_complete',
+        payload: { trigger: 'auto_advance' },
+      });
+
+      await this.triggerDdPipeline(startupId, row.userId);
     }
   }
 

@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef, type DragEvent } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { customFetch } from "@/api/client";
+import { customFetch, ApiError } from "@/api/client";
 import { format } from "date-fns";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -1281,6 +1281,7 @@ function DataGateCard({
   onRequestDocs,
   isRequesting,
   needsEmailInput,
+  isTabActive,
 }: {
   item: PipelineCardItem;
   onSkip: (startupId: string) => void;
@@ -1288,6 +1289,7 @@ function DataGateCard({
   onRequestDocs: (startupId: string, founderEmail?: string) => Promise<void> | void;
   isRequesting: boolean;
   needsEmailInput?: boolean;
+  isTabActive: boolean;
 }) {
   const [founderEmail, setFounderEmail] = useState("");
 
@@ -1295,7 +1297,8 @@ function DataGateCard({
     queryKey: ["data-gates", item.startupId],
     queryFn: () => customFetch<DataGateInfo>(`/startups/${item.startupId}/data-gates`),
     staleTime: 30_000,
-    refetchInterval: 15_000,
+    refetchInterval: isTabActive ? 15_000 : false,
+    enabled: isTabActive,
   });
 
   const openCount = gateData?.openQuestions?.filter((q) => q.status === "open").length ?? 0;
@@ -1428,7 +1431,7 @@ function DataGateCard({
   );
 }
 
-function DataGatesView({ items }: { items: PipelineCardItem[] }) {
+function DataGatesView({ items, isActive }: { items: PipelineCardItem[]; isActive: boolean }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -1439,6 +1442,7 @@ function DataGatesView({ items }: { items: PipelineCardItem[] }) {
       toast.success("Data gate skipped — DD pipeline starting");
       queryClient.invalidateQueries({ queryKey: getInvestorControllerGetPipelineQueryKey() });
       queryClient.invalidateQueries({ queryKey: getStartupControllerFindAllQueryKey() });
+      queryClient.invalidateQueries({ queryKey: ["data-gates"] });
     },
     onError: () => {
       toast.error("Failed to skip data gate");
@@ -1465,8 +1469,7 @@ function DataGatesView({ items }: { items: PipelineCardItem[] }) {
       queryClient.invalidateQueries({ queryKey: ["data-gates"] });
     },
     onError: (error) => {
-      const msg = error instanceof Error ? error.message : String(error);
-      if (msg.includes("no_founder_email")) {
+      if (error instanceof ApiError && error.status === 400 && error.message.includes("founder email")) {
         setEmailPromptStartupId(requestDocsMutation.variables?.startupId ?? null);
         toast.error("No founder email found — please enter one below");
       } else {
@@ -1504,6 +1507,7 @@ function DataGatesView({ items }: { items: PipelineCardItem[] }) {
           onRequestDocs={handleRequestDocs}
           isRequesting={requestDocsMutation.isPending && requestDocsMutation.variables?.startupId === item.startupId}
           needsEmailInput={emailPromptStartupId === item.startupId}
+          isTabActive={isActive}
         />
       ))}
     </div>
@@ -1874,7 +1878,7 @@ function InvestorDashboard() {
         </TabsList>
 
         <TabsContent value="data-gates" className="mt-6">
-          <DataGatesView items={dataGateItems} />
+          <DataGatesView items={dataGateItems} isActive={ddSubTab === "data-gates"} />
         </TabsContent>
 
         <TabsContent value="engaged" className="mt-6">

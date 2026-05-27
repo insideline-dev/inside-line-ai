@@ -302,6 +302,36 @@ function AdminDashboard() {
     <div className="space-y-6">
       <StageNav surface="admin" />
 
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Due Diligence</h1>
+          <p className="text-muted-foreground">Review and manage startup submissions</p>
+        </div>
+      </div>
+
+      {/* Stats */}
+      {isLoadingStats ? (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <Skeleton key={i} className="h-24 rounded-lg" />
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+          {stats.map((stat) => (
+            <Card key={stat.label} className={`border-l-3 ${stat.accent}`}>
+              <CardContent className="p-4 flex items-center gap-3">
+                <stat.icon className={`w-4 h-4 shrink-0 ${stat.iconColor}`} />
+                <div className="min-w-0">
+                  <p className="text-2xl font-semibold tabular-nums leading-none">{stat.value}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{stat.label}</p>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
       {/* ─── DD Sub-stage Tabs ─── */}
       <Tabs value={ddSubTab} onValueChange={(v) => setDdSubTab(v as DDSubTab)}>
         <TabsList>
@@ -342,37 +372,7 @@ function AdminDashboard() {
 
         <TabsContent value="analyzed" className="mt-6 space-y-6">
 
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Due Diligence</h1>
-          <p className="text-muted-foreground">Review and manage startup submissions</p>
-        </div>
-      </div>
-
-      {/* Stats */}
-      {isLoadingStats ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-          {[1, 2, 3, 4, 5, 6].map((i) => (
-            <Skeleton key={i} className="h-24 rounded-lg" />
-          ))}
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-          {stats.map((stat) => (
-            <Card key={stat.label} className={`border-l-3 ${stat.accent}`}>
-              <CardContent className="p-4 flex items-center gap-3">
-                <stat.icon className={`w-4 h-4 shrink-0 ${stat.iconColor}`} />
-                <div className="min-w-0">
-                  <p className="text-2xl font-semibold tabular-nums leading-none">{stat.value}</p>
-                  <p className="text-xs text-muted-foreground mt-1">{stat.label}</p>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-
-      {/* Tabs */}
+      {/* Status filter Tabs */}
       <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
         <TabsList>
           {tabs.map((tab) => (

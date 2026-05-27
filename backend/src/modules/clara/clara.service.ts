@@ -649,13 +649,14 @@ export class ClaraService {
           dataGateDocRequest
         ) {
           try {
-            await this.handleDataGateDocReply(
+            const docReplyText = await this.handleDataGateDocReply(
               conversation,
               ctx,
               dataGateDocRequest,
               fromName,
             );
             agentRuntime.replyHandled = true;
+            agentRuntime.replyText = docReplyText;
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             this.logger.error(
@@ -1876,7 +1877,7 @@ export class ClaraService {
     ctx: MessageContext,
     docRequest: { startupId: string; requestedDocTypes: string[] },
     senderName: string | null,
-  ): Promise<void> {
+  ): Promise<string> {
     const startupId = conversation.startupId ?? docRequest.startupId;
 
     if (ctx.attachments.length > 0) {
@@ -2003,6 +2004,8 @@ export class ClaraService {
         allDocsPresent: allPresent,
       },
     });
+
+    return replyText;
   }
 
   private formatClassifiedDocumentsList(

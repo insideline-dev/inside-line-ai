@@ -634,7 +634,7 @@ export class StartupController {
 
     let claraService: { requestDocumentsForDataGate: (startupId: string, missingDocs: string[], founderEmail?: string) => Promise<{ sentTo: string; requestedDocs: string[] }> } | null = null;
     try {
-      claraService = await this.moduleRef.get('ClaraService', { strict: false });
+      claraService = this.moduleRef.get('CLARA_SERVICE', { strict: false });
     } catch {
       claraService = null;
     }

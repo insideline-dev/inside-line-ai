@@ -33,12 +33,13 @@ import { ClaraChannelService } from "./clara-channel.service";
   ],
   providers: [
     ClaraService,
+    { provide: 'CLARA_SERVICE', useExisting: ClaraService },
     ClaraAiService,
     ClaraSubmissionService,
     ClaraConversationService,
     ClaraToolsService,
     ClaraChannelService,
   ],
-  exports: [ClaraService],
+  exports: [ClaraService, 'CLARA_SERVICE'],
 })
 export class ClaraModule {}

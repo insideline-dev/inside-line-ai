@@ -170,7 +170,7 @@ export const investorThesis = pgTable(
 
     // Data Gates settings
     requiredDocTypes: text('required_doc_types').array().default(['pitch_deck', 'financial']),
-    autoAdvanceDataGate: boolean('auto_advance_data_gate').default(false).notNull(),
+    autoAdvanceDataGate: boolean('auto_advance_data_gate').default(true).notNull(),
 
     // Active status
     isActive: boolean('is_active').default(true).notNull(),

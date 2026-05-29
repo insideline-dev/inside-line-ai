@@ -170,7 +170,7 @@ function InvestorThesisPage() {
     fundSize: null,
     dealBreakers: [],
     requiredDocTypes: ["pitch_deck", "financial"],
-    autoAdvanceDataGate: false,
+    autoAdvanceDataGate: true,
   });
   const [expandedGeographyNodes, setExpandedGeographyNodes] = useState<string[]>([]);
   const parentNodeMap = useMemo(() => buildParentNodeMap(taxonomyNodes), [taxonomyNodes]);
@@ -222,7 +222,7 @@ function InvestorThesisPage() {
         requiredDocTypes: Array.isArray(t.requiredDocTypes)
           ? t.requiredDocTypes.filter((v): v is string => typeof v === "string")
           : ["pitch_deck", "financial"],
-        autoAdvanceDataGate: typeof t.autoAdvanceDataGate === "boolean" ? t.autoAdvanceDataGate : false,
+        autoAdvanceDataGate: typeof t.autoAdvanceDataGate === "boolean" ? t.autoAdvanceDataGate : true,
       };
       setFormData(next);
       baselineRef.current = JSON.stringify(next);

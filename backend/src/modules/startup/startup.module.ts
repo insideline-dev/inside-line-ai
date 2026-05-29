@@ -1,10 +1,9 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { DatabaseModule } from '../../database';
 import { QueueModule } from '../../queue';
 import { StorageModule } from '../../storage';
 import { NotificationModule } from '../../notification/notification.module';
 import { FundingEnrichmentModule } from '../integrations/funding-enrichment';
-import { ClaraModule } from '../clara/clara.module';
 import { StartupController } from './startup.controller';
 import { StartupService } from './startup.service';
 import { DraftService } from './draft.service';
@@ -28,7 +27,6 @@ import { DdModule } from '../dd/dd.module';
     StorageModule,
     NotificationModule,
     FundingEnrichmentModule,
-    forwardRef(() => ClaraModule),
   ],
   controllers: [StartupController],
   providers: [

@@ -15,8 +15,8 @@ import {
   BadRequestException,
   NotFoundException,
   Logger,
-  Optional,
 } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
@@ -38,7 +38,6 @@ import { PdfService } from './pdf.service';
 import { PdfRenderService } from './pdf/pdf-render.service';
 import { DataRoomService } from './data-room.service';
 import { DataGateService } from './data-gate.service';
-import { ClaraService } from '../clara/clara.service';
 import { InvestorInterestService } from './investor-interest.service';
 import { MeetingService } from './meeting.service';
 import { DealEventService } from './deal-event.service';
@@ -85,7 +84,7 @@ export class StartupController {
     private pdfRenderService: PdfRenderService,
     private dataRoomService: DataRoomService,
     private dataGateService: DataGateService,
-    @Optional() private claraService: ClaraService,
+    private moduleRef: ModuleRef,
     private interestService: InvestorInterestService,
     private meetingService: MeetingService,
     private dealEvents: DealEventService,
@@ -632,7 +631,14 @@ export class StartupController {
     @Body() body?: { founderEmail?: string },
   ) {
     await this.dataGateService.assertOwnership(id, user.id, user.role);
-    if (!this.claraService) {
+
+    let claraService: { requestDocumentsForDataGate: (startupId: string, missingDocs: string[], founderEmail?: string) => Promise<{ sentTo: string; requestedDocs: string[] }> } | null = null;
+    try {
+      claraService = await this.moduleRef.get('ClaraService', { strict: false });
+    } catch {
+      claraService = null;
+    }
+    if (!claraService) {
       throw new BadRequestException('Clara is not available');
     }
 
@@ -642,7 +648,7 @@ export class StartupController {
     }
 
     try {
-      const result = await this.claraService.requestDocumentsForDataGate(
+      const result = await claraService.requestDocumentsForDataGate(
         id,
         gateInfo.missingMaterials,
         body?.founderEmail,

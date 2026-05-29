@@ -17,6 +17,7 @@ import { CurrentUser } from '../../auth/decorators';
 import { UserRole } from '../../auth/entities/auth.schema';
 import { StartupStage, PrivateInvestorPipelineStatus, DataGateStatus, startup } from '../startup/entities/startup.schema';
 import { DealEventService } from '../startup/deal-event.service';
+import { DataGateService } from '../startup/data-gate.service';
 import { RolesGuard } from '../startup/guards';
 import { Roles } from '../startup/decorators/roles.decorator';
 import { ThesisService } from './thesis.service';
@@ -98,6 +99,7 @@ export class InvestorController {
     private pipelineState: PipelineStateService,
     private drizzle: DrizzleService,
     private dealEvents: DealEventService,
+    private dataGateService: DataGateService,
   ) {}
 
   // ============ THESIS ENDPOINTS ============
@@ -451,12 +453,24 @@ export class InvestorController {
       },
     });
 
+    await this.dataGateService.checkAutoAdvance(startupId);
+
+    const [postCheck] = await this.drizzle.db
+      .select({ dataGateStatus: startup.dataGateStatus })
+      .from(startup)
+      .where(eq(startup.id, startupId))
+      .limit(1);
+
+    const autoAdvanced = postCheck?.dataGateStatus === DataGateStatus.COMPLETE;
+
     return {
       ok: true,
       startupId,
       verdict: 'advance' as const,
-      path: 'data_gate' as const,
-      note: 'Deal moved to Data Gates. Investor can skip or wait for documents before DD pipeline starts.',
+      path: autoAdvanced ? ('auto_advanced' as const) : ('data_gate' as const),
+      note: autoAdvanced
+        ? 'All required documents present — DD pipeline started immediately.'
+        : 'Deal moved to Data Gates. Investor can skip or wait for documents before DD pipeline starts.',
     };
   }
 

@@ -4,9 +4,8 @@
 // for the few non-generated `customFetch` reads and for narrowing responses
 // whose generated `data` type is `void`/`unknown`.
 //
-// TODO: ~10 components/routes still inline copies of these (e.g.
-// StartupSubmitForm, useStartupRealtimeProgress, the per-role startup.$id
-// routes, admin/agents, apply.$slug). Migrate them to import from here.
+// These are the single source of truth — import from here rather than
+// re-inlining a local copy.
 
 function hasDataField(payload: unknown): payload is { data: unknown } {
   return (
@@ -26,10 +25,12 @@ export function unwrapApiResponse<T>(payload: unknown): T {
 }
 
 /**
- * Like {@link unwrapApiResponse} but returns `null` for a missing envelope —
- * matches the `extractResponseData<T>(): T | null` variant duplicated across
- * several routes.
+ * Like {@link unwrapApiResponse} but typed as nullable: returns `null` only
+ * when the payload itself is null/undefined, otherwise unwraps a `{ data }`
+ * envelope or returns the bare payload. Mirrors the `extractResponseData<T>():
+ * T | null` variant duplicated across several routes.
  */
 export function extractResponseData<T>(payload: unknown): T | null {
-  return hasDataField(payload) ? (payload.data as T) : null;
+  if (payload === null || payload === undefined) return null;
+  return hasDataField(payload) ? (payload.data as T) : (payload as T);
 }

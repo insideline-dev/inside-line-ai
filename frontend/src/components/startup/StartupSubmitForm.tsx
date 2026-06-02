@@ -67,6 +67,7 @@ import { CountryCodeSelector } from "@/components/CountryCodeSelector";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Upload, Globe, FileText, Building2, MapPin, Loader2, CheckCircle, Users, Plus, Trash2, Linkedin, TrendingUp, Package, Video, Image, User, Mail, Phone, History, Info, Save, Cloud, CloudOff, Search, RefreshCw } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
+import { unwrapApiResponse } from "@/lib/api-utils";
 
 // Define base schema shape for type inference
 const baseFormSchema = z.object({
@@ -205,19 +206,6 @@ interface StoredDraft {
   teamMembers: TeamMember[];
   productScreenshots: string[];
   savedAt: string;
-}
-
-function unwrapApiResponse<T>(payload: unknown): T {
-  if (
-    payload &&
-    typeof payload === "object" &&
-    "data" in (payload as Record<string, unknown>) &&
-    (payload as Record<string, unknown>).data !== undefined
-  ) {
-    return (payload as Record<string, unknown>).data as T;
-  }
-
-  return payload as T;
 }
 
 const SUPPORTED_IMAGE_TYPES = [

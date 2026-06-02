@@ -55,6 +55,7 @@ import {
 } from "@/api/generated/investor/investor";
 import { AnalysisProgressBar } from "@/components/AnalysisProgressBar";
 import { cn } from "@/lib/utils";
+import { extractResponseData } from "@/lib/api-utils";
 import {
   useStartupControllerFindAll,
   useStartupControllerUpdate,
@@ -254,19 +255,6 @@ function extractList<T>(payload: unknown): T[] {
     return (payload as { data: T[] }).data;
   }
   return [];
-}
-
-function extractResponseData<T>(payload: unknown): T | null {
-  if (payload === null || payload === undefined) return null;
-  if (
-    typeof payload === "object" &&
-    !Array.isArray(payload) &&
-    "data" in (payload as Record<string, unknown>) &&
-    (payload as Record<string, unknown>).data !== undefined
-  ) {
-    return (payload as { data: T }).data;
-  }
-  return payload as T;
 }
 
 function formatDate(date: string | null) {

@@ -10,6 +10,8 @@ import { AiConfigService } from "../../ai/services/ai-config.service";
 import { PipelineService } from "../../ai/services/pipeline.service";
 import { PipelineFeedbackService } from "../../ai/services/pipeline-feedback.service";
 import { StartupMatchingPipelineService } from "../../ai/services/startup-matching-pipeline.service";
+import { DataRoomService } from "../data-room.service";
+import { DealEventService } from "../deal-event.service";
 import { EnrichmentService } from "../../ai/services/enrichment.service";
 import { PipelineTemplateService } from "../../ai/services/pipeline-template.service";
 import { NotificationService } from "../../../notification/notification.service";
@@ -399,6 +401,9 @@ describe("Startup lifecycle integration: submit -> pipeline complete -> approve 
       queue,
       investorMatching,
       notifications,
+      {
+        record: jest.fn().mockResolvedValue({ id: "event-1" }),
+      } as unknown as DealEventService,
     );
 
     startupService = new StartupService(
@@ -410,6 +415,12 @@ describe("Startup lifecycle integration: submit -> pipeline complete -> approve 
       startupPipeline,
       pipelineFeedback,
       matchingPipelineService,
+      {
+        syncCategoryByAssetKey: jest.fn().mockResolvedValue(undefined),
+      } as unknown as DataRoomService,
+      {
+        record: jest.fn().mockResolvedValue({ id: "event-1" }),
+      } as unknown as DealEventService,
     );
 
     const phaseTransition = {

@@ -37,13 +37,7 @@ import {
   selectInitialFlowConfigCandidate,
   type FlowConfigRecord,
 } from "./-flow-config-helpers";
-
-function extractResponseData<T>(payload: unknown): T {
-  if (payload && typeof payload === "object" && "data" in payload) {
-    return (payload as { data: T }).data;
-  }
-  return payload as T;
-}
+import { unwrapApiResponse } from "@/lib/api-utils";
 
 function normalizeFlowEdges(value: unknown): FlowEdgeDefinition[] | null {
   if (!Array.isArray(value)) {
@@ -202,7 +196,7 @@ export function AdminFlowView() {
   const createDraftMutation = useAdminControllerCreatePipelineFlowConfig({
     mutation: {
       onSuccess: (data: unknown) => {
-        const result = extractResponseData<{ id: string }>(data);
+        const result = unwrapApiResponse<{ id: string }>(data);
         setDraftId(result.id);
         setIsDirty(false);
         toast.success("Draft saved");
@@ -248,14 +242,14 @@ export function AdminFlowView() {
     },
   });
 
-  const flows = extractResponseData<{ flows: AiPromptFlowResponseDtoFlowsItem[] }>(
+  const flows = unwrapApiResponse<{ flows: AiPromptFlowResponseDtoFlowsItem[] }>(
     flowData,
   )?.flows;
   const selectedFlow = flows?.find((f) => f.id === selectedFlowId);
 
-  const configs = extractResponseData<{ data: FlowConfigRecord[] }>(configsData);
+  const configs = unwrapApiResponse<{ data: FlowConfigRecord[] }>(configsData);
   const activeConfig = useMemo(
-    () => parseFlowConfigRecord(extractResponseData<unknown>(activeConfigData)),
+    () => parseFlowConfigRecord(unwrapApiResponse<unknown>(activeConfigData)),
     [activeConfigData],
   );
 
@@ -322,14 +316,14 @@ export function AdminFlowView() {
           id: draftId,
           data: payload as never,
         });
-        const updatedDraft = extractResponseData<{ id: string }>(updated);
+        const updatedDraft = unwrapApiResponse<{ id: string }>(updated);
         return updatedDraft.id;
       }
 
       const created = await createDraftMutation.mutateAsync({
         data: payload as never,
       });
-      const createdDraft = extractResponseData<{ id: string }>(created);
+      const createdDraft = unwrapApiResponse<{ id: string }>(created);
       return createdDraft.id;
     },
     [buildDraftPayloadForFlow, createDraftMutation, draftId, updateDraftMutation],

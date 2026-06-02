@@ -23,6 +23,7 @@ import type { Startup } from "@/types/startup";
 import type { Evaluation } from "@/types/evaluation";
 import { Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { unwrapApiResponse } from "@/lib/api-utils";
 
 function formatCompactCurrency(value?: number | null): string {
   if (value == null) return "N/A";
@@ -73,19 +74,6 @@ const FOUNDER_STARTUP_SECTIONS = [
   { id: "market", label: "Market" },
   { id: "sources", label: "Sources" },
 ] as const;
-
-function unwrapApiResponse<T>(payload: unknown): T {
-  if (
-    payload &&
-    typeof payload === "object" &&
-    "data" in (payload as Record<string, unknown>) &&
-    (payload as Record<string, unknown>).data !== undefined
-  ) {
-    return (payload as Record<string, unknown>).data as T;
-  }
-
-  return payload as T;
-}
 
 function findScrollContainer(node: HTMLElement | null): HTMLElement | null {
   let current = node?.parentElement ?? null;

@@ -47,6 +47,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { Startup } from "@/types/startup";
 import type { Evaluation } from "@/types/evaluation";
 import type { ScoringWeights } from "@/lib/score-utils";
+import { unwrapApiResponse } from "@/lib/api-utils";
 
 export const Route = createFileRoute("/_protected/investor/startup/$id")({
   component: InvestorStartupDetailPage,
@@ -63,18 +64,6 @@ type InvestorStartupTab =
   | "competitors"
   | "data-room"
   | "events";
-
-function unwrapApiResponse<T>(payload: unknown): T {
-  if (
-    payload &&
-    typeof payload === "object" &&
-    "data" in (payload as Record<string, unknown>) &&
-    (payload as Record<string, unknown>).data !== undefined
-  ) {
-    return (payload as Record<string, unknown>).data as T;
-  }
-  return payload as T;
-}
 
 function InvestorStartupDetailPage() {
   const { id } = Route.useParams();

@@ -107,6 +107,7 @@ export const Route = createFileRoute("/_protected/admin/startup/$id")({
 import type { Startup } from "@/types/startup";
 import type { Evaluation } from "@/types/evaluation";
 import { DealActivityTimeline } from "@/components/startup-view/DealActivityTimeline";
+import { unwrapApiResponse } from "@/lib/api-utils";
 
 interface StartupDetail extends Startup {
   evaluation?: Evaluation;
@@ -223,19 +224,6 @@ function formatLabel(value: string): string {
     .replace(/\s+/g, " ")
     .trim()
     .replace(/^\w/, (char) => char.toUpperCase());
-}
-
-function unwrapApiResponse<T>(payload: unknown): T {
-  if (
-    payload &&
-    typeof payload === "object" &&
-    "data" in (payload as Record<string, unknown>) &&
-    (payload as Record<string, unknown>).data !== undefined
-  ) {
-    return (payload as Record<string, unknown>).data as T;
-  }
-
-  return payload as T;
 }
 
 function hasPipelineProgressSnapshot(payload: unknown): boolean {

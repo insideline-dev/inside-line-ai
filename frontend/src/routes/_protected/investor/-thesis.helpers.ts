@@ -85,22 +85,7 @@ export function shouldShowThesisGeneratingBanner({
   return (summaryAtMs as number) < (scrapedAtMs as number);
 }
 
-export function extractResponseData<T>(payload: unknown): T | null {
-  if (payload === null || payload === undefined) {
-    return null;
-  }
-
-  if (
-    typeof payload === "object" &&
-    !Array.isArray(payload) &&
-    "data" in (payload as Record<string, unknown>) &&
-    (payload as Record<string, unknown>).data !== undefined
-  ) {
-    return (payload as { data: T }).data;
-  }
-
-  return payload as T;
-}
+export { extractResponseData } from "@/lib/api-utils";
 
 export function flattenNodes(nodes: GeographyNode[]): GeographyNode[] {
   return nodes.flatMap((node) => [node, ...(node.children ? flattenNodes(node.children) : [])]);

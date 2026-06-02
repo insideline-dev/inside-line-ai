@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
+import { extractResponseData } from "@/lib/api-utils";
 import {
   useAdminControllerGetAiPromptContextSchema,
   useAdminControllerGetAiPromptFlow,
@@ -143,18 +144,6 @@ const STAGES = [
   "series_f_plus",
 ] as const;
 type StageOption = (typeof STAGES)[number];
-
-function extractResponseData<T>(payload: unknown): T | null {
-  if (payload === null || payload === undefined) {
-    return null;
-  }
-
-  if (typeof payload === "object" && "data" in payload) {
-    return (payload as { data: T }).data;
-  }
-
-  return payload as T;
-}
 
 function formatStage(value: string | null): string {
   if (!value) return "Global";

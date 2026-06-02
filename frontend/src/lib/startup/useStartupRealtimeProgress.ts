@@ -18,6 +18,7 @@ import {
   type PipelinePhaseProgress,
   type StartupProgressResponse,
 } from "@/types/pipeline-progress";
+import { unwrapApiResponse } from "@/lib/api-utils";
 
 const TERMINAL_PIPELINE_STATUSES = new Set(["completed", "failed", "cancelled"]);
 
@@ -44,19 +45,6 @@ const EXPECTED_AGENT_RUNTIME_MS: Record<string, number> = {
 };
 
 const MAX_RUNNING_PROGRESS = 85;
-
-function unwrapApiResponse<T>(payload: unknown): T {
-  if (
-    payload &&
-    typeof payload === "object" &&
-    "data" in (payload as Record<string, unknown>) &&
-    (payload as Record<string, unknown>).data !== undefined
-  ) {
-    return (payload as Record<string, unknown>).data as T;
-  }
-
-  return payload as T;
-}
 
 function normalizePercent(value: number): number {
   if (!Number.isFinite(value)) {

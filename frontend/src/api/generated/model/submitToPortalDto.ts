@@ -5,7 +5,6 @@
  * Inside Line API Documentation
  * OpenAPI spec version: 2.0
  */
-import type { SubmitToPortalDtoDistributionMode } from './submitToPortalDtoDistributionMode';
 import type { SubmitToPortalDtoStage } from './submitToPortalDtoStage';
 
 export interface SubmitToPortalDto {
@@ -55,6 +54,4 @@ export interface SubmitToPortalDto {
    * @maxLength 200
    */
   founderName?: string;
-  distributionMode?: SubmitToPortalDtoDistributionMode;
-  selectedInvestorIds?: string[];
 }

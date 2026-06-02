@@ -2470,7 +2470,9 @@ export class ClaraService {
     const context = this.coerceConversationContext(conversation?.context);
     const inboxId = this.readConversationContextString(context, "lastInboundInboxId");
     const messageId = this.readConversationContextString(context, "lastInboundMessageId");
-    if (!inboxId || !messageId) {
+    // Non-email inbox ids (e.g. "whatsapp" from a WhatsApp-channel conversation)
+    // would 404 against the AgentMail email send path — treat them as absent.
+    if (!this.isEmailInboxId(inboxId) || !messageId) {
       return null;
     }
     return { inboxId, messageId };
@@ -2480,10 +2482,20 @@ export class ClaraService {
     conversation: { context?: unknown } | null,
   ): string | null {
     const context = this.coerceConversationContext(conversation?.context);
-    return (
-      this.readConversationContextString(context, "lastInboundInboxId") ??
-      this.claraInboxId
-    );
+    const inboxId = this.readConversationContextString(context, "lastInboundInboxId");
+    // Only AgentMail email inbox ids are valid here; anything else (e.g. the
+    // "whatsapp" channel marker) falls back to the configured Clara inbox.
+    return this.isEmailInboxId(inboxId) ? inboxId : this.claraInboxId;
+  }
+
+  /**
+   * AgentMail inbox ids are the full email address (e.g.
+   * clara.insideline@agentmail.to). Anything without an "@" (stale UUID-style
+   * ids or non-email channel markers like "whatsapp") 404s on the SDK send
+   * path, so callers should treat such values as no inbox.
+   */
+  private isEmailInboxId(value: string | null | undefined): value is string {
+    return typeof value === "string" && /^[^@\s]+@[^@\s]+$/.test(value);
   }
 
   private normalizeEmailAddress(value: string | null | undefined): string {

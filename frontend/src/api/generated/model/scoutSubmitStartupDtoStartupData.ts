@@ -5,6 +5,7 @@
  * Inside Line API Documentation
  * OpenAPI spec version: 2.0
  */
+import type { ScoutSubmitStartupDtoStartupDataDistributionMode } from './scoutSubmitStartupDtoStartupDataDistributionMode';
 import type { ScoutSubmitStartupDtoStartupDataFilesItem } from './scoutSubmitStartupDtoStartupDataFilesItem';
 import type { ScoutSubmitStartupDtoStartupDataRaiseType } from './scoutSubmitStartupDtoStartupDataRaiseType';
 import type { ScoutSubmitStartupDtoStartupDataStage } from './scoutSubmitStartupDtoStartupDataStage';
@@ -92,4 +93,6 @@ export type ScoutSubmitStartupDtoStartupData = {
   /** @maxItems 20 */
   productScreenshots?: string[];
   demoUrl?: string;
+  distributionMode?: ScoutSubmitStartupDtoStartupDataDistributionMode;
+  selectedInvestorIds?: string[];
 };

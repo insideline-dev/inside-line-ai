@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef, type DragEvent } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch, ApiError } from "@/api/client";
 import { format } from "date-fns";
 import { Card, CardContent } from "@/components/ui/card";
@@ -59,6 +59,9 @@ import {
   useStartupControllerFindAll,
   useStartupControllerUpdate,
   getStartupControllerFindAllQueryKey,
+  useStartupControllerGetDataGates,
+  useStartupControllerSkipDataGate,
+  useStartupControllerRequestDocuments,
 } from "@/api/generated/startups/startups";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -1253,15 +1256,6 @@ function CloseDealDialog({
 
 type DDSubTab = "data-gates" | "analyzed" | "engaged";
 
-type DataGateInfo = {
-  dataGateStatus: string | null;
-  docRequestedAt: string | null;
-  openQuestions: Array<{ id: string; summary: string; status: string }>;
-  missingMaterials: string[];
-  requiredDocTypes: string[];
-  presentDocTypes: string[];
-};
-
 const DOC_TYPE_LABELS: Record<string, string> = {
   pitch_deck: "Pitch Deck",
   financial: "Financials",
@@ -1293,13 +1287,14 @@ function DataGateCard({
 }) {
   const [founderEmail, setFounderEmail] = useState("");
 
-  const { data: gateData } = useQuery({
-    queryKey: ["data-gates", item.startupId],
-    queryFn: () => customFetch<DataGateInfo>(`/startups/${item.startupId}/data-gates`),
-    staleTime: 30_000,
-    refetchInterval: isTabActive ? 15_000 : false,
-    enabled: isTabActive,
+  const { data: gateResponse } = useStartupControllerGetDataGates(item.startupId, {
+    query: {
+      staleTime: 30_000,
+      refetchInterval: isTabActive ? 15_000 : false,
+      enabled: isTabActive,
+    },
   });
+  const gateData = gateResponse?.data;
 
   const openCount = gateData?.openQuestions?.filter((q) => q.status === "open").length ?? 0;
   const alreadyRequested = Boolean(gateData?.docRequestedAt);
@@ -1435,51 +1430,55 @@ function DataGatesView({ items, isActive }: { items: PipelineCardItem[]; isActiv
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const skipMutation = useMutation({
-    mutationFn: (startupId: string) =>
-      customFetch(`/startups/${startupId}/data-gates/skip`, { method: "POST" }),
-    onSuccess: () => {
-      toast.success("Data gate skipped — DD pipeline starting");
-      queryClient.invalidateQueries({ queryKey: getInvestorControllerGetPipelineQueryKey() });
-      queryClient.invalidateQueries({ queryKey: getStartupControllerFindAllQueryKey() });
-      queryClient.invalidateQueries({ queryKey: ["data-gates"] });
-    },
-    onError: () => {
-      toast.error("Failed to skip data gate");
+  const invalidateDataGates = () =>
+    queryClient.invalidateQueries({
+      predicate: (query) =>
+        typeof query.queryKey[0] === "string" &&
+        query.queryKey[0].startsWith("/startups/") &&
+        query.queryKey[0].endsWith("/data-gates"),
+    });
+
+  const skipMutation = useStartupControllerSkipDataGate({
+    mutation: {
+      onSuccess: () => {
+        toast.success("Data gate skipped — DD pipeline starting");
+        queryClient.invalidateQueries({ queryKey: getInvestorControllerGetPipelineQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getStartupControllerFindAllQueryKey() });
+        void invalidateDataGates();
+      },
+      onError: () => {
+        toast.error("Failed to skip data gate");
+      },
     },
   });
 
   const [emailPromptStartupId, setEmailPromptStartupId] = useState<string | null>(null);
 
-  const requestDocsMutation = useMutation({
-    mutationFn: ({ startupId, founderEmail }: { startupId: string; founderEmail?: string }) =>
-      customFetch<{ success: boolean; sentTo?: string; requestedDocs?: string[] }>(
-        `/startups/${startupId}/data-gates/request-documents`,
-        {
-          method: "POST",
-          body: JSON.stringify(founderEmail ? { founderEmail } : {}),
-          headers: { "Content-Type": "application/json" },
-        },
-      ),
-    onSuccess: (data) => {
-      if (data.sentTo) {
-        toast.success(`Document request sent to ${data.sentTo}`);
-      }
-      setEmailPromptStartupId(null);
-      queryClient.invalidateQueries({ queryKey: ["data-gates"] });
-    },
-    onError: (error) => {
-      if (error instanceof ApiError && error.status === 400 && error.message.includes("founder email")) {
-        setEmailPromptStartupId(requestDocsMutation.variables?.startupId ?? null);
-        toast.error("No founder email found — please enter one below");
-      } else {
-        toast.error("Failed to send document request");
-      }
+  const requestDocsMutation = useStartupControllerRequestDocuments({
+    mutation: {
+      onSuccess: (response) => {
+        if (response.data.sentTo) {
+          toast.success(`Document request sent to ${response.data.sentTo}`);
+        }
+        setEmailPromptStartupId(null);
+        void invalidateDataGates();
+      },
+      onError: (error) => {
+        if (error instanceof ApiError && error.status === 400 && error.message.includes("founder email")) {
+          setEmailPromptStartupId(requestDocsMutation.variables?.id ?? null);
+          toast.error("No founder email found — please enter one below");
+        } else {
+          toast.error("Failed to send document request");
+        }
+      },
     },
   });
 
   const handleRequestDocs = (startupId: string, founderEmail?: string) => {
-    requestDocsMutation.mutate({ startupId, founderEmail });
+    requestDocsMutation.mutate({
+      id: startupId,
+      data: founderEmail ? { founderEmail } : {},
+    });
   };
 
   if (items.length === 0) {
@@ -1502,10 +1501,10 @@ function DataGatesView({ items, isActive }: { items: PipelineCardItem[]; isActiv
         <DataGateCard
           key={item.startupId}
           item={item}
-          onSkip={(id) => skipMutation.mutate(id)}
-          isSkipping={skipMutation.isPending && skipMutation.variables === item.startupId}
+          onSkip={(id) => skipMutation.mutate({ id })}
+          isSkipping={skipMutation.isPending && skipMutation.variables?.id === item.startupId}
           onRequestDocs={handleRequestDocs}
-          isRequesting={requestDocsMutation.isPending && requestDocsMutation.variables?.startupId === item.startupId}
+          isRequesting={requestDocsMutation.isPending && requestDocsMutation.variables?.id === item.startupId}
           needsEmailInput={emailPromptStartupId === item.startupId}
           isTabActive={isActive}
         />

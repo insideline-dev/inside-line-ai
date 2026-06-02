@@ -28,11 +28,12 @@ frontend/src/api/client.ts   → custom fetch mutator (shared by Orval)
 ```
 
 **Rules:**
-1. **Never hand-write `fetch()` or `useQuery` for backend endpoints.** Use generated hooks.
+1. **Never hand-write `fetch()` or `useQuery` for backend endpoints, and never call `customFetch` directly from a component/route.** Use generated hooks. `customFetch` is the Orval mutator — the generated hooks are its only sanctioned callers; ad-hoc calls are a rule violation.
 2. **Never edit files inside `frontend/src/api/generated/`.** Overwritten on regeneration.
-3. After adding/changing backend endpoints, regenerate: `cd frontend && bun generate:api`
-4. The custom fetch mutator handles auth cookies, token refresh (401), and 429 backoff.
-5. `GET /auth/me` is excluded from 401 refresh+redirect logic.
+3. **Adding a NEW backend endpoint?** You MUST: (a) give it Swagger DTOs/decorators — `@ApiOperation`, `@ApiResponse({ type: XDto })`, and a `createZodDto` body DTO (never an inline `@Body() body: { ... }` type, or it won't surface a typed body in the spec) — so it appears in the OpenAPI spec; (b) start the backend with `ENABLE_SWAGGER=true` and run `cd frontend && bun generate:api`; (c) consume the generated hook in the frontend. Generated results are wrapped (payload is `response.data`), and query keys are URL-shaped (`[`/startups/${id}/data-gates`]`) so invalidate with a `predicate`. **Cautionary example:** epic #113 Data Gates shipped using ad-hoc `customFetch` calls and had to be reworked into generated hooks — don't repeat it.
+4. After changing existing endpoints, regenerate: `cd frontend && bun generate:api`.
+5. The custom fetch mutator handles auth cookies, token refresh (401), and 429 backoff.
+6. `GET /auth/me` is excluded from 401 refresh+redirect logic.
 
 ### Auth Flow
 

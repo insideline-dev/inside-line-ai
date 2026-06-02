@@ -5,6 +5,7 @@
  * Inside Line API Documentation
  * OpenAPI spec version: 2.0
  */
+import type { CreateStartupDtoDistributionMode } from './createStartupDtoDistributionMode';
 import type { CreateStartupDtoFilesItem } from './createStartupDtoFilesItem';
 import type { CreateStartupDtoRaiseType } from './createStartupDtoRaiseType';
 import type { CreateStartupDtoStage } from './createStartupDtoStage';
@@ -92,4 +93,6 @@ export interface CreateStartupDto {
   /** @maxItems 20 */
   productScreenshots?: string[];
   demoUrl?: string;
+  distributionMode?: CreateStartupDtoDistributionMode;
+  selectedInvestorIds?: string[];
 }

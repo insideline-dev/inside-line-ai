@@ -58,6 +58,8 @@ export interface CreateThesisDto {
   minStartupScore?: number | null;
   /** @maxLength 2000 */
   thesisSummary?: string;
+  requiredDocTypes?: string[];
+  autoAdvanceDataGate?: boolean;
   skipRematching?: boolean;
   regenerateSummary?: boolean;
 }

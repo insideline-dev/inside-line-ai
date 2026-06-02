@@ -5,6 +5,7 @@
  * Inside Line API Documentation
  * OpenAPI spec version: 2.0
  */
+import type { UpdateStartupDtoDistributionMode } from './updateStartupDtoDistributionMode';
 import type { UpdateStartupDtoFilesItem } from './updateStartupDtoFilesItem';
 import type { UpdateStartupDtoPrivateInvestorPipelineStatus } from './updateStartupDtoPrivateInvestorPipelineStatus';
 import type { UpdateStartupDtoRaiseType } from './updateStartupDtoRaiseType';
@@ -93,5 +94,7 @@ export interface UpdateStartupDto {
   /** @maxItems 20 */
   productScreenshots?: string[];
   demoUrl?: string;
+  distributionMode?: UpdateStartupDtoDistributionMode;
+  selectedInvestorIds?: string[];
   privateInvestorPipelineStatus?: UpdateStartupDtoPrivateInvestorPipelineStatus;
 }

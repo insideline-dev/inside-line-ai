@@ -27,11 +27,16 @@ import type {
 import type {
   ApproveStartupDto,
   CreateStartupDto,
+  DataGateInfoDto,
+  DataGateStatusResponseDto,
   GetProgressResponseDto,
   PresignedUrlDto,
+  PreviewMatchesDto,
   RegisterDataRoomFileDto,
   RegisterDataRoomFilesBulkDto,
   RejectStartupDto,
+  RequestDocumentsDto,
+  RequestDocumentsResponseDto,
   RespondInterestDto,
   SaveDraftDto,
   ScheduleMeetingDto,
@@ -242,7 +247,170 @@ export function useStartupControllerFindAll<TData = Awaited<ReturnType<typeof st
 
 
 
-export type startupControllerGetEvaluationByIdResponse200 = {
+/**
+ * @summary Preview which investors match the given startup profile
+ */
+export type startupControllerPreviewMatchesResponse201 = {
+  data: void
+  status: 201
+}
+    
+export type startupControllerPreviewMatchesResponseSuccess = (startupControllerPreviewMatchesResponse201) & {
+  headers: Headers;
+};
+;
+
+export type startupControllerPreviewMatchesResponse = (startupControllerPreviewMatchesResponseSuccess)
+
+export const getStartupControllerPreviewMatchesUrl = () => {
+
+
+  
+
+  return `/startups/preview-matches`
+}
+
+export const startupControllerPreviewMatches = async (previewMatchesDto: PreviewMatchesDto, options?: RequestInit): Promise<startupControllerPreviewMatchesResponse> => {
+  
+  return customFetch<startupControllerPreviewMatchesResponse>(getStartupControllerPreviewMatchesUrl(),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      previewMatchesDto,)
+  }
+);}
+
+
+
+
+export const getStartupControllerPreviewMatchesMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startupControllerPreviewMatches>>, TError,{data: BodyType<PreviewMatchesDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof startupControllerPreviewMatches>>, TError,{data: BodyType<PreviewMatchesDto>}, TContext> => {
+
+const mutationKey = ['startupControllerPreviewMatches'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof startupControllerPreviewMatches>>, {data: BodyType<PreviewMatchesDto>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  startupControllerPreviewMatches(data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type StartupControllerPreviewMatchesMutationResult = NonNullable<Awaited<ReturnType<typeof startupControllerPreviewMatches>>>
+    export type StartupControllerPreviewMatchesMutationBody = BodyType<PreviewMatchesDto>
+    export type StartupControllerPreviewMatchesMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Preview which investors match the given startup profile
+ */
+export const useStartupControllerPreviewMatches = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startupControllerPreviewMatches>>, TError,{data: BodyType<PreviewMatchesDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof startupControllerPreviewMatches>>,
+        TError,
+        {data: BodyType<PreviewMatchesDto>},
+        TContext
+      > => {
+      return useMutation(getStartupControllerPreviewMatchesMutationOptions(options), queryClient);
+    }
+    /**
+ * @summary Extract company name + website from an uploaded pitch deck
+ */
+export type startupControllerExtractDeckMetadataResponse201 = {
+  data: void
+  status: 201
+}
+    
+export type startupControllerExtractDeckMetadataResponseSuccess = (startupControllerExtractDeckMetadataResponse201) & {
+  headers: Headers;
+};
+;
+
+export type startupControllerExtractDeckMetadataResponse = (startupControllerExtractDeckMetadataResponseSuccess)
+
+export const getStartupControllerExtractDeckMetadataUrl = () => {
+
+
+  
+
+  return `/startups/extract-deck-metadata`
+}
+
+export const startupControllerExtractDeckMetadata = async ( options?: RequestInit): Promise<startupControllerExtractDeckMetadataResponse> => {
+  
+  return customFetch<startupControllerExtractDeckMetadataResponse>(getStartupControllerExtractDeckMetadataUrl(),
+  {      
+    ...options,
+    method: 'POST'
+    
+    
+  }
+);}
+
+
+
+
+export const getStartupControllerExtractDeckMetadataMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startupControllerExtractDeckMetadata>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof startupControllerExtractDeckMetadata>>, TError,void, TContext> => {
+
+const mutationKey = ['startupControllerExtractDeckMetadata'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof startupControllerExtractDeckMetadata>>, void> = () => {
+          
+
+          return  startupControllerExtractDeckMetadata(requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type StartupControllerExtractDeckMetadataMutationResult = NonNullable<Awaited<ReturnType<typeof startupControllerExtractDeckMetadata>>>
+    
+    export type StartupControllerExtractDeckMetadataMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Extract company name + website from an uploaded pitch deck
+ */
+export const useStartupControllerExtractDeckMetadata = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startupControllerExtractDeckMetadata>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof startupControllerExtractDeckMetadata>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getStartupControllerExtractDeckMetadataMutationOptions(options), queryClient);
+    }
+    export type startupControllerGetEvaluationByIdResponse200 = {
   data: void
   status: 200
 }
@@ -3759,6 +3927,361 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getStartupControllerAdminDeleteMutationOptions(options), queryClient);
+    }
+    /**
+ * @summary Get data gate info (required/missing documents) for a startup
+ */
+export type startupControllerGetDataGatesResponse200 = {
+  data: DataGateInfoDto
+  status: 200
+}
+    
+export type startupControllerGetDataGatesResponseSuccess = (startupControllerGetDataGatesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type startupControllerGetDataGatesResponse = (startupControllerGetDataGatesResponseSuccess)
+
+export const getStartupControllerGetDataGatesUrl = (id: string,) => {
+
+
+  
+
+  return `/startups/${id}/data-gates`
+}
+
+export const startupControllerGetDataGates = async (id: string, options?: RequestInit): Promise<startupControllerGetDataGatesResponse> => {
+  
+  return customFetch<startupControllerGetDataGatesResponse>(getStartupControllerGetDataGatesUrl(id),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getStartupControllerGetDataGatesQueryKey = (id: string,) => {
+    return [
+    `/startups/${id}/data-gates`
+    ] as const;
+    }
+
+    
+export const getStartupControllerGetDataGatesQueryOptions = <TData = Awaited<ReturnType<typeof startupControllerGetDataGates>>, TError = ErrorType<unknown>>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof startupControllerGetDataGates>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getStartupControllerGetDataGatesQueryKey(id);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof startupControllerGetDataGates>>> = ({ signal }) => startupControllerGetDataGates(id, { signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof startupControllerGetDataGates>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type StartupControllerGetDataGatesQueryResult = NonNullable<Awaited<ReturnType<typeof startupControllerGetDataGates>>>
+export type StartupControllerGetDataGatesQueryError = ErrorType<unknown>
+
+
+export function useStartupControllerGetDataGates<TData = Awaited<ReturnType<typeof startupControllerGetDataGates>>, TError = ErrorType<unknown>>(
+ id: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof startupControllerGetDataGates>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof startupControllerGetDataGates>>,
+          TError,
+          Awaited<ReturnType<typeof startupControllerGetDataGates>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useStartupControllerGetDataGates<TData = Awaited<ReturnType<typeof startupControllerGetDataGates>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof startupControllerGetDataGates>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof startupControllerGetDataGates>>,
+          TError,
+          Awaited<ReturnType<typeof startupControllerGetDataGates>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useStartupControllerGetDataGates<TData = Awaited<ReturnType<typeof startupControllerGetDataGates>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof startupControllerGetDataGates>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get data gate info (required/missing documents) for a startup
+ */
+
+export function useStartupControllerGetDataGates<TData = Awaited<ReturnType<typeof startupControllerGetDataGates>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof startupControllerGetDataGates>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getStartupControllerGetDataGatesQueryOptions(id,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+/**
+ * @summary Skip the data gate and start the DD pipeline
+ */
+export type startupControllerSkipDataGateResponse201 = {
+  data: DataGateStatusResponseDto
+  status: 201
+}
+    
+export type startupControllerSkipDataGateResponseSuccess = (startupControllerSkipDataGateResponse201) & {
+  headers: Headers;
+};
+;
+
+export type startupControllerSkipDataGateResponse = (startupControllerSkipDataGateResponseSuccess)
+
+export const getStartupControllerSkipDataGateUrl = (id: string,) => {
+
+
+  
+
+  return `/startups/${id}/data-gates/skip`
+}
+
+export const startupControllerSkipDataGate = async (id: string, options?: RequestInit): Promise<startupControllerSkipDataGateResponse> => {
+  
+  return customFetch<startupControllerSkipDataGateResponse>(getStartupControllerSkipDataGateUrl(id),
+  {      
+    ...options,
+    method: 'POST'
+    
+    
+  }
+);}
+
+
+
+
+export const getStartupControllerSkipDataGateMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startupControllerSkipDataGate>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof startupControllerSkipDataGate>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['startupControllerSkipDataGate'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof startupControllerSkipDataGate>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  startupControllerSkipDataGate(id,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type StartupControllerSkipDataGateMutationResult = NonNullable<Awaited<ReturnType<typeof startupControllerSkipDataGate>>>
+    
+    export type StartupControllerSkipDataGateMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Skip the data gate and start the DD pipeline
+ */
+export const useStartupControllerSkipDataGate = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startupControllerSkipDataGate>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof startupControllerSkipDataGate>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getStartupControllerSkipDataGateMutationOptions(options), queryClient);
+    }
+    /**
+ * @summary Mark the data gate as complete
+ */
+export type startupControllerCompleteDataGateResponse201 = {
+  data: DataGateStatusResponseDto
+  status: 201
+}
+    
+export type startupControllerCompleteDataGateResponseSuccess = (startupControllerCompleteDataGateResponse201) & {
+  headers: Headers;
+};
+;
+
+export type startupControllerCompleteDataGateResponse = (startupControllerCompleteDataGateResponseSuccess)
+
+export const getStartupControllerCompleteDataGateUrl = (id: string,) => {
+
+
+  
+
+  return `/startups/${id}/data-gates/complete`
+}
+
+export const startupControllerCompleteDataGate = async (id: string, options?: RequestInit): Promise<startupControllerCompleteDataGateResponse> => {
+  
+  return customFetch<startupControllerCompleteDataGateResponse>(getStartupControllerCompleteDataGateUrl(id),
+  {      
+    ...options,
+    method: 'POST'
+    
+    
+  }
+);}
+
+
+
+
+export const getStartupControllerCompleteDataGateMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startupControllerCompleteDataGate>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof startupControllerCompleteDataGate>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['startupControllerCompleteDataGate'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof startupControllerCompleteDataGate>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  startupControllerCompleteDataGate(id,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type StartupControllerCompleteDataGateMutationResult = NonNullable<Awaited<ReturnType<typeof startupControllerCompleteDataGate>>>
+    
+    export type StartupControllerCompleteDataGateMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Mark the data gate as complete
+ */
+export const useStartupControllerCompleteDataGate = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startupControllerCompleteDataGate>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof startupControllerCompleteDataGate>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getStartupControllerCompleteDataGateMutationOptions(options), queryClient);
+    }
+    /**
+ * @summary Request missing documents from the founder via Clara
+ */
+export type startupControllerRequestDocumentsResponse201 = {
+  data: RequestDocumentsResponseDto
+  status: 201
+}
+    
+export type startupControllerRequestDocumentsResponseSuccess = (startupControllerRequestDocumentsResponse201) & {
+  headers: Headers;
+};
+;
+
+export type startupControllerRequestDocumentsResponse = (startupControllerRequestDocumentsResponseSuccess)
+
+export const getStartupControllerRequestDocumentsUrl = (id: string,) => {
+
+
+  
+
+  return `/startups/${id}/data-gates/request-documents`
+}
+
+export const startupControllerRequestDocuments = async (id: string,
+    requestDocumentsDto: RequestDocumentsDto, options?: RequestInit): Promise<startupControllerRequestDocumentsResponse> => {
+  
+  return customFetch<startupControllerRequestDocumentsResponse>(getStartupControllerRequestDocumentsUrl(id),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      requestDocumentsDto,)
+  }
+);}
+
+
+
+
+export const getStartupControllerRequestDocumentsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startupControllerRequestDocuments>>, TError,{id: string;data: BodyType<RequestDocumentsDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof startupControllerRequestDocuments>>, TError,{id: string;data: BodyType<RequestDocumentsDto>}, TContext> => {
+
+const mutationKey = ['startupControllerRequestDocuments'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof startupControllerRequestDocuments>>, {id: string;data: BodyType<RequestDocumentsDto>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  startupControllerRequestDocuments(id,data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type StartupControllerRequestDocumentsMutationResult = NonNullable<Awaited<ReturnType<typeof startupControllerRequestDocuments>>>
+    export type StartupControllerRequestDocumentsMutationBody = BodyType<RequestDocumentsDto>
+    export type StartupControllerRequestDocumentsMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Request missing documents from the founder via Clara
+ */
+export const useStartupControllerRequestDocuments = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startupControllerRequestDocuments>>, TError,{id: string;data: BodyType<RequestDocumentsDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof startupControllerRequestDocuments>>,
+        TError,
+        {id: string;data: BodyType<RequestDocumentsDto>},
+        TContext
+      > => {
+      return useMutation(getStartupControllerRequestDocumentsMutationOptions(options), queryClient);
     }
     export type startupControllerFindBySlugResponse200 = {
   data: void

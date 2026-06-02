@@ -126,7 +126,7 @@ All DTOs use `createZodDto()` from `nestjs-zod`. Validation is automatic via `Zo
 
 ## Critical Rules
 
-- **Never hand-write fetch/useQuery for backend endpoints** — use Orval-generated hooks
+- **Never hand-write fetch/useQuery for backend endpoints, and never call `customFetch` directly from a component/route** — use Orval-generated hooks. `customFetch` in `frontend/src/api/client.ts` is the Orval mutator; the generated hooks are the only sanctioned callers. When you add a NEW backend endpoint you MUST: (a) give it Swagger DTOs/decorators (`@ApiOperation`, `@ApiResponse({ type: SomeDto })`, a `createZodDto` body DTO — no inline `@Body() body: { ... }` types) so it appears in the OpenAPI spec; (b) run `cd frontend && bun generate:api` with the backend running (`ENABLE_SWAGGER=true`); (c) consume the generated hook. Note: generated query/mutation results are wrapped — the payload is on `response.data`, and generated query keys are `[`/path/${id}`]`, so invalidate with a predicate. Cautionary example: epic #113 Data Gates shipped with ad-hoc `customFetch` calls and had to be migrated back to generated hooks — do not repeat this.
 - **Never edit** `frontend/src/api/generated/` or `routeTree.gen.ts`
 - **Never use `queryClient.clear()`** — causes refetch loops. Use `removeQueries` for logout
 - **Never use `rm`** — use `trash` for file deletion

@@ -1,9 +1,9 @@
 import { Injectable, Logger, ForbiddenException, NotFoundException, Optional } from '@nestjs/common';
-import { eq, and, gt, sql } from 'drizzle-orm';
+import { eq, and, gt, sql, inArray } from 'drizzle-orm';
 import { DrizzleService } from '../../database';
 import { startup, DataGateStatus } from './entities/startup.schema';
 import { dataRoom } from './entities/data-room.schema';
-import { investorThesis } from '../investor/entities/investor.schema';
+import { investorThesis, startupMatch } from '../investor/entities/investor.schema';
 import { PipelineService } from '../ai/services/pipeline.service';
 import { PipelinePhase } from '../ai/interfaces/pipeline.interface';
 import { DealEventService } from './deal-event.service';
@@ -49,6 +49,42 @@ export class DataGateService {
     }
   }
 
+  /**
+   * Resolves the investor who owns this deal in the pipeline.
+   *
+   * For non-admin viewers the caller IS the investor — return their id directly.
+   * For admin views (or auto-advance checks) we must look up the investor via
+   * the startupMatch table because startup.userId is the submitter (founder /
+   * scout), NOT an investor.
+   *
+   * Priority: engaged → reviewing → new (most-advanced match wins).
+   */
+  private async resolveOwningInvestorId(
+    startupId: string,
+    viewerUserId: string,
+    viewerRole?: UserRole,
+  ): Promise<string | null> {
+    if (viewerRole !== UserRole.ADMIN) return viewerUserId;
+
+    const matches = await this.drizzle.db
+      .select({ investorId: startupMatch.investorId, status: startupMatch.status })
+      .from(startupMatch)
+      .where(
+        and(
+          eq(startupMatch.startupId, startupId),
+          inArray(startupMatch.status, ['engaged', 'reviewing', 'new']),
+        ),
+      );
+
+    if (matches.length === 0) return null;
+
+    const priority: Record<string, number> = { engaged: 0, reviewing: 1, new: 2 };
+    matches.sort(
+      (a, b) => (priority[a.status] ?? 99) - (priority[b.status] ?? 99),
+    );
+    return matches[0].investorId;
+  }
+
   async getDataGateInfo(
     startupId: string,
     viewerUserId: string,
@@ -58,7 +94,6 @@ export class DataGateService {
       .select({
         dataGateStatus: startup.dataGateStatus,
         docRequestedAt: startup.docRequestedAt,
-        userId: startup.userId,
       })
       .from(startup)
       .where(eq(startup.id, startupId))
@@ -66,12 +101,19 @@ export class DataGateService {
 
     if (!row) throw new NotFoundException(`Startup ${startupId} not found`);
 
-    const investorId = viewerRole === UserRole.ADMIN ? row.userId : viewerUserId;
-    const [thesis] = await this.drizzle.db
-      .select({ requiredDocTypes: investorThesis.requiredDocTypes })
-      .from(investorThesis)
-      .where(eq(investorThesis.userId, investorId))
-      .limit(1);
+    const investorId = await this.resolveOwningInvestorId(
+      startupId,
+      viewerUserId,
+      viewerRole,
+    );
+
+    const [thesis] = investorId
+      ? await this.drizzle.db
+          .select({ requiredDocTypes: investorThesis.requiredDocTypes })
+          .from(investorThesis)
+          .where(eq(investorThesis.userId, investorId))
+          .limit(1)
+      : [];
 
     const requiredDocTypes = thesis?.requiredDocTypes ?? ['pitch_deck', 'financial'];
 
@@ -156,15 +198,22 @@ export class DataGateService {
 
   async checkAutoAdvance(startupId: string): Promise<void> {
     const [row] = await this.drizzle.db
-      .select({
-        dataGateStatus: startup.dataGateStatus,
-        userId: startup.userId,
-      })
+      .select({ dataGateStatus: startup.dataGateStatus })
       .from(startup)
       .where(eq(startup.id, startupId))
       .limit(1);
 
     if (!row || row.dataGateStatus !== DataGateStatus.PENDING) return;
+
+    // Resolve the investor who owns this deal — startup.userId is the submitter
+    // (founder/scout), not necessarily an investor.
+    const investorId = await this.resolveOwningInvestorId(
+      startupId,
+      '',
+      UserRole.ADMIN, // force match-table lookup since there is no viewer context
+    );
+
+    if (!investorId) return;
 
     const [thesis] = await this.drizzle.db
       .select({
@@ -172,7 +221,7 @@ export class DataGateService {
         autoAdvanceDataGate: investorThesis.autoAdvanceDataGate,
       })
       .from(investorThesis)
-      .where(eq(investorThesis.userId, row.userId))
+      .where(eq(investorThesis.userId, investorId))
       .limit(1);
 
     if (!thesis?.autoAdvanceDataGate) return;
@@ -218,12 +267,12 @@ export class DataGateService {
 
       void this.dealEvents.record({
         startupId,
-        actorUserId: row.userId,
+        actorUserId: investorId,
         type: 'due_diligence.data_gate_complete',
         payload: { trigger: 'auto_advance' },
       });
 
-      await this.triggerDdPipeline(startupId, row.userId);
+      await this.triggerDdPipeline(startupId, investorId);
     }
   }
 

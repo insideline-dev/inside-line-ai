@@ -67,6 +67,10 @@ import {
   RespondInterestDto,
   ScheduleMeetingDto,
   PreviewMatchesDto,
+  DataGateInfoDto,
+  DataGateStatusResponseDto,
+  RequestDocumentsDto,
+  RequestDocumentsResponseDto,
 } from './dto';
 import { Public } from '../../auth/decorators';
 
@@ -593,20 +597,24 @@ export class StartupController {
 
   @Get(':id/data-gates')
   @Roles(UserRole.INVESTOR, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Get data gate info (required/missing documents) for a startup' })
+  @ApiResponse({ status: 200, type: DataGateInfoDto })
   async getDataGates(
     @Param('id') id: string,
     @CurrentUser() user: User,
-  ) {
+  ): Promise<DataGateInfoDto> {
     await this.dataGateService.assertOwnership(id, user.id, user.role);
     return this.dataGateService.getDataGateInfo(id, user.id, user.role);
   }
 
   @Post(':id/data-gates/skip')
   @Roles(UserRole.INVESTOR, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Skip the data gate and start the DD pipeline' })
+  @ApiResponse({ status: 201, type: DataGateStatusResponseDto })
   async skipDataGate(
     @Param('id') id: string,
     @CurrentUser() user: User,
-  ) {
+  ): Promise<DataGateStatusResponseDto> {
     await this.dataGateService.assertOwnership(id, user.id, user.role);
     await this.dataGateService.skip(id, user.id);
     return { ok: true, startupId: id, dataGateStatus: 'skipped' };
@@ -614,10 +622,12 @@ export class StartupController {
 
   @Post(':id/data-gates/complete')
   @Roles(UserRole.INVESTOR, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Mark the data gate as complete' })
+  @ApiResponse({ status: 201, type: DataGateStatusResponseDto })
   async completeDataGate(
     @Param('id') id: string,
     @CurrentUser() user: User,
-  ) {
+  ): Promise<DataGateStatusResponseDto> {
     await this.dataGateService.assertOwnership(id, user.id, user.role);
     await this.dataGateService.complete(id, user.id);
     return { ok: true, startupId: id, dataGateStatus: 'complete' };
@@ -625,11 +635,13 @@ export class StartupController {
 
   @Post(':id/data-gates/request-documents')
   @Roles(UserRole.INVESTOR, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Request missing documents from the founder via Clara' })
+  @ApiResponse({ status: 201, type: RequestDocumentsResponseDto })
   async requestDocuments(
     @Param('id') id: string,
     @CurrentUser() user: User,
-    @Body() body?: { founderEmail?: string },
-  ) {
+    @Body() body?: RequestDocumentsDto,
+  ): Promise<RequestDocumentsResponseDto> {
     await this.dataGateService.assertOwnership(id, user.id, user.role);
 
     let claraService: { requestDocumentsForDataGate: (startupId: string, missingDocs: string[], founderEmail?: string) => Promise<{ sentTo: string; requestedDocs: string[] }> } | null = null;

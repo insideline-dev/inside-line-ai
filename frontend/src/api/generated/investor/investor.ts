@@ -30,6 +30,7 @@ import type {
   CreateTeamInviteDto,
   CreateThesisDto,
   GenerateStructuredDealbreakersDto,
+  InvestorControllerGetActivityParams,
   InvestorControllerGetMatchesParams,
   InvestorControllerListCalibrationProposalsParams,
   OverrideScreeningVerdictDto,
@@ -2546,6 +2547,117 @@ export function useInvestorControllerGetPipeline<TData = Awaited<ReturnType<type
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getInvestorControllerGetPipelineQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+export type investorControllerGetActivityResponse200 = {
+  data: void
+  status: 200
+}
+    
+export type investorControllerGetActivityResponseSuccess = (investorControllerGetActivityResponse200) & {
+  headers: Headers;
+};
+;
+
+export type investorControllerGetActivityResponse = (investorControllerGetActivityResponseSuccess)
+
+export const getInvestorControllerGetActivityUrl = (params: InvestorControllerGetActivityParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/investor/activity?${stringifiedParams}` : `/investor/activity`
+}
+
+export const investorControllerGetActivity = async (params: InvestorControllerGetActivityParams, options?: RequestInit): Promise<investorControllerGetActivityResponse> => {
+  
+  return customFetch<investorControllerGetActivityResponse>(getInvestorControllerGetActivityUrl(params),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getInvestorControllerGetActivityQueryKey = (params?: InvestorControllerGetActivityParams,) => {
+    return [
+    `/investor/activity`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+    
+export const getInvestorControllerGetActivityQueryOptions = <TData = Awaited<ReturnType<typeof investorControllerGetActivity>>, TError = ErrorType<unknown>>(params: InvestorControllerGetActivityParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetActivity>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getInvestorControllerGetActivityQueryKey(params);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof investorControllerGetActivity>>> = ({ signal }) => investorControllerGetActivity(params, { signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetActivity>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type InvestorControllerGetActivityQueryResult = NonNullable<Awaited<ReturnType<typeof investorControllerGetActivity>>>
+export type InvestorControllerGetActivityQueryError = ErrorType<unknown>
+
+
+export function useInvestorControllerGetActivity<TData = Awaited<ReturnType<typeof investorControllerGetActivity>>, TError = ErrorType<unknown>>(
+ params: InvestorControllerGetActivityParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetActivity>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof investorControllerGetActivity>>,
+          TError,
+          Awaited<ReturnType<typeof investorControllerGetActivity>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useInvestorControllerGetActivity<TData = Awaited<ReturnType<typeof investorControllerGetActivity>>, TError = ErrorType<unknown>>(
+ params: InvestorControllerGetActivityParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetActivity>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof investorControllerGetActivity>>,
+          TError,
+          Awaited<ReturnType<typeof investorControllerGetActivity>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useInvestorControllerGetActivity<TData = Awaited<ReturnType<typeof investorControllerGetActivity>>, TError = ErrorType<unknown>>(
+ params: InvestorControllerGetActivityParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetActivity>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useInvestorControllerGetActivity<TData = Awaited<ReturnType<typeof investorControllerGetActivity>>, TError = ErrorType<unknown>>(
+ params: InvestorControllerGetActivityParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetActivity>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getInvestorControllerGetActivityQueryOptions(params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

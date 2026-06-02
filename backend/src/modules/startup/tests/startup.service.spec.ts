@@ -316,6 +316,92 @@ describe("StartupService", () => {
         }),
       );
     });
+
+    const baseCreateDto = {
+      name: "Privacy Co",
+      tagline: "A test startup",
+      description:
+        "This is a test startup description that is long enough to pass validation requirements.",
+      website: "https://privacy.co",
+      location: "San Francisco",
+      industry: "SaaS",
+      stage: StartupStage.SEED,
+      fundingTarget: 1000000,
+      teamSize: 5,
+    };
+
+    const primeInsert = () => {
+      mockDb.limit.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+      mockDb.returning.mockResolvedValueOnce([
+        { ...mockStartup, name: "Privacy Co", slug: "privacy-co" },
+      ]);
+    };
+
+    it("defaults investor submission WITHOUT distributionMode to private", async () => {
+      // Regression: previously isPrivateByDistribution (a boolean) short-circuited
+      // the `?? isInvestorSubmission` fallback, leaking confidential investor
+      // deals as public when distributionMode was omitted.
+      primeInsert();
+
+      await service.create(mockUserId, baseCreateDto, UserRole.INVESTOR);
+
+      expect(mockDb.values).toHaveBeenCalledWith(
+        expect.objectContaining({ isPrivate: true }),
+      );
+    });
+
+    it("defaults founder submission WITHOUT distributionMode to public", async () => {
+      primeInsert();
+
+      await service.create(mockUserId, baseCreateDto, UserRole.FOUNDER);
+
+      expect(mockDb.values).toHaveBeenCalledWith(
+        expect.objectContaining({ isPrivate: false }),
+      );
+    });
+
+    it("lets a provided distributionMode of all_aligned make an investor deal public", async () => {
+      primeInsert();
+
+      await service.create(
+        mockUserId,
+        { ...baseCreateDto, distributionMode: "all_aligned" },
+        UserRole.INVESTOR,
+      );
+
+      expect(mockDb.values).toHaveBeenCalledWith(
+        expect.objectContaining({ isPrivate: false }),
+      );
+    });
+
+    it("lets a provided distributionMode of this_fund_only force private", async () => {
+      primeInsert();
+
+      await service.create(
+        mockUserId,
+        { ...baseCreateDto, distributionMode: "this_fund_only" },
+        UserRole.FOUNDER,
+      );
+
+      expect(mockDb.values).toHaveBeenCalledWith(
+        expect.objectContaining({ isPrivate: true }),
+      );
+    });
+
+    it("honors an explicit options.isPrivate override above distributionMode", async () => {
+      primeInsert();
+
+      await service.create(
+        mockUserId,
+        { ...baseCreateDto, distributionMode: "all_aligned" },
+        UserRole.INVESTOR,
+        { isPrivate: true },
+      );
+
+      expect(mockDb.values).toHaveBeenCalledWith(
+        expect.objectContaining({ isPrivate: true }),
+      );
+    });
   });
 
   describe("findOne", () => {

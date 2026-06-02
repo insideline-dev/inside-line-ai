@@ -13,6 +13,7 @@ import { user } from "../../auth/entities/auth.schema";
 import { startup } from "../startup/entities/startup.schema";
 import { DealEventService } from "../startup/deal-event.service";
 import { DataGateService } from "../startup/data-gate.service";
+import { DataRoomService } from "../startup/data-room.service";
 import {
   isMissingWebsiteValue,
   isLikelyPlaceholderStage,
@@ -73,6 +74,7 @@ export class ClaraService {
     private pdfRenderService: PdfRenderService,
     @Optional() private dealEvents?: DealEventService,
     @Optional() private dataGateService?: DataGateService,
+    @Optional() private dataRoomService?: DataRoomService,
   ) {
     this.claraInboxId = this.config.get<string>("CLARA_INBOX_ID") ?? null;
     this.adminUserId =
@@ -1898,8 +1900,30 @@ export class ClaraService {
           this.adminUserId!,
           uploaded,
         );
+
+        // Just-registered docs land as classificationStatus:'pending', but the
+        // completeness check below only counts 'completed' rows. Classify the
+        // pending docs first (mirrors deal-trigger.processor.handleDocUploaded)
+        // so the reply reflects what was actually received.
+        if (this.dataRoomService) {
+          try {
+            await this.dataRoomService.reclassifyAll(startupId, undefined, {
+              onlyPending: true,
+            });
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            this.logger.warn(
+              `[Clara] Reclassify after data-gate doc reply failed for ${startupId}: ${msg}`,
+            );
+          }
+        }
       }
     }
+
+    // The conversation knows the acting investor — their thesis governs the gate.
+    // Falling back to adminUserId keeps the founder/scout-submission path working
+    // (resolves a sensible investor via self-submission / match lookup).
+    const actingInvestorId = conversation.investorUserId ?? null;
 
     let allPresent = false;
     let stillMissing: string[] = docRequest.requestedDocTypes;
@@ -1907,13 +1931,13 @@ export class ClaraService {
     if (this.dataGateService) {
       const gateInfo = await this.dataGateService.getDataGateInfo(
         startupId,
-        this.adminUserId!,
+        actingInvestorId ?? this.adminUserId!,
       );
       stillMissing = gateInfo.missingMaterials;
       allPresent = stillMissing.length === 0;
 
       if (allPresent) {
-        await this.dataGateService.checkAutoAdvance(startupId);
+        await this.dataGateService.checkAutoAdvance(startupId, actingInvestorId);
       }
     }
 

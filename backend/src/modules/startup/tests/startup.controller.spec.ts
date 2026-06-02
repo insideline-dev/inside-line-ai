@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from "bun:test";
+import { ForbiddenException } from '@nestjs/common';
 import { StartupController } from '../startup.controller';
+import type { PdfTextExtractorService } from '../../ai/services/pdf-text-extractor.service';
+import type { FieldExtractorService } from '../../ai/services/field-extractor.service';
+import type { StorageService } from '../../../storage';
 import { StartupService } from '../startup.service';
 import { DraftService } from '../draft.service';
 import { PdfService } from '../pdf.service';
@@ -620,6 +624,101 @@ describe('StartupController', () => {
 
       expect(result).toEqual(approved);
       expect(startupService.findBySlug).toHaveBeenCalledWith('test-startup');
+    });
+  });
+
+  describe('extractDeckMetadata', () => {
+    let storageService: jest.Mocked<StorageService>;
+    let pdfTextExtractor: jest.Mocked<PdfTextExtractorService>;
+    let fieldExtractor: jest.Mocked<FieldExtractorService>;
+
+    const investorUser = { ...mockUser, role: UserRole.INVESTOR };
+    const ownedKey = `${investorUser.id}/pitch-deck/abc123.pdf`;
+    const foreignKey = 'other-user-id/pitch-deck/xyz789.pdf';
+
+    beforeEach(() => {
+      storageService = {
+        getDownloadUrl: jest.fn(),
+      } as unknown as jest.Mocked<StorageService>;
+      pdfTextExtractor = {
+        extractText: jest.fn(),
+      } as unknown as jest.Mocked<PdfTextExtractorService>;
+      fieldExtractor = {
+        extractFields: jest.fn(),
+      } as unknown as jest.Mocked<FieldExtractorService>;
+
+      // The constructor positions for these injected deps are wired by Nest in
+      // production; here we assign them directly so the test targets only the
+      // ownership-guard + extraction behaviour.
+      (controller as unknown as {
+        storageService: StorageService;
+        pdfTextExtractor: PdfTextExtractorService;
+        fieldExtractor: FieldExtractorService;
+      }).storageService = storageService;
+      (controller as unknown as {
+        pdfTextExtractor: PdfTextExtractorService;
+      }).pdfTextExtractor = pdfTextExtractor;
+      (controller as unknown as {
+        fieldExtractor: FieldExtractorService;
+      }).fieldExtractor = fieldExtractor;
+
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        arrayBuffer: async () => new ArrayBuffer(8),
+      }) as unknown as typeof fetch;
+    });
+
+    it('rejects an investor passing another tenant\'s storage key (IDOR)', async () => {
+      await expect(
+        controller.extractDeckMetadata(investorUser, { storageKey: foreignKey }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+
+      expect(storageService.getDownloadUrl).not.toHaveBeenCalled();
+    });
+
+    it('allows an investor to extract from their own storage key', async () => {
+      storageService.getDownloadUrl.mockResolvedValueOnce('https://signed.example/deck.pdf');
+      pdfTextExtractor.extractText.mockResolvedValueOnce({
+        hasContent: true,
+        text: 'Acme deck',
+      } as Awaited<ReturnType<PdfTextExtractorService['extractText']>>);
+      fieldExtractor.extractFields.mockResolvedValueOnce({
+        companyName: 'Acme',
+        website: 'https://acme.com',
+        industry: 'SaaS',
+        stage: 'seed',
+        description: 'An Acme company',
+      } as Awaited<ReturnType<FieldExtractorService['extractFields']>>);
+
+      const result = await controller.extractDeckMetadata(investorUser, {
+        storageKey: ownedKey,
+      });
+
+      expect(result).toEqual({
+        companyName: 'Acme',
+        website: 'https://acme.com',
+        industry: 'SaaS',
+        stage: 'seed',
+        description: 'An Acme company',
+        extracted: true,
+      });
+      expect(storageService.getDownloadUrl).toHaveBeenCalledWith(ownedKey, 300);
+    });
+
+    it('allows admin to extract from any tenant\'s storage key', async () => {
+      const adminUser = { ...mockUser, role: UserRole.ADMIN };
+      storageService.getDownloadUrl.mockResolvedValueOnce('https://signed.example/deck.pdf');
+      pdfTextExtractor.extractText.mockResolvedValueOnce({
+        hasContent: false,
+        text: '',
+      } as Awaited<ReturnType<PdfTextExtractorService['extractText']>>);
+
+      const result = await controller.extractDeckMetadata(adminUser, {
+        storageKey: foreignKey,
+      });
+
+      expect(result).toEqual({ companyName: null, website: null, extracted: false });
+      expect(storageService.getDownloadUrl).toHaveBeenCalledWith(foreignKey, 300);
     });
   });
 });

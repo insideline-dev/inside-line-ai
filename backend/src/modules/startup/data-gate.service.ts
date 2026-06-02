@@ -8,7 +8,7 @@ import { PipelineService } from '../ai/services/pipeline.service';
 import { PipelinePhase } from '../ai/interfaces/pipeline.interface';
 import { DealEventService } from './deal-event.service';
 import { OpenQuestionService } from '../dd/open-question.service';
-import { UserRole } from '../../auth/entities/auth.schema';
+import { UserRole, user } from '../../auth/entities/auth.schema';
 
 export interface DataGateInfo {
   dataGateStatus: string | null;
@@ -50,22 +50,26 @@ export class DataGateService {
   }
 
   /**
-   * Resolves the investor who owns this deal in the pipeline.
+   * Resolves the investor whose thesis governs this deal's data gate.
    *
-   * For non-admin viewers the caller IS the investor — return their id directly.
-   * For admin views (or auto-advance checks) we must look up the investor via
-   * the startupMatch table because startup.userId is the submitter (founder /
-   * scout), NOT an investor.
+   * The gate is conceptually per-(startup, acting-investor). A startup usually
+   * has many active matches, so we cannot just pick an arbitrary one — we must
+   * honour the investor who is actually acting on the deal when the caller knows
+   * them (the investor advancing from screening, or the investor a Clara
+   * conversation belongs to).
    *
-   * Priority: engaged → reviewing → new (most-advanced match wins).
+   * Resolution order:
+   *   1. actingInvestorId — if supplied and that investor has an active match for
+   *      this startup OR owns the startup (self-submission) → use it.
+   *   2. startup.userId — if the submitter is themselves an investor
+   *      (self-submitted private deal, no startupMatch row) → use it.
+   *   3. Most-advanced active match (engaged → reviewing → new).
+   *   4. null — no investor context (e.g. admin viewing an unmatched deal).
    */
   private async resolveOwningInvestorId(
     startupId: string,
-    viewerUserId: string,
-    viewerRole?: UserRole,
+    actingInvestorId?: string | null,
   ): Promise<string | null> {
-    if (viewerRole !== UserRole.ADMIN) return viewerUserId;
-
     const matches = await this.drizzle.db
       .select({ investorId: startupMatch.investorId, status: startupMatch.status })
       .from(startupMatch)
@@ -76,13 +80,46 @@ export class DataGateService {
         ),
       );
 
-    if (matches.length === 0) return null;
+    const [startupRow] = await this.drizzle.db
+      .select({ userId: startup.userId })
+      .from(startup)
+      .where(eq(startup.id, startupId))
+      .limit(1);
+    const ownerUserId = startupRow?.userId ?? null;
 
-    const priority: Record<string, number> = { engaged: 0, reviewing: 1, new: 2 };
-    matches.sort(
-      (a, b) => (priority[a.status] ?? 99) - (priority[b.status] ?? 99),
-    );
-    return matches[0].investorId;
+    // (1) Acting investor wins when they actually participate in this deal.
+    if (actingInvestorId) {
+      const hasMatch = matches.some((m) => m.investorId === actingInvestorId);
+      if (hasMatch || actingInvestorId === ownerUserId) {
+        return actingInvestorId;
+      }
+    }
+
+    // (2) Self-submission: the submitter is themselves an investor.
+    if (ownerUserId && (await this.isInvestor(ownerUserId))) {
+      return ownerUserId;
+    }
+
+    // (3) Fall back to the most-advanced active match.
+    if (matches.length > 0) {
+      const priority: Record<string, number> = { engaged: 0, reviewing: 1, new: 2 };
+      const [top] = [...matches].sort(
+        (a, b) => (priority[a.status] ?? 99) - (priority[b.status] ?? 99),
+      );
+      return top.investorId;
+    }
+
+    // (4) No investor context.
+    return null;
+  }
+
+  private async isInvestor(userId: string): Promise<boolean> {
+    const [row] = await this.drizzle.db
+      .select({ role: user.role })
+      .from(user)
+      .where(eq(user.id, userId))
+      .limit(1);
+    return row?.role === UserRole.INVESTOR;
   }
 
   async getDataGateInfo(
@@ -101,10 +138,14 @@ export class DataGateService {
 
     if (!row) throw new NotFoundException(`Startup ${startupId} not found`);
 
+    // A non-admin viewer IS the investor acting on this deal. Admin viewers have
+    // no acting-investor context, so resolution falls back to self-submission /
+    // most-advanced match.
+    const actingInvestorId =
+      viewerRole === UserRole.ADMIN ? undefined : viewerUserId;
     const investorId = await this.resolveOwningInvestorId(
       startupId,
-      viewerUserId,
-      viewerRole,
+      actingInvestorId,
     );
 
     const [thesis] = investorId
@@ -159,13 +200,25 @@ export class DataGateService {
   }
 
   async skip(startupId: string, userId: string): Promise<void> {
+    // Ensure the startup exists so we can still surface a 404 even when the gate
+    // has already advanced.
+    await this.assertStartupExists(startupId);
+
+    // Compare-and-swap: only transition (and fire the DD pipeline) when the gate
+    // is genuinely PENDING. Re-invoking on an already-advanced gate is a no-op,
+    // preventing a double DD pipeline run.
     const [updated] = await this.drizzle.db
       .update(startup)
       .set({ dataGateStatus: DataGateStatus.SKIPPED })
-      .where(eq(startup.id, startupId))
+      .where(
+        and(
+          eq(startup.id, startupId),
+          eq(startup.dataGateStatus, DataGateStatus.PENDING),
+        ),
+      )
       .returning({ id: startup.id });
 
-    if (!updated) throw new NotFoundException(`Startup ${startupId} not found`);
+    if (!updated) return;
 
     void this.dealEvents.record({
       startupId,
@@ -178,13 +231,20 @@ export class DataGateService {
   }
 
   async complete(startupId: string, userId: string): Promise<void> {
+    await this.assertStartupExists(startupId);
+
     const [updated] = await this.drizzle.db
       .update(startup)
       .set({ dataGateStatus: DataGateStatus.COMPLETE })
-      .where(eq(startup.id, startupId))
+      .where(
+        and(
+          eq(startup.id, startupId),
+          eq(startup.dataGateStatus, DataGateStatus.PENDING),
+        ),
+      )
       .returning({ id: startup.id });
 
-    if (!updated) throw new NotFoundException(`Startup ${startupId} not found`);
+    if (!updated) return;
 
     void this.dealEvents.record({
       startupId,
@@ -196,7 +256,19 @@ export class DataGateService {
     await this.triggerDdPipeline(startupId, userId);
   }
 
-  async checkAutoAdvance(startupId: string): Promise<void> {
+  private async assertStartupExists(startupId: string): Promise<void> {
+    const [row] = await this.drizzle.db
+      .select({ id: startup.id })
+      .from(startup)
+      .where(eq(startup.id, startupId))
+      .limit(1);
+    if (!row) throw new NotFoundException(`Startup ${startupId} not found`);
+  }
+
+  async checkAutoAdvance(
+    startupId: string,
+    actingInvestorId?: string | null,
+  ): Promise<void> {
     const [row] = await this.drizzle.db
       .select({ dataGateStatus: startup.dataGateStatus })
       .from(startup)
@@ -205,12 +277,12 @@ export class DataGateService {
 
     if (!row || row.dataGateStatus !== DataGateStatus.PENDING) return;
 
-    // Resolve the investor who owns this deal — startup.userId is the submitter
-    // (founder/scout), not necessarily an investor.
+    // Resolve the investor whose thesis governs the gate. When the caller knows
+    // the acting investor (advancing from screening, Clara conversation owner)
+    // we honour it; otherwise we fall back to self-submission / match lookup.
     const investorId = await this.resolveOwningInvestorId(
       startupId,
-      '',
-      UserRole.ADMIN, // force match-table lookup since there is no viewer context
+      actingInvestorId,
     );
 
     if (!investorId) return;

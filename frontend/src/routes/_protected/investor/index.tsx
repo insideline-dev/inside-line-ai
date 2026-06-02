@@ -114,6 +114,7 @@ type PipelineMatch = {
   startupStage: string | null;
   startupIndustry: string | null;
   startupDescription: string | null;
+  dataGateStatus?: "pending" | "skipped" | "complete" | null;
 };
 
 type PipelineData = {
@@ -318,11 +319,28 @@ function mergeStartups(pipeline: PipelineData | null, privateStartups: PrivateSt
           isAnalyzing: false,
           isPrivate: false,
           isSaved: m.isSaved,
+          dataGateStatus: m.dataGateStatus ?? null,
         })),
       )
     : [];
 
   const matchedStartupIds = new Set(matchItems.map((m) => m.startupId));
+
+  // A startup may be both owned (private) and matched. We keep a single card
+  // (the match copy) but must not lose the gate status the private copy carries.
+  // Backfill the match item's dataGateStatus from its owned counterpart when the
+  // match copy lacks one, so the deal still classifies into Data Gates.
+  const privateGateById = new Map(
+    privateStartups
+      .filter((s) => s.dataGateStatus != null)
+      .map((s) => [s.id, s.dataGateStatus] as const),
+  );
+  for (const item of matchItems) {
+    if (item.dataGateStatus == null) {
+      const ownedGate = privateGateById.get(item.startupId);
+      if (ownedGate != null) item.dataGateStatus = ownedGate;
+    }
+  }
 
   const privateItems: PipelineCardItem[] = privateStartups
     .filter((s) => !matchedStartupIds.has(s.id))

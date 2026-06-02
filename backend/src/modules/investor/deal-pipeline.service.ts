@@ -35,6 +35,7 @@ export class DealPipelineService {
         startupStage: startup.stage,
         startupIndustry: startup.industry,
         startupDescription: startup.description,
+        dataGateStatus: startup.dataGateStatus,
       })
       .from(startupMatch)
       .leftJoin(startup, eq(startupMatch.startupId, startup.id))

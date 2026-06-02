@@ -13,6 +13,7 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  ForbiddenException,
   NotFoundException,
   Logger,
 } from '@nestjs/common';
@@ -71,6 +72,8 @@ import {
   DataGateStatusResponseDto,
   RequestDocumentsDto,
   RequestDocumentsResponseDto,
+  ExtractDeckMetadataDto,
+  ExtractDeckMetadataResponseDto,
 } from './dto';
 import { Public } from '../../auth/decorators';
 
@@ -116,11 +119,26 @@ export class StartupController {
   @Post('extract-deck-metadata')
   @Roles(UserRole.INVESTOR, UserRole.ADMIN)
   @ApiOperation({ summary: 'Extract company name + website from an uploaded pitch deck' })
+  @ApiResponse({ status: 201, type: ExtractDeckMetadataResponseDto })
   async extractDeckMetadata(
-    @Body() body: { storageKey: string },
-  ) {
-    if (!body.storageKey) {
-      throw new BadRequestException('storageKey is required');
+    @CurrentUser() user: User,
+    @Body() body: ExtractDeckMetadataDto,
+  ): Promise<ExtractDeckMetadataResponseDto> {
+    // IDOR guard: storage keys are namespaced by owner — every presigned
+    // upload key is generated as `${userId}/<assetType>/...` (see
+    // StorageService.generateKey). A non-admin caller may only extract
+    // metadata from a deck they themselves uploaded, i.e. a key under their
+    // own `${user.id}/` prefix. ADMIN may extract for any key (existing
+    // convention across this controller). Without this check any investor
+    // could pass another tenant's key and read the extracted company /
+    // website / industry / stage / description.
+    if (user.role !== UserRole.ADMIN) {
+      const ownerPrefix = `${user.id}/`;
+      if (!body.storageKey.startsWith(ownerPrefix)) {
+        throw new ForbiddenException(
+          'You do not have access to this storage key',
+        );
+      }
     }
 
     try {

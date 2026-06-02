@@ -361,7 +361,16 @@ export class StartupService {
         raw: dto,
         sourcePath,
         status: StartupStatus.DRAFT,
-        isPrivate: options?.isPrivate ?? isPrivateByDistribution ?? isInvestorSubmission,
+        // Privacy resolution order (most specific wins):
+        //   1. explicit options.isPrivate (caller-forced)
+        //   2. distributionMode, but ONLY when actually provided — it yields a
+        //      boolean, so `?? isInvestorSubmission` was dead code and omitting
+        //      distributionMode wrongly defaulted to public.
+        //   3. default: investor submissions are private (confidential deals
+        //      must not leak into cross-matching).
+        isPrivate:
+          options?.isPrivate ??
+          (dto.distributionMode ? isPrivateByDistribution : isInvestorSubmission),
         stage: stageForInsert,
         fundingTarget: fundingTargetForInsert,
         teamSize: dto.teamSize,

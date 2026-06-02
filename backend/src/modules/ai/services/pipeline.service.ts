@@ -1425,18 +1425,6 @@ export class PipelineService {
           );
         }
       }
-
-      try {
-        await this.drizzle.db
-          .update(startup)
-          .set({ lastExtractionAt: new Date() })
-          .where(eq(startup.id, startupId));
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        this.logger.warn(
-          `[Pipeline] Failed to update lastExtractionAt for ${startupId}: ${message}`,
-        );
-      }
     }
 
     if (phase === PipelinePhase.SCRAPING) {
@@ -1487,6 +1475,26 @@ export class PipelineService {
     const state = await this.pipelineState.get(startupId);
     if (!state) {
       return;
+    }
+
+    // Stamp `lastExtractionAt` at the START of extraction (before the phase
+    // reads its document set). Any doc uploaded during the run then has
+    // uploadedAt >= this stamp and is conservatively re-extracted on the next
+    // gate check (see hasNewDocsSinceExtraction). Stamping at the end of the
+    // phase would silently miss docs uploaded mid-run. Docs uploaded before
+    // the run started have uploadedAt < this stamp, so no re-extraction loop.
+    if (phase === PipelinePhase.EXTRACTION) {
+      try {
+        await this.drizzle.db
+          .update(startup)
+          .set({ lastExtractionAt: new Date() })
+          .where(eq(startup.id, startupId));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.warn(
+          `[Pipeline] Failed to update lastExtractionAt for ${startupId}: ${message}`,
+        );
+      }
     }
 
     const phaseConfig = this.phaseTransition.getPhaseConfig(phase);

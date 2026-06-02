@@ -201,6 +201,27 @@ export function formatEvent(event: DealEvent): FormattedEvent {
         detail: readString(p, "trigger") ?? readString(p, "path"),
         tone: "neutral",
       };
+    case "due_diligence.data_gate_entered":
+      return {
+        icon: <ShieldCheck className="h-3.5 w-3.5" />,
+        label: "Data gate opened",
+        detail: readString(p, "gate") ?? readString(p, "name"),
+        tone: "neutral",
+      };
+    case "due_diligence.data_gate_skipped":
+      return {
+        icon: <CircleSlash className="h-3.5 w-3.5" />,
+        label: "Data gate skipped",
+        detail: readString(p, "gate") ?? readString(p, "name") ?? readString(p, "reason"),
+        tone: "warn",
+      };
+    case "due_diligence.data_gate_complete":
+      return {
+        icon: <CheckCircle2 className="h-3.5 w-3.5" />,
+        label: "Data gate complete",
+        detail: readString(p, "gate") ?? readString(p, "name"),
+        tone: "good",
+      };
     case "due_diligence.completed":
       return {
         icon: <CheckCircle2 className="h-3.5 w-3.5" />,
@@ -267,12 +288,16 @@ export function formatEvent(event: DealEvent): FormattedEvent {
         detail: readString(p, "channel"),
         tone: "neutral",
       };
-    default:
+    default: {
+      const humanized = event.type
+        .replace(/[._]/g, " ")
+        .replace(/\b\w/g, (c) => c.toUpperCase());
       return {
         icon: <Check className="h-3.5 w-3.5" />,
-        label: event.type,
+        label: humanized,
         tone: "default",
       };
+    }
   }
 }
 

@@ -245,6 +245,8 @@ export * from './evolutionWebhookDto';
 export * from './evolutionWebhookDtoData';
 export * from './evolutionWebhookDtoDataKey';
 export * from './evolutionWebhookDtoDataMessage';
+export * from './extractDeckMetadataDto';
+export * from './extractDeckMetadataResponseDto';
 export * from './function';
 export * from './fundingHistoryListResponseDto';
 export * from './fundingHistoryListResponseDtoRowsItem';

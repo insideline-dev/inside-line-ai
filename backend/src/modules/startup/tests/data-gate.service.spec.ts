@@ -17,11 +17,18 @@ const SUBMITTER = "44444444-4444-4444-8444-444444444444";
 type TableKey = "startup" | "startupMatch" | "user" | "investorThesis" | "dataRoom";
 
 interface Scenario {
-  startupRow?: { userId?: string; dataGateStatus?: string | null };
+  startupRow?: {
+    userId?: string;
+    dataGateStatus?: string | null;
+    lastExtractionAt?: Date | null;
+  };
   matches?: Array<{ investorId: string; status: string }>;
   userRole?: UserRole | null;
   thesis?: { requiredDocTypes: string[] | null; autoAdvanceDataGate?: boolean } | null;
   presentDocs?: string[];
+  // Result of the hasNewDocsSinceExtraction count query (docs with
+  // uploadedAt >= lastExtractionAt). Drives the re-extraction phase decision.
+  newDocsCount?: number;
   updateReturns?: Array<{ id: string }>;
 }
 
@@ -32,6 +39,7 @@ import {
   investorThesis,
   startupMatch,
 } from "../../investor/entities/investor.schema";
+import { PipelinePhase } from "../../ai/interfaces/pipeline.interface";
 
 const TABLE_MAP = new WeakMap<object, TableKey>([
   [startup as object, "startup"],
@@ -44,6 +52,9 @@ const TABLE_MAP = new WeakMap<object, TableKey>([
 function makeDb(s: Scenario) {
   const presentRows = (s.presentDocs ?? []).map((category) => ({ category }));
   let currentTable: TableKey | null = null;
+  // hasNewDocsSinceExtraction projects `count`, every other dataRoom query
+  // projects `category`. Detect by projection so the mock is order-independent.
+  let isCountSelect = false;
 
   const resolveSelect = async (): Promise<unknown[]> => {
     switch (currentTable) {
@@ -55,6 +66,7 @@ function makeDb(s: Scenario) {
               {
                 userId: s.startupRow.userId,
                 dataGateStatus: s.startupRow.dataGateStatus ?? null,
+                lastExtractionAt: s.startupRow.lastExtractionAt ?? null,
                 id: STARTUP_ID,
               },
             ]
@@ -71,7 +83,9 @@ function makeDb(s: Scenario) {
             ]
           : [];
       case "dataRoom":
-        return presentRows;
+        return isCountSelect
+          ? [{ count: s.newDocsCount ?? 0 }]
+          : presentRows;
       default:
         return [];
     }
@@ -95,7 +109,10 @@ function makeDb(s: Scenario) {
   };
 
   const db = {
-    select: jest.fn(() => selectChain),
+    select: jest.fn((projection?: Record<string, unknown>) => {
+      isCountSelect = projection != null && "count" in projection;
+      return selectChain;
+    }),
     update: jest.fn((t: object) => {
       currentTable = TABLE_MAP.get(t) ?? null;
       return updateChain;
@@ -286,6 +303,90 @@ describe("DataGateService.skip / complete — #8 compare-and-swap guard", () => 
 
     await expect(svc.skip(STARTUP_ID, ACTING_INVESTOR)).rejects.toThrow(
       /not found/i,
+    );
+  });
+});
+
+describe("DataGateService.triggerDdPipeline — #10 re-extraction race", () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  const advanceScenario = (extra: Partial<Scenario>): Scenario => ({
+    startupRow: { userId: SUBMITTER, dataGateStatus: DataGateStatus.PENDING },
+    matches: [{ investorId: ACTING_INVESTOR, status: "new" }],
+    userRole: UserRole.FOUNDER,
+    thesis: { requiredDocTypes: ["pitch_deck"], autoAdvanceDataGate: true },
+    presentDocs: ["pitch_deck"],
+    updateReturns: [{ id: STARTUP_ID }],
+    ...extra,
+  });
+
+  it("#10 re-extracts (CLASSIFICATION) when a doc was uploaded during the last run", async () => {
+    // Race: lastExtractionAt is stamped at the START of extraction. A doc
+    // uploaded mid-run has uploadedAt >= the stamp, so the count query finds it
+    // and hasNewDocsSinceExtraction returns true — DD must rebuild from
+    // CLASSIFICATION rather than skipping straight to RESEARCH on stale content.
+    const { db } = makeDb(
+      advanceScenario({
+        startupRow: {
+          userId: SUBMITTER,
+          dataGateStatus: DataGateStatus.PENDING,
+          lastExtractionAt: new Date("2026-06-01T00:00:00Z"),
+        },
+        newDocsCount: 1,
+      }),
+    );
+    const { svc, pipeline } = buildService(db);
+
+    await svc.checkAutoAdvance(STARTUP_ID, ACTING_INVESTOR);
+
+    expect(pipeline.rerunFromPhase).toHaveBeenCalledTimes(1);
+    expect(pipeline.rerunFromPhase).toHaveBeenCalledWith(
+      STARTUP_ID,
+      PipelinePhase.CLASSIFICATION,
+    );
+  });
+
+  it("#10 skips extraction (RESEARCH) when no doc changed since the last run", async () => {
+    const { db } = makeDb(
+      advanceScenario({
+        startupRow: {
+          userId: SUBMITTER,
+          dataGateStatus: DataGateStatus.PENDING,
+          lastExtractionAt: new Date("2026-06-01T00:00:00Z"),
+        },
+        newDocsCount: 0,
+      }),
+    );
+    const { svc, pipeline } = buildService(db);
+
+    await svc.checkAutoAdvance(STARTUP_ID, ACTING_INVESTOR);
+
+    expect(pipeline.rerunFromPhase).toHaveBeenCalledTimes(1);
+    expect(pipeline.rerunFromPhase).toHaveBeenCalledWith(
+      STARTUP_ID,
+      PipelinePhase.RESEARCH,
+    );
+  });
+
+  it("#10 re-extracts (CLASSIFICATION) when extraction never ran", async () => {
+    const { db } = makeDb(
+      advanceScenario({
+        startupRow: {
+          userId: SUBMITTER,
+          dataGateStatus: DataGateStatus.PENDING,
+          lastExtractionAt: null,
+        },
+        newDocsCount: 0,
+      }),
+    );
+    const { svc, pipeline } = buildService(db);
+
+    await svc.checkAutoAdvance(STARTUP_ID, ACTING_INVESTOR);
+
+    expect(pipeline.rerunFromPhase).toHaveBeenCalledTimes(1);
+    expect(pipeline.rerunFromPhase).toHaveBeenCalledWith(
+      STARTUP_ID,
+      PipelinePhase.CLASSIFICATION,
     );
   });
 });

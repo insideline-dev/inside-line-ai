@@ -937,9 +937,26 @@
       "post": {
         "operationId": "StartupController_extractDeckMetadata",
         "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtractDeckMetadataDto"
+              }
+            }
+          }
+        },
         "responses": {
           "201": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtractDeckMetadataResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -9072,6 +9089,52 @@
           "stage",
           "location",
           "fundingTarget"
+        ]
+      },
+      "ExtractDeckMetadataDto": {
+        "type": "object",
+        "properties": {
+          "storageKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "storageKey"
+        ]
+      },
+      "ExtractDeckMetadataResponseDto": {
+        "type": "object",
+        "properties": {
+          "companyName": {
+            "type": "string",
+            "nullable": true
+          },
+          "website": {
+            "type": "string",
+            "nullable": true
+          },
+          "industry": {
+            "type": "string",
+            "nullable": true
+          },
+          "stage": {
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "extracted": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "companyName",
+          "website",
+          "extracted"
         ]
       },
       "UpdateStartupDto": {

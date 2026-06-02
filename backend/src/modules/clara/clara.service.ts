@@ -54,6 +54,16 @@ type EmailMessageSnapshot = {
   }>;
 };
 
+const DOC_TYPE_LABELS: Record<string, string> = {
+  pitch_deck: "pitch deck / investor presentation",
+  financial: "financial statements or projections",
+  cap_table: "cap table",
+  legal: "legal documents (term sheet, incorporation docs, etc.)",
+  technical_product: "technical product documentation",
+  business_plan: "business plan",
+  market_research: "market research or analysis",
+};
+
 @Injectable()
 export class ClaraService {
   private readonly logger = new Logger(ClaraService.name);
@@ -1688,16 +1698,6 @@ export class ClaraService {
       throw new Error("no_founder_email");
     }
 
-    const DOC_TYPE_LABELS: Record<string, string> = {
-      pitch_deck: "pitch deck / investor presentation",
-      financial: "financial statements or projections",
-      cap_table: "cap table",
-      legal: "legal documents (term sheet, incorporation docs, etc.)",
-      technical_product: "technical product documentation",
-      business_plan: "business plan",
-      market_research: "market research or analysis",
-    };
-
     const docLabels = missingDocTypes
       .map((dt) => DOC_TYPE_LABELS[dt] ?? dt.replace(/_/g, " "))
       .filter(Boolean);
@@ -1962,15 +1962,6 @@ export class ClaraService {
         ConversationStatus.PROCESSING,
       );
     } else {
-      const DOC_TYPE_LABELS: Record<string, string> = {
-        pitch_deck: "pitch deck / investor presentation",
-        financial: "financial statements or projections",
-        cap_table: "cap table",
-        legal: "legal documents",
-        technical_product: "technical product documentation",
-        business_plan: "business plan",
-        market_research: "market research or analysis",
-      };
       const missingLabels = stillMissing.map(
         (dt) => DOC_TYPE_LABELS[dt] ?? dt.replace(/_/g, " "),
       );
@@ -2519,7 +2510,7 @@ export class ClaraService {
    * path, so callers should treat such values as no inbox.
    */
   private isEmailInboxId(value: string | null | undefined): value is string {
-    return typeof value === "string" && /^[^@\s]+@[^@\s]+$/.test(value);
+    return typeof value === "string" && this.isValidEmail(value);
   }
 
   private normalizeEmailAddress(value: string | null | undefined): string {

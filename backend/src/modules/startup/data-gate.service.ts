@@ -1,5 +1,5 @@
 import { Injectable, Logger, ForbiddenException, NotFoundException, Optional } from '@nestjs/common';
-import { eq, and, gt, sql, inArray } from 'drizzle-orm';
+import { eq, and, gte, sql, inArray } from 'drizzle-orm';
 import { DrizzleService } from '../../database';
 import { startup, DataGateStatus } from './entities/startup.schema';
 import { dataRoom } from './entities/data-room.schema';
@@ -357,13 +357,18 @@ export class DataGateService {
 
     if (!row?.lastExtractionAt) return true;
 
+    // `lastExtractionAt` is stamped when the extraction phase STARTS (see
+    // onPhaseStarted in pipeline.service.ts), so any doc uploaded during a run
+    // has uploadedAt >= the stamp and is conservatively treated as new — it is
+    // never silently skipped. `gte` (not `gt`) errs toward re-extracting on the
+    // boundary where uploadedAt exactly equals the stamp.
     const [result] = await this.drizzle.db
       .select({ count: sql<number>`count(*)::int` })
       .from(dataRoom)
       .where(
         and(
           eq(dataRoom.startupId, startupId),
-          gt(dataRoom.uploadedAt, row.lastExtractionAt),
+          gte(dataRoom.uploadedAt, row.lastExtractionAt),
         ),
       );
 

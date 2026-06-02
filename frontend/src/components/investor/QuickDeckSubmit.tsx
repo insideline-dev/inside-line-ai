@@ -13,35 +13,22 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import { getStartupControllerFindAllQueryKey } from "@/api/generated/startups/startups";
+import {
+  getStartupControllerFindAllQueryKey,
+  startupControllerCreate,
+  startupControllerExtractDeckMetadata,
+  startupControllerRegisterDataRoomFilesBulk,
+  startupControllerSubmit,
+} from "@/api/generated/startups/startups";
 import { getInvestorControllerGetPipelineQueryKey } from "@/api/generated/investor/investor";
 import { storageControllerGetUploadUrl } from "@/api/generated/storage/storage";
-import { customFetch } from "@/api/client";
-import type { CreateStartupDto } from "@/api/generated/model";
+import type { CreateStartupDto, ExtractDeckMetadataResponseDto } from "@/api/generated/model";
+import { unwrapApiResponse } from "@/lib/api-utils";
 import { Upload, FileText, Loader2, CheckCircle2, Sparkles } from "lucide-react";
 
 type Phase = "uploading" | "extracting" | "review" | "submitting" | "done" | "error";
 
-function unwrapApiResponse<T>(payload: unknown): T {
-  if (
-    payload &&
-    typeof payload === "object" &&
-    "data" in (payload as Record<string, unknown>) &&
-    (payload as Record<string, unknown>).data !== undefined
-  ) {
-    return (payload as Record<string, unknown>).data as T;
-  }
-  return payload as T;
-}
-
-type ExtractionResult = {
-  companyName: string | null;
-  website: string | null;
-  industry: string | null;
-  stage: string | null;
-  description: string | null;
-  extracted: boolean;
-};
+type ExtractionResult = ExtractDeckMetadataResponseDto;
 
 // ─── Drop Zone ──────────────────────────────────────────────────────────────
 
@@ -163,21 +150,16 @@ async function uploadAndExtract(
 
   onProgress("extracting", 60);
 
-  const extraction = await customFetch<ExtractionResult>(
-    "/startups/extract-deck-metadata",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ storageKey: data.key }),
-    },
-  );
+  const extraction = await startupControllerExtractDeckMetadata({
+    storageKey: data.key,
+  });
 
   onProgress("extracting", 100);
 
   return {
     key: data.key,
     publicUrl: data.publicUrl || "",
-    extraction: unwrapApiResponse<ExtractionResult>(extraction),
+    extraction: extraction.data,
   };
 }
 
@@ -193,45 +175,35 @@ async function createAndSubmit(
     normalizedWebsite = `https://${normalizedWebsite}`;
   }
 
-  const createPayload = {
+  const createPayload: CreateStartupDto = {
     name: name.trim(),
     website: normalizedWebsite,
     pitchDeckUrl: upload.publicUrl,
     pitchDeckPath: upload.key,
     industry: extra.industry || undefined,
-    stage: extra.stage || undefined,
+    stage: (extra.stage || undefined) as CreateStartupDto["stage"],
     description: extra.description || undefined,
-  } as CreateStartupDto;
+  };
 
-  const createResult = await customFetch<unknown>("/startups", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(createPayload),
-  });
+  const createResult = await startupControllerCreate(createPayload);
 
-  const created = unwrapApiResponse<{ id?: string }>(createResult);
+  // The generated response types `data` as `void`; the backend returns the
+  // created startup, so narrow it to read the id.
+  const created = unwrapApiResponse<{ id?: string }>(createResult.data);
   if (!created?.id) throw new Error("Startup created but no ID returned");
 
-  await customFetch(`/startups/${created.id}/data-room/register-bulk`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      files: [
-        {
-          path: upload.key,
-          name: file.name,
-          type: "application/pdf",
-          size: file.size,
-        },
-      ],
-    }),
+  await startupControllerRegisterDataRoomFilesBulk(created.id, {
+    files: [
+      {
+        path: upload.key,
+        name: file.name,
+        type: "application/pdf",
+        size: file.size,
+      },
+    ],
   });
 
-  await customFetch(`/startups/${created.id}/submit`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({}),
-  });
+  await startupControllerSubmit(created.id, {});
 
   return created.id;
 }

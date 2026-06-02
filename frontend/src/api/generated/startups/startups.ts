@@ -29,6 +29,8 @@ import type {
   CreateStartupDto,
   DataGateInfoDto,
   DataGateStatusResponseDto,
+  ExtractDeckMetadataDto,
+  ExtractDeckMetadataResponseDto,
   GetProgressResponseDto,
   PresignedUrlDto,
   PreviewMatchesDto,
@@ -333,7 +335,7 @@ export const useStartupControllerPreviewMatches = <TError = ErrorType<unknown>,
  * @summary Extract company name + website from an uploaded pitch deck
  */
 export type startupControllerExtractDeckMetadataResponse201 = {
-  data: void
+  data: ExtractDeckMetadataResponseDto
   status: 201
 }
     
@@ -352,14 +354,15 @@ export const getStartupControllerExtractDeckMetadataUrl = () => {
   return `/startups/extract-deck-metadata`
 }
 
-export const startupControllerExtractDeckMetadata = async ( options?: RequestInit): Promise<startupControllerExtractDeckMetadataResponse> => {
+export const startupControllerExtractDeckMetadata = async (extractDeckMetadataDto: ExtractDeckMetadataDto, options?: RequestInit): Promise<startupControllerExtractDeckMetadataResponse> => {
   
   return customFetch<startupControllerExtractDeckMetadataResponse>(getStartupControllerExtractDeckMetadataUrl(),
   {      
     ...options,
-    method: 'POST'
-    
-    
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      extractDeckMetadataDto,)
   }
 );}
 
@@ -367,8 +370,8 @@ export const startupControllerExtractDeckMetadata = async ( options?: RequestIni
 
 
 export const getStartupControllerExtractDeckMetadataMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startupControllerExtractDeckMetadata>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof startupControllerExtractDeckMetadata>>, TError,void, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startupControllerExtractDeckMetadata>>, TError,{data: BodyType<ExtractDeckMetadataDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof startupControllerExtractDeckMetadata>>, TError,{data: BodyType<ExtractDeckMetadataDto>}, TContext> => {
 
 const mutationKey = ['startupControllerExtractDeckMetadata'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -380,10 +383,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof startupControllerExtractDeckMetadata>>, void> = () => {
-          
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof startupControllerExtractDeckMetadata>>, {data: BodyType<ExtractDeckMetadataDto>}> = (props) => {
+          const {data} = props ?? {};
 
-          return  startupControllerExtractDeckMetadata(requestOptions)
+          return  startupControllerExtractDeckMetadata(data,requestOptions)
         }
 
 
@@ -394,18 +397,18 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type StartupControllerExtractDeckMetadataMutationResult = NonNullable<Awaited<ReturnType<typeof startupControllerExtractDeckMetadata>>>
-    
+    export type StartupControllerExtractDeckMetadataMutationBody = BodyType<ExtractDeckMetadataDto>
     export type StartupControllerExtractDeckMetadataMutationError = ErrorType<unknown>
 
     /**
  * @summary Extract company name + website from an uploaded pitch deck
  */
 export const useStartupControllerExtractDeckMetadata = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startupControllerExtractDeckMetadata>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startupControllerExtractDeckMetadata>>, TError,{data: BodyType<ExtractDeckMetadataDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof startupControllerExtractDeckMetadata>>,
         TError,
-        void,
+        {data: BodyType<ExtractDeckMetadataDto>},
         TContext
       > => {
       return useMutation(getStartupControllerExtractDeckMetadataMutationOptions(options), queryClient);

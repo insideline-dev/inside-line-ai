@@ -121,6 +121,10 @@ export const envSchema = z.object({
   CLARA_ADMIN_USER_ID: z.string().optional(),
   // Comma-separated list of additional email addresses treated as Clara-originated (e.g. "clara@insideline.ai,clara@example.com")
   CLARA_EMAIL_ALIASES: z.string().optional(),
+  // Dev/staging safety net: when set, EVERY outbound Clara email is redirected to
+  // this address instead of the real recipient (founder/investor). Leave UNSET in
+  // production. e.g. "dev@insideline.ai"
+  CLARA_EMAIL_REDIRECT: z.string().optional(),
 
   // Unipile Integration (LinkedIn)
   UNIPILE_DSN: z.string().optional(),

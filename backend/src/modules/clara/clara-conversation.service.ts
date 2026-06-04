@@ -131,6 +131,43 @@ export class ClaraConversationService {
       .where(eq(claraConversation.id, conversationId));
   }
 
+  /**
+   * Repoint a conversation at the real AgentMail thread so inbound replies
+   * match by thread id (sender-agnostic) via {@link findByThreadId}. When an
+   * outbound send returns a real `threadId`, the data-gate / follow-up flows
+   * call this so the reply lands on this exact conversation regardless of who
+   * replies (or where a dev redirect rewrites the sender).
+   *
+   * The `threadId` column carries a unique index. If another conversation
+   * already owns that thread (rare — a fresh AgentMail thread is the norm), the
+   * unique violation is swallowed and `false` is returned so callers degrade
+   * gracefully instead of crashing.
+   */
+  async setThread(
+    conversationId: string,
+    threadId: string,
+    externalThreadId?: string,
+  ): Promise<boolean> {
+    try {
+      await this.drizzle.db
+        .update(claraConversation)
+        .set({
+          threadId,
+          externalThreadId: externalThreadId ?? threadId,
+          updatedAt: new Date(),
+        })
+        .where(eq(claraConversation.id, conversationId));
+      return true;
+    } catch (error) {
+      this.logger.warn(
+        `Failed to repoint conversation ${conversationId} to thread ${threadId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return false;
+    }
+  }
+
   async linkStartup(
     conversationId: string,
     startupId: string,

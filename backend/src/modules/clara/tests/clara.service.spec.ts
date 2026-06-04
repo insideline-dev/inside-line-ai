@@ -140,6 +140,7 @@ describe('ClaraService', () => {
       findByStartupIdAndChannel: jest.fn().mockResolvedValue(null),
       hasMessage: jest.fn().mockResolvedValue(false),
       updateContext: jest.fn().mockResolvedValue({}),
+      setThread: jest.fn().mockResolvedValue(true),
     };
     claraAi = {
       classifyIntent: jest.fn().mockResolvedValue({
@@ -641,32 +642,7 @@ describe('ClaraService', () => {
   // ============ notifyScreeningMissingMaterials ============
 
   describe('notifyScreeningMissingMaterials', () => {
-    it('should send the follow-up email, persist context, and mark the conversation awaiting info', async () => {
-      conversationService.findByStartupId.mockResolvedValueOnce(null);
-      conversationService.findOrCreate.mockResolvedValueOnce({
-        ...mockConversation,
-        context: {},
-      });
-      drizzleService.db.limit.mockResolvedValueOnce([
-        {
-          id: 'startup-1',
-          userId: 'owner-1',
-          name: 'TestCo',
-          pitchDeckUrl: null,
-          pitchDeckPath: null,
-          productDescription: null,
-          description: null,
-          teamMembers: [],
-          fundingTarget: null,
-          valuation: null,
-          raiseType: null,
-          website: null,
-          contactEmail: 'founder@testco.com',
-          contactName: 'Taylor Founder',
-          contactPhone: null,
-        },
-      ]);
-
+    it('suppresses DS missing-material email; Data Gates require explicit investor request', async () => {
       await (service as unknown as {
         notifyScreeningMissingMaterials: (
           startupId: string,
@@ -677,81 +653,92 @@ describe('ClaraService', () => {
         pipelineRunId: 'run-1',
       });
 
-      expect(claraChannel.send).toHaveBeenCalledWith(
-        expect.objectContaining({
-          channel: 'email',
-          email: expect.objectContaining({
-            to: ['founder@testco.com'],
-          }),
-          text: expect.stringContaining('pitch deck / presentation'),
-        }),
+      expect(drizzleService.db.select).not.toHaveBeenCalled();
+      expect(claraChannel.reply).not.toHaveBeenCalled();
+      expect(claraChannel.send).not.toHaveBeenCalled();
+      expect(conversationService.updateContext).not.toHaveBeenCalled();
+    });
+  });
+
+  // ============ requestDocumentsForDataGate ============
+
+  describe('requestDocumentsForDataGate', () => {
+    it('repoints the conversation at the real AgentMail thread returned by the send', async () => {
+      // Fresh data-gate flow: no existing conversation, so findOrCreate makes one
+      // with the synthetic threadId, then setThread must repoint it to the real one.
+      conversationService.findByStartupId.mockResolvedValueOnce(null);
+      conversationService.findOrCreate.mockResolvedValueOnce({
+        ...mockConversation,
+        id: 'conv-dg',
+        threadId: 'data-gate-request-startup-1',
+        context: {},
+      });
+      // Startup record lookup for requestDocumentsForDataGate.
+      drizzleService.db.limit.mockResolvedValueOnce([
+        {
+          id: 'startup-1',
+          userId: 'owner-1',
+          name: 'TestCo',
+          contactEmail: 'founder@testco.com',
+          contactName: 'Taylor Founder',
+        },
+      ]);
+      claraChannel.send.mockResolvedValueOnce({
+        threadId: 'th_real',
+        messageId: 'msg_1',
+      });
+
+      const result = await service.requestDocumentsForDataGate(
+        'startup-1',
+        ['financial', 'cap_table'],
+        'founder@testco.com',
       );
+
+      expect(claraChannel.send).toHaveBeenCalled();
+      expect(conversationService.setThread).toHaveBeenCalledWith('conv-dg', 'th_real');
+      // The outbound message id is persisted in the conversation context.
       expect(conversationService.updateContext).toHaveBeenCalledWith(
-        'conv-1',
+        'conv-dg',
         expect.objectContaining({
-          screeningFollowUp: expect.objectContaining({
-            type: 'screening_missing_materials',
+          dataGateDocRequest: expect.objectContaining({
+            type: 'data_gate_doc_request',
             startupId: 'startup-1',
-            pipelineRunId: 'run-1',
-            missingMaterials: ['deck', 'team'],
           }),
+          lastOutboundMessageId: 'msg_1',
         }),
       );
-      expect(conversationService.updateStatus).toHaveBeenCalledWith(
-        'conv-1',
-        ConversationStatus.AWAITING_INFO,
-      );
+      expect(result).toEqual({
+        sentTo: 'founder@testco.com',
+        requestedDocs: ['financial', 'cap_table'],
+      });
     });
 
-    it('should send a fresh message when the startup contact differs from the investor thread recipient', async () => {
-      conversationService.findByStartupId.mockResolvedValueOnce({
+    it('skips repointing when the send returns no thread id (e.g. non-email channel)', async () => {
+      conversationService.findByStartupId.mockResolvedValueOnce(null);
+      conversationService.findOrCreate.mockResolvedValueOnce({
         ...mockConversation,
-        startupId: 'startup-1',
-        context: {
-          lastInboundInboxId: 'inbox-1',
-          lastInboundMessageId: 'msg-original',
-        },
+        id: 'conv-dg',
+        threadId: 'data-gate-request-startup-1',
+        context: {},
       });
       drizzleService.db.limit.mockResolvedValueOnce([
         {
           id: 'startup-1',
           userId: 'owner-1',
           name: 'TestCo',
-          pitchDeckUrl: null,
-          pitchDeckPath: null,
-          productDescription: null,
-          description: null,
-          teamMembers: [],
-          fundingTarget: null,
-          valuation: null,
-          raiseType: null,
-          website: null,
           contactEmail: 'founder@testco.com',
           contactName: 'Taylor Founder',
-          contactPhone: null,
         },
       ]);
+      claraChannel.send.mockResolvedValueOnce(null);
 
-      await (service as unknown as {
-        notifyScreeningMissingMaterials: (
-          startupId: string,
-          missingMaterials: Array<'deck' | 'product_description' | 'team' | 'deal_terms' | 'website'>,
-          options?: { pipelineRunId?: string | null },
-        ) => Promise<void>;
-      }).notifyScreeningMissingMaterials('startup-1', ['deck'], {
-        pipelineRunId: 'run-2',
-      });
-
-      expect(claraChannel.reply).not.toHaveBeenCalled();
-      expect(claraChannel.send).toHaveBeenCalledWith(
-        expect.objectContaining({
-          channel: 'email',
-          email: expect.objectContaining({
-            to: ['founder@testco.com'],
-          }),
-          text: expect.stringContaining('missing materials'),
-        }),
+      await service.requestDocumentsForDataGate(
+        'startup-1',
+        ['financial'],
+        'founder@testco.com',
       );
+
+      expect(conversationService.setThread).not.toHaveBeenCalled();
     });
   });
 

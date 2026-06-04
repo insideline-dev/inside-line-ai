@@ -1,6 +1,7 @@
 import {
   Inject,
   Injectable,
+  Logger,
   NotImplementedException,
   forwardRef,
 } from "@nestjs/common";
@@ -27,6 +28,8 @@ type WhatsAppTarget = {
 
 @Injectable()
 export class ClaraChannelService {
+  private readonly logger = new Logger(ClaraChannelService.name);
+
   constructor(
     private readonly agentMailClient: AgentMailClientService,
     @Inject(forwardRef(() => EvolutionApiClientService))
@@ -90,6 +93,13 @@ export class ClaraChannelService {
         throw new Error("Email send target is required for email channel sends");
       }
 
+      if (this.isSuppressedScreeningMissingMaterialsEmail(params.email.subject)) {
+        this.logger.warn(
+          `[ClaraChannel] Suppressed legacy DS screening missing-materials email: subject="${params.email.subject}" to=${params.email.to.join(",")}`,
+        );
+        return null;
+      }
+
       return this.agentMailClient.sendMessage(params.email.inboxId, {
         to: params.email.to,
         subject: params.email.subject,
@@ -113,6 +123,11 @@ export class ClaraChannelService {
     throw new NotImplementedException(
       `Clara channel adapter for ${params.channel} is not implemented yet`,
     );
+  }
+
+  private isSuppressedScreeningMissingMaterialsEmail(subject: string): boolean {
+    const normalized = subject.replace(/^\[DEV\]\s*/i, "").trim().toLowerCase();
+    return normalized.startsWith("action needed: missing materials for ");
   }
 
   private async sendWhatsAppContent(params: {

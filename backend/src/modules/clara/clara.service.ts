@@ -70,6 +70,8 @@ export class ClaraService {
   private readonly claraInboxId: string | null;
   private readonly adminUserId: string | null;
   private readonly claraEmailAliases: Set<string>;
+  /** Dev/staging safety net: when set, ALL outbound Clara email is redirected here. */
+  private readonly emailRedirect: string | null;
   private readonly webhookLock: RedisFallbackClient;
 
   constructor(
@@ -93,6 +95,13 @@ export class ClaraService {
     this.claraEmailAliases = new Set(
       rawAliases.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean),
     );
+    const rawRedirect = this.config.get<string>("CLARA_EMAIL_REDIRECT")?.trim().toLowerCase() ?? "";
+    this.emailRedirect = rawRedirect && this.isValidEmail(rawRedirect) ? rawRedirect : null;
+    if (this.emailRedirect) {
+      this.logger.warn(
+        `Clara EMAIL REDIRECT active — all outbound email will be sent to ${this.emailRedirect} (no real founders/investors will be emailed).`,
+      );
+    }
     this.webhookLock = new RedisFallbackClient({
       redisUrl: this.config.get<string>("REDIS_URL") ?? "redis://localhost:6379",
       recoveryIntervalMs: 60_000,
@@ -1281,6 +1290,7 @@ export class ClaraService {
           ? `Analysis Complete With Warnings: ${startupRecord.name}`
           : `Analysis Complete: ${startupRecord.name}`,
         text: replyText,
+        redirectTag: startupRecord.name,
         attachments: pdfAttachments.length > 0 ? pdfAttachments : undefined,
       });
 
@@ -1441,11 +1451,12 @@ export class ClaraService {
       "Clara",
     ].join("\n");
 
-    await this.sendConversationEmail({
+    const missingInfoSentIds = await this.sendConversationEmail({
       conversation,
       recipientEmail: recipient.email,
       subject: `Action Needed: Missing startup details for ${startupRecord.name}`,
       text: replyText,
+      redirectTag: startupRecord.name,
     });
 
     this.logger.log(
@@ -1490,6 +1501,16 @@ export class ClaraService {
       await this.conversationService.linkStartup(conv.id, startupId);
     }
 
+    // Repoint at the real thread so the founder's reply matches by thread.
+    if (missingInfoSentIds) {
+      await this.conversationService.setThread(conv.id, missingInfoSentIds.threadId);
+      conv = {
+        ...conv,
+        threadId: missingInfoSentIds.threadId,
+        externalThreadId: missingInfoSentIds.threadId,
+      };
+    }
+
     await this.conversationService.logMessage({
       conversationId: conv.id,
       messageId,
@@ -1512,144 +1533,8 @@ export class ClaraService {
       pipelineRunId?: string | null;
     },
   ): Promise<void> {
-    if (!this.claraInboxId) return;
-
-    const normalizedMissing = Array.from(
-      new Set(
-        missingMaterials.filter(
-          (material): material is MissingMaterialCode =>
-            material === "deck" ||
-            material === "product_description" ||
-            material === "team" ||
-            material === "deal_terms" ||
-            material === "website" ||
-            material === "evidence_claims",
-        ),
-      ),
-    );
-    if (normalizedMissing.length === 0) return;
-
-    const [startupRecord] = await this.drizzle.db
-      .select({
-        id: startup.id,
-        userId: startup.userId,
-        name: startup.name,
-        pitchDeckUrl: startup.pitchDeckUrl,
-        pitchDeckPath: startup.pitchDeckPath,
-        productDescription: startup.productDescription,
-        description: startup.description,
-        teamMembers: startup.teamMembers,
-        fundingTarget: startup.fundingTarget,
-        valuation: startup.valuation,
-        raiseType: startup.raiseType,
-        website: startup.website,
-        contactEmail: startup.contactEmail,
-        contactName: startup.contactName,
-        contactPhone: startup.contactPhone,
-      })
-      .from(startup)
-      .where(eq(startup.id, startupId))
-      .limit(1);
-    if (!startupRecord) return;
-
-    const unresolvedMissing = detectMissingMaterials(startupRecord).filter((field) =>
-      normalizedMissing.includes(field),
-    );
-    if (unresolvedMissing.length === 0) return;
-
-    const recipient = await this.resolveMissingInfoRecipient({
-      userId: startupRecord.userId,
-      contactEmail: startupRecord.contactEmail,
-      contactName: startupRecord.contactName,
-    });
-    if (!recipient) {
-      this.logger.warn(
-        `Unable to send Clara screening follow-up for startup ${startupId}: no valid recipient`,
-      );
-      return;
-    }
-
-    const conversation = await this.conversationService.findByStartupId(startupId);
-    const dedupeScope =
-      options?.pipelineRunId?.trim() || `screening-${new Date().toISOString().slice(0, 10)}`;
-    const messageId = `screening-followup-${startupId}-${dedupeScope}-${unresolvedMissing.join("-")}`;
-    let conv = conversation;
-    if (conv) {
-      const alreadySent = await this.conversationService.hasMessage(
-        conv.id,
-        messageId,
-        MessageDirection.OUTBOUND,
-      );
-      if (alreadySent) {
-        this.logger.debug(
-          `Skipping duplicate Clara screening follow-up for startup ${startupId} (scope=${dedupeScope}, materials=${unresolvedMissing.join(",")})`,
-        );
-        return;
-      }
-    }
-
-    const labels = this.formatMissingMaterialLabels(unresolvedMissing);
-    const greetingName = recipient.name ?? "there";
-    const replyText = [
-      `Hi ${greetingName},`,
-      "",
-      `I'm reviewing ${startupRecord.name} and need a few missing materials before I can continue:`,
-      ...labels.map((label) => `- ${label}`),
-      "",
-      "Please reply in this thread with the missing details or attach the files directly, and I’ll pick up right where I left off.",
-      "",
-      "Best,",
-      "Clara",
-    ].join("\n");
-
-    await this.sendConversationEmail({
-      conversation,
-      recipientEmail: recipient.email,
-      subject: `Action Needed: Missing materials for ${startupRecord.name}`,
-      text: replyText,
-    });
-
-    this.logger.log(
-      `Sent Clara screening follow-up for startup ${startupId} to ${recipient.email} (materials=${unresolvedMissing.join(",")}, scope=${dedupeScope})`,
-    );
-
-    if (!conv) {
-      conv = await this.conversationService.findOrCreate(
-        `screening-followup-outbound-${startupId}`,
-        recipient.email,
-        recipient.name,
-        null,
-      );
-      await this.conversationService.linkStartup(conv.id, startupId);
-    }
-
-    await this.conversationService.logMessage({
-      conversationId: conv.id,
-      messageId,
-      direction: MessageDirection.OUTBOUND,
-      fromEmail: "clara@agentmail.to",
-      subject: `Action Needed: Missing materials for ${startupRecord.name}`,
-      bodyText: replyText,
-      processed: true,
-    });
-    await this.conversationService.updateStatus(
-      conv.id,
-      ConversationStatus.AWAITING_INFO,
-    );
-    await this.conversationService.updateContext(
-      conv.id,
-      this.mergeConversationContext(
-        conv.context as Record<string, unknown> | null | undefined,
-        {
-          screeningFollowUp: {
-            type: "screening_missing_materials",
-            startupId,
-            pipelineRunId: options?.pipelineRunId ?? null,
-            missingMaterials: unresolvedMissing,
-            createdAt: new Date().toISOString(),
-          },
-        },
-      ),
+    this.logger.warn(
+      `[Clara] Screening missing-material email suppressed for startup ${startupId}. Missing materials are DS/Data Gate UI state only until an investor explicitly requests documents. materials=${missingMaterials.join(",")} run=${options?.pipelineRunId ?? "none"}`,
     );
   }
 
@@ -1719,11 +1604,12 @@ export class ClaraService {
       await this.conversationService.findByStartupId(startupId);
     let conv = conversation;
 
-    await this.sendConversationEmail({
+    const sentIds = await this.sendConversationEmail({
       conversation,
       recipientEmail: recipient.email,
       subject: `Documents needed for ${startupRecord.name} review`,
       text: emailText,
+      redirectTag: startupRecord.name,
     });
 
     if (!conv) {
@@ -1734,6 +1620,17 @@ export class ClaraService {
         null,
       );
       await this.conversationService.linkStartup(conv.id, startupId);
+    }
+
+    // Repoint the conversation at the REAL AgentMail thread so the founder's
+    // reply matches by thread (sender-agnostic) via findByThreadId — this is
+    // what lets handleDataGateDocReply run even when a dev redirect rewrites the
+    // sender, and hardens prod against mismatched sender emails. The data-gate
+    // request is always a fresh thread, so repointing an existing conversation
+    // here is intended.
+    if (sentIds) {
+      await this.conversationService.setThread(conv.id, sentIds.threadId);
+      conv = { ...conv, threadId: sentIds.threadId, externalThreadId: sentIds.threadId };
     }
 
     const messageId = `data-gate-request-${startupId}-${Date.now()}`;
@@ -1763,6 +1660,7 @@ export class ClaraService {
             requestedDocTypes: missingDocTypes,
             createdAt: new Date().toISOString(),
           },
+          ...(sentIds ? { lastOutboundMessageId: sentIds.messageId } : {}),
         },
       ),
     );
@@ -2099,6 +1997,31 @@ export class ClaraService {
     return /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(value);
   }
 
+  /**
+   * Dev-only: build the redirect recipient. When a tag is provided, encode it
+   * into the local part via plus-addressing (e.g. `dev+path-robotics@host`) so
+   * the single test inbox visibly groups messages by startup. The base address
+   * is `this.emailRedirect` (guaranteed set when this is called).
+   */
+  private buildDevRedirectAddress(tag?: string): string {
+    const base = this.emailRedirect ?? "";
+    const slug = this.slugifyEmailTag(tag);
+    const at = base.indexOf("@");
+    if (!slug || at < 0) return base;
+    const localBase = base.slice(0, at).split("+")[0];
+    const domain = base.slice(at + 1);
+    return `${localBase}+${slug}@${domain}`;
+  }
+
+  private slugifyEmailTag(value?: string): string {
+    if (!value) return "";
+    return value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 40);
+  }
+
   private isStartupFieldMissing(
     field: "website" | "stage",
     startupRecord: StartupFieldRecord,
@@ -2396,7 +2319,40 @@ export class ClaraService {
     subject: string;
     text: string;
     attachments?: AgentMail.SendAttachment[];
-  }): Promise<void> {
+    /**
+     * Dev-only: a short label (e.g. startup name) that, when the email redirect
+     * is active, is encoded into the redirect recipient via plus-addressing so
+     * the test inbox shows which startup each message belongs to.
+     */
+    redirectTag?: string;
+  }): Promise<{ threadId: string; messageId: string } | null> {
+    // Dev/staging safety net: when CLARA_EMAIL_REDIRECT is set, send EVERY outbound
+    // email to the test inbox instead of the real recipient. We force the direct-send
+    // path (skipping any thread reply) so nothing can ever reach a real founder/
+    // investor, plus-address the recipient per-startup so the inbox shows which deal
+    // each message is from, and annotate the subject/body with the intended recipient.
+    if (this.emailRedirect) {
+      const inboxId = this.getConversationInboxId(params.conversation);
+      if (!inboxId) {
+        throw new Error("Clara email send target is unavailable: no inbox ID found");
+      }
+      const to = this.buildDevRedirectAddress(params.redirectTag);
+      const tagNote = params.redirectTag ? ` | startup: ${params.redirectTag}` : "";
+      const redirectText = `[DEV REDIRECT — original recipient: ${params.recipientEmail}${tagNote}]\n\n${params.text}`;
+      const response = await this.claraChannel.send({
+        channel: "email",
+        email: {
+          inboxId,
+          to: [to],
+          subject: `[DEV] ${params.subject}`,
+        },
+        text: redirectText,
+        html: this.toHtml(redirectText),
+        attachments: params.attachments,
+      });
+      return this.extractSendIds(response);
+    }
+
     const normalizedRecipientEmail = this.normalizeEmailAddress(params.recipientEmail);
     const normalizedConversationEmail = this.normalizeEmailAddress(
       params.conversation?.investorEmail ?? null,
@@ -2408,7 +2364,7 @@ export class ClaraService {
         : null;
 
     if (replyTarget) {
-      await this.claraChannel.reply({
+      const response = await this.claraChannel.reply({
         channel: "email",
         email: {
           inboxId: replyTarget.inboxId,
@@ -2418,7 +2374,7 @@ export class ClaraService {
         html: this.toHtml(params.text),
         attachments: params.attachments,
       });
-      return;
+      return this.extractSendIds(response);
     }
 
     const inboxId = this.getConversationInboxId(params.conversation);
@@ -2426,7 +2382,7 @@ export class ClaraService {
       throw new Error("Clara email send target is unavailable: no inbox ID found");
     }
 
-    await this.claraChannel.send({
+    const response = await this.claraChannel.send({
       channel: "email",
       email: {
         inboxId,
@@ -2437,6 +2393,30 @@ export class ClaraService {
       html: this.toHtml(params.text),
       attachments: params.attachments,
     });
+    return this.extractSendIds(response);
+  }
+
+  /**
+   * Normalize the AgentMail send/reply response into the ids we care about.
+   * Email sends/replies return `{ messageId, threadId }`; WhatsApp/Evolution
+   * responses (or a null response) don't, so we return `null` in that case.
+   */
+  private extractSendIds(
+    response: unknown,
+  ): { threadId: string; messageId: string } | null {
+    if (!response || typeof response !== "object") {
+      return null;
+    }
+    const candidate = response as { threadId?: unknown; messageId?: unknown };
+    if (
+      typeof candidate.threadId === "string" &&
+      candidate.threadId.trim().length > 0 &&
+      typeof candidate.messageId === "string" &&
+      candidate.messageId.trim().length > 0
+    ) {
+      return { threadId: candidate.threadId, messageId: candidate.messageId };
+    }
+    return null;
   }
 
   private async sendConversationWhatsApp(params: {

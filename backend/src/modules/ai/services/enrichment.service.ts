@@ -59,6 +59,7 @@ const CRITICAL_ENRICHMENT_FIELDS = new Set([
 ]);
 
 const DEFAULT_INFERRED_FIELD_CONFIDENCE = 0.5;
+const TEAM_MEMBER_PERSISTENCE_CONFIDENCE = 0.7;
 
 const nullToUndefined = (value: unknown): unknown =>
   value === null ? undefined : value;
@@ -2648,7 +2649,18 @@ export class EnrichmentService {
     const gapFillThreshold = 0.3;
     const updates: Record<string, unknown> = {};
     const updatedFields: string[] = [];
-    const foundersAdded = 0;
+    const teamMergeResult = this.mergeDiscoveredTeamMembers(
+      record.teamMembers ?? [],
+      cascadeResolved,
+      enrichment,
+    );
+    const foundersAdded = teamMergeResult.addedCount;
+    if (foundersAdded > 0) {
+      updates.teamMembers = teamMergeResult.teamMembers;
+      updatedFields.push(
+        `Team Members (${foundersAdded} discovered from deck/enrichment)`,
+      );
+    }
 
     // Apply cascade-resolved data (high confidence, from extraction/email)
     for (const [field, data] of cascadeResolved) {
@@ -2802,6 +2814,114 @@ export class EnrichmentService {
       fieldsUpdated: updatedFields,
       foundersAdded,
     };
+  }
+
+  private mergeDiscoveredTeamMembers(
+    existingMembers: NonNullable<StartupRecord["teamMembers"]>,
+    cascadeResolved: Map<string, { value: string | number; source: string; confidence: number }>,
+    enrichment: EnrichmentResult,
+  ): {
+    teamMembers: NonNullable<StartupRecord["teamMembers"]>;
+    addedCount: number;
+  } {
+    const merged = new Map<string, NonNullable<StartupRecord["teamMembers"]>[number]>();
+
+    for (const member of existingMembers) {
+      const normalized = this.normalizeTeamMemberForPersistence(member);
+      if (!normalized) continue;
+      merged.set(this.teamMemberKey(normalized), normalized);
+    }
+    const initialCount = merged.size;
+
+    const addCandidate = (
+      candidate: {
+        name?: string | null;
+        role?: string | null;
+        linkedinUrl?: string | null;
+      },
+      fallbackRole: string,
+    ) => {
+      const normalized = this.normalizeTeamMemberForPersistence({
+        name: candidate.name ?? "",
+        role: candidate.role?.trim() || fallbackRole,
+        linkedinUrl: candidate.linkedinUrl?.trim() || "",
+      });
+      if (!normalized) return;
+
+      const key = this.teamMemberKey(normalized);
+      const existing = merged.get(key);
+      if (!existing) {
+        merged.set(key, normalized);
+        return;
+      }
+
+      merged.set(key, {
+        name: existing.name || normalized.name,
+        role: existing.role || normalized.role,
+        linkedinUrl: existing.linkedinUrl || normalized.linkedinUrl,
+      });
+    };
+
+    const cascadeTeam = cascadeResolved.get("teamMembers");
+    if (
+      cascadeTeam &&
+      cascadeTeam.confidence >= TEAM_MEMBER_PERSISTENCE_CONFIDENCE
+    ) {
+      for (const name of this.parseTeamMemberNames(String(cascadeTeam.value))) {
+        addCandidate({ name }, "Founder");
+      }
+    }
+
+    for (const founder of enrichment.discoveredFounders ?? []) {
+      if (founder.confidence < TEAM_MEMBER_PERSISTENCE_CONFIDENCE) continue;
+      addCandidate(
+        {
+          name: founder.name,
+          role: founder.role,
+          linkedinUrl: founder.linkedinUrl,
+        },
+        "Founder",
+      );
+    }
+
+    const teamMembers = Array.from(merged.values());
+    return {
+      teamMembers,
+      addedCount: Math.max(0, teamMembers.length - initialCount),
+    };
+  }
+
+  private normalizeTeamMemberForPersistence(member: {
+    name?: string | null;
+    role?: string | null;
+    linkedinUrl?: string | null;
+  }): NonNullable<StartupRecord["teamMembers"]>[number] | null {
+    const name = member.name?.trim();
+    const role = member.role?.trim();
+    if (!name || !role) return null;
+
+    return {
+      name,
+      role,
+      linkedinUrl: member.linkedinUrl?.trim() ?? "",
+    };
+  }
+
+  private teamMemberKey(
+    member: NonNullable<StartupRecord["teamMembers"]>[number],
+  ): string {
+    const linkedin = member.linkedinUrl?.trim().toLowerCase();
+    if (linkedin) return `linkedin:${linkedin}`;
+    return `name:${member.name.trim().toLowerCase()}`;
+  }
+
+  private parseTeamMemberNames(value: string): string[] {
+    return value
+      .split(/[,;\n]+/)
+      .map((part) => part.trim())
+      .filter((part) => part.length > 0)
+      .map((part) => part.replace(/\s+\(([^)]*)\)\s*$/, "").trim())
+      .filter((part) => part.length > 0);
   }
 
   private matchesCorrectionField(

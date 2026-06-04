@@ -36,6 +36,8 @@ describe("ScrapingService", () => {
     from: jest.fn().mockReturnThis(),
     where: jest.fn().mockReturnThis(),
     limit: jest.fn(),
+    update: jest.fn().mockReturnThis(),
+    set: jest.fn().mockReturnThis(),
   };
 
   beforeEach(() => {
@@ -134,6 +136,59 @@ describe("ScrapingService", () => {
     expect(result.websiteUrl).toBe("https://inside-line.test/");
     expect(result.teamMembers[0]?.enrichmentStatus).toBe("success");
     expect(result.scrapeErrors).toHaveLength(0);
+  });
+
+  it("persists verified LinkedIn team members back to the startup", async () => {
+    mockDb.limit.mockResolvedValueOnce([
+      {
+        id: "startup-new-team",
+        userId: "user-123",
+        website: "https://inside-line.test",
+        name: "Inside Line",
+        industry: "SaaS",
+        stage: "seed",
+        description: "AI startup screening",
+        teamMembers: [],
+      },
+    ]);
+    websiteScraper.deepScrape.mockResolvedValueOnce({
+      url: "https://inside-line.test/",
+      title: "Inside Line",
+      description: "AI startup screening",
+      fullText: "scraped content",
+      headings: ["AI Venture Screening"],
+      subpages: [],
+      links: [],
+      teamBios: [
+        {
+          name: "Alex Founder",
+          role: "CEO",
+          bio: "CEO and founder of Inside Line.",
+        },
+      ],
+      customerLogos: [],
+      testimonials: [],
+      metadata: {
+        scrapedAt: new Date().toISOString(),
+        pageCount: 1,
+        hasAboutPage: true,
+        hasTeamPage: true,
+        hasPricingPage: false,
+      },
+    });
+
+    await service.run("startup-new-team");
+
+    expect(mockDb.update).toHaveBeenCalled();
+    expect(mockDb.set).toHaveBeenCalledWith({
+      teamMembers: [
+        {
+          name: "Alex Founder",
+          role: "CEO",
+          linkedinUrl: "https://linkedin.com/in/alex-founder",
+        },
+      ],
+    });
   });
 
   it("skips website scraping when startup website is a placeholder URL", async () => {

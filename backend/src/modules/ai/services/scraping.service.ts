@@ -616,6 +616,12 @@ export class ScrapingService {
       scrapeErrors,
     };
 
+    await this.persistVerifiedTeamMembers(
+      startupId,
+      record.teamMembers ?? [],
+      result.teamMembers,
+    );
+
     const statusCounts = result.teamMembers.reduce<Record<string, number>>((acc, member) => {
       const key = member.enrichmentStatus ?? "unknown";
       acc[key] = (acc[key] ?? 0) + 1;
@@ -684,6 +690,64 @@ export class ScrapingService {
     });
 
     return result;
+  }
+
+  private async persistVerifiedTeamMembers(
+    startupId: string,
+    existingMembers: Array<{ name: string; role: string; linkedinUrl: string }>,
+    verifiedMembers: EnrichedTeamMember[],
+  ): Promise<void> {
+    const merged = new Map<string, { name: string; role: string; linkedinUrl: string }>();
+
+    const normalize = (member: {
+      name?: string | null;
+      role?: string | null;
+      linkedinUrl?: string | null;
+    }): { name: string; role: string; linkedinUrl: string } | null => {
+      const name = member.name?.trim();
+      const role = member.role?.trim();
+      if (!name || !role) return null;
+      return {
+        name,
+        role,
+        linkedinUrl: member.linkedinUrl?.trim() ?? "",
+      };
+    };
+
+    const keyFor = (member: { name: string; linkedinUrl: string }): string => {
+      const linkedin = member.linkedinUrl.trim().toLowerCase();
+      if (linkedin) return `linkedin:${linkedin}`;
+      return `name:${member.name.trim().toLowerCase()}`;
+    };
+
+    for (const member of existingMembers) {
+      const normalized = normalize(member);
+      if (!normalized) continue;
+      merged.set(keyFor(normalized), normalized);
+    }
+    const before = JSON.stringify(Array.from(merged.values()));
+
+    for (const member of verifiedMembers) {
+      const normalized = normalize(member);
+      if (!normalized) continue;
+      const key = keyFor(normalized);
+      const existing = merged.get(key);
+      merged.set(key, {
+        name: existing?.name || normalized.name,
+        role: existing?.role || normalized.role,
+        linkedinUrl: existing?.linkedinUrl || normalized.linkedinUrl,
+      });
+    }
+
+    const teamMembers = Array.from(merged.values());
+    if (JSON.stringify(teamMembers) === before) {
+      return;
+    }
+
+    await this.drizzle.db
+      .update(startup)
+      .set({ teamMembers })
+      .where(eq(startup.id, startupId));
   }
 
   private resolveRunOptions(

@@ -671,10 +671,15 @@ describe("EnrichmentService", () => {
   });
 
   describe("applyDbWrites — discovered founders", () => {
-    it("does not write discovered founders into teamMembers (handled by linkedin_enrichment)", async () => {
+    it("writes high-confidence discovered founders into teamMembers", async () => {
       const aiJson = makeEnrichmentJson({
         discoveredFounders: [
-          { name: "Bob Builder", role: "CTO", confidence: 0.8 },
+          {
+            name: "Bob Builder",
+            role: "CTO",
+            linkedinUrl: "https://www.linkedin.com/in/bob-builder",
+            confidence: 0.8,
+          },
         ],
       });
       generateTextMock.mockResolvedValue({ text: aiJson });
@@ -686,8 +691,42 @@ describe("EnrichmentService", () => {
       });
       const result = await service.run(STARTUP_ID);
 
+      expect(drizzle.db.update).toHaveBeenCalled();
+      expect(result.dbFieldsUpdated.some((f) => f.includes("Team Members"))).toBe(true);
+    });
+
+    it("does not write low-confidence discovered founders into teamMembers", async () => {
+      const aiJson = makeEnrichmentJson({
+        discoveredFounders: [
+          { name: "Maybe Person", role: "Founder", confidence: 0.4 },
+        ],
+      });
+      generateTextMock.mockResolvedValue({ text: aiJson });
+
+      const { service, drizzle } = buildService({
+        record: makeStartupRecord({ teamMembers: [] }),
+      });
+      const result = await service.run(STARTUP_ID);
+
       expect(drizzle.db.update).not.toHaveBeenCalled();
       expect(result.dbFieldsUpdated).toHaveLength(0);
+    });
+
+    it("writes team names resolved from deck extraction as founders", async () => {
+      const aiJson = makeEnrichmentJson();
+      generateTextMock.mockResolvedValue({ text: aiJson });
+
+      const { service, drizzle, pipelineState } = buildService({
+        record: makeStartupRecord({ teamMembers: [] }),
+      });
+      pipelineState.getPhaseResult.mockResolvedValueOnce({
+        founderNames: ["Alice Founder", "Bob Builder"],
+      });
+
+      const result = await service.run(STARTUP_ID);
+
+      expect(drizzle.db.update).toHaveBeenCalled();
+      expect(result.dbFieldsUpdated.some((f) => f.includes("Team Members"))).toBe(true);
     });
   });
 

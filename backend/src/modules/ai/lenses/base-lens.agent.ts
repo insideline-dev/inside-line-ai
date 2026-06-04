@@ -83,6 +83,29 @@ export abstract class BaseLensAgent<TOutput extends LensOutput> {
     return false;
   }
 
+  /**
+   * Reasoning effort for the lens model call. Lenses are short triage signals,
+   * not deep analyses. `resolveForPrompt` defaults OpenAI prompts to "high",
+   * which made the web-search market lens take ~2m per pass and blow the
+   * screening phase budget. Keep lenses on "low". Override per lens only if a
+   * deeper pass is ever justified.
+   */
+  protected reasoningEffort(): "low" | "medium" | "high" {
+    return "low";
+  }
+
+  /**
+   * Hard wall-clock budget (ms) for a single model attempt. The screening
+   * phase has a fixed 5-minute budget and lenses run concurrently with NO
+   * per-lens cap, so an unbounded web-search pass can time out the whole
+   * phase. These bounds guarantee the lens returns (with real output or a
+   * graceful fallback) well inside that budget: attempt 1 (web search) +
+   * attempt 2 (fast tool-less) ≈ 195s < 300s.
+   */
+  protected attemptTimeoutMs(attempt: number): number {
+    return attempt === 1 ? 150_000 : 45_000;
+  }
+
   constructor(
     protected readonly modelExec: AiModelExecutionService,
     protected readonly prompts: AiPromptService,
@@ -173,10 +196,20 @@ export abstract class BaseLensAgent<TOutput extends LensOutput> {
           enableBraveSearch: true,
         });
         model = resolved.generateTextOptions.model;
+        const baseProviderOptions = resolved.generateTextOptions.providerOptions;
         toolOptions = {
           tools: resolved.generateTextOptions.tools,
           toolChoice: resolved.generateTextOptions.toolChoice,
-          providerOptions: resolved.generateTextOptions.providerOptions,
+          // Force the lens reasoning effort down — resolveForPrompt defaults
+          // OpenAI prompts to "high", which is too slow for a screening lens.
+          providerOptions: {
+            ...(baseProviderOptions ?? {}),
+            openai: {
+              ...((baseProviderOptions as { openai?: Record<string, unknown> } | undefined)
+                ?.openai ?? {}),
+              reasoningEffort: this.reasoningEffort(),
+            },
+          } as typeof baseProviderOptions,
         };
       } else {
         model = this.resolveModel(modelId);
@@ -196,27 +229,51 @@ export abstract class BaseLensAgent<TOutput extends LensOutput> {
       let usage: Awaited<
         ReturnType<typeof this.modelExec.generateText<TOutput>>
       >["usage"];
+      let lastError: string | undefined;
       for (let attempt = 1; attempt <= 2; attempt += 1) {
-        const result = await this.modelExec.generateText<TOutput>({
-          model,
-          system,
-          prompt: userPrompt,
-          schema: this.outputSchema,
-          temperature: 0.2,
-          ...(attempt === 1 ? toolOptions : {}),
-        });
-        if (result.output) {
-          output = result.output;
-          usage = result.usage;
-          break;
-        }
-        this.logger.warn(
-          `Lens '${this.key}' returned empty structured output (attempt ${attempt}/2)`,
+        // Hard per-attempt timeout so the lens can never run long enough to
+        // trip the phase budget. On timeout the request aborts and we fall
+        // through to the next (faster, tool-less) attempt; if the last attempt
+        // times out, the empty `output` below triggers the graceful fallback.
+        const controller = new AbortController();
+        const timer = setTimeout(
+          () => controller.abort(),
+          this.attemptTimeoutMs(attempt),
         );
+        try {
+          const result = await this.modelExec.generateText<TOutput>({
+            model,
+            system,
+            prompt: userPrompt,
+            schema: this.outputSchema,
+            temperature: 0.2,
+            ...(attempt === 1 ? toolOptions : {}),
+            abortSignal: controller.signal,
+          });
+          if (result.output) {
+            output = result.output;
+            usage = result.usage;
+            break;
+          }
+          this.logger.warn(
+            `Lens '${this.key}' returned empty structured output (attempt ${attempt}/2)`,
+          );
+        } catch (err) {
+          lastError = (err as Error).message;
+          this.logger.warn(
+            `Lens '${this.key}' attempt ${attempt}/2 failed: ${lastError}`,
+          );
+        } finally {
+          clearTimeout(timer);
+        }
       }
 
       if (!output) {
-        throw new Error("Lens model returned empty structured output");
+        throw new Error(
+          lastError
+            ? `Lens model call failed: ${lastError}`
+            : "Lens model returned empty structured output",
+        );
       }
 
       // Belt-and-suspenders: AI SDK already validated, but enforce again so

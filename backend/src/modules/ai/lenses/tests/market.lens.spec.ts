@@ -279,4 +279,27 @@ describe("MarketLens", () => {
     expect(result.usedFallback).toBe(false);
     expect(result.output.score).toBe(55);
   });
+
+  it("forces low reasoning effort and a bounded abort signal on the web-search call", async () => {
+    const generateText = jest.fn().mockResolvedValue({
+      output: {
+        score: 64,
+        signal: "review",
+        rationale: "ok",
+        evidence: [],
+      },
+    });
+
+    const lens = await buildLens({
+      generateText,
+      // resolveProviderOptions would default this to "high".
+      tools: { web_search: {} },
+    });
+    await lens.run(CTX);
+
+    const call = generateText.mock.calls[0][0];
+    expect(call.providerOptions?.openai?.reasoningEffort).toBe("low");
+    // A hard timeout is wired so the lens can never exceed the phase budget.
+    expect(call.abortSignal).toBeInstanceOf(AbortSignal);
+  });
 });

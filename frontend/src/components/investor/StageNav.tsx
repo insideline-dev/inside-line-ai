@@ -9,7 +9,6 @@ import { cn } from "@/lib/utils";
 export interface StageCounts {
   screening?: number;
   dd?: number;
-  contracting?: number;
   portfolio?: number;
 }
 
@@ -49,12 +48,6 @@ function stagesFor(surface: "investor" | "admin"): StageDef[] {
         p === root ||
         p === `${root}/` ||
         p.startsWith(`${root}/startup`),
-    },
-    {
-      key: "contracting",
-      label: "Engaged",
-      to: `${root}/contracting`,
-      matches: (p) => p.startsWith(`${root}/contracting`),
     },
     {
       key: "portfolio",
@@ -136,7 +129,6 @@ function useAutoCounts(surface: "investor" | "admin", overrides: StageCounts) {
         : pipeline?.stats?.total !== undefined
           ? pipeline.stats.total
           : undefined),
-    contracting: overrides.contracting ?? 0,
     portfolio:
       overrides.portfolio ??
       (Array.isArray(portfolioQ.data) ? portfolioQ.data.length : undefined),

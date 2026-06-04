@@ -43,7 +43,6 @@ import { Route as ProtectedInvestorPortalRouteImport } from './routes/_protected
 import { Route as ProtectedInvestorNotesRouteImport } from './routes/_protected/investor/notes'
 import { Route as ProtectedInvestorMessagingRouteImport } from './routes/_protected/investor/messaging'
 import { Route as ProtectedInvestorDataRoomRouteImport } from './routes/_protected/investor/data-room'
-import { Route as ProtectedInvestorContractingRouteImport } from './routes/_protected/investor/contracting'
 import { Route as ProtectedInvestorActivityRouteImport } from './routes/_protected/investor/activity'
 import { Route as ProtectedFounderSubmitRouteImport } from './routes/_protected/founder/submit'
 import { Route as ProtectedFounderMeetingsRouteImport } from './routes/_protected/founder/meetings'
@@ -59,7 +58,6 @@ import { Route as ProtectedAdminInvestorsRouteImport } from './routes/_protected
 import { Route as ProtectedAdminIntegrationsRouteImport } from './routes/_protected/admin/integrations'
 import { Route as ProtectedAdminDataRoomRouteImport } from './routes/_protected/admin/data-room'
 import { Route as ProtectedAdminConversationsRouteImport } from './routes/_protected/admin/conversations'
-import { Route as ProtectedAdminContractingRouteImport } from './routes/_protected/admin/contracting'
 import { Route as ProtectedAdminAnalyticsRouteImport } from './routes/_protected/admin/analytics'
 import { Route as ProtectedAdminAgentsRouteImport } from './routes/_protected/admin/agents'
 import { Route as ProtectedScoutStartupIdRouteImport } from './routes/_protected/scout/startup.$id'
@@ -246,12 +244,6 @@ const ProtectedInvestorDataRoomRoute =
     path: '/data-room',
     getParentRoute: () => ProtectedInvestorRoute,
   } as any)
-const ProtectedInvestorContractingRoute =
-  ProtectedInvestorContractingRouteImport.update({
-    id: '/contracting',
-    path: '/contracting',
-    getParentRoute: () => ProtectedInvestorRoute,
-  } as any)
 const ProtectedInvestorActivityRoute =
   ProtectedInvestorActivityRouteImport.update({
     id: '/activity',
@@ -334,12 +326,6 @@ const ProtectedAdminConversationsRoute =
     path: '/conversations',
     getParentRoute: () => ProtectedAdminRoute,
   } as any)
-const ProtectedAdminContractingRoute =
-  ProtectedAdminContractingRouteImport.update({
-    id: '/contracting',
-    path: '/contracting',
-    getParentRoute: () => ProtectedAdminRoute,
-  } as any)
 const ProtectedAdminAnalyticsRoute = ProtectedAdminAnalyticsRouteImport.update({
   id: '/analytics',
   path: '/analytics',
@@ -406,7 +392,6 @@ export interface FileRoutesByFullPath {
   '/auth/magic-link': typeof AuthMagicLinkRoute
   '/admin/agents': typeof ProtectedAdminAgentsRoute
   '/admin/analytics': typeof ProtectedAdminAnalyticsRoute
-  '/admin/contracting': typeof ProtectedAdminContractingRoute
   '/admin/conversations': typeof ProtectedAdminConversationsRoute
   '/admin/data-room': typeof ProtectedAdminDataRoomRoute
   '/admin/integrations': typeof ProtectedAdminIntegrationsRoute
@@ -422,7 +407,6 @@ export interface FileRoutesByFullPath {
   '/founder/meetings': typeof ProtectedFounderMeetingsRoute
   '/founder/submit': typeof ProtectedFounderSubmitRoute
   '/investor/activity': typeof ProtectedInvestorActivityRoute
-  '/investor/contracting': typeof ProtectedInvestorContractingRoute
   '/investor/data-room': typeof ProtectedInvestorDataRoomRoute
   '/investor/messaging': typeof ProtectedInvestorMessagingRoute
   '/investor/notes': typeof ProtectedInvestorNotesRoute
@@ -463,7 +447,6 @@ export interface FileRoutesByTo {
   '/auth/magic-link': typeof AuthMagicLinkRoute
   '/admin/agents': typeof ProtectedAdminAgentsRoute
   '/admin/analytics': typeof ProtectedAdminAnalyticsRoute
-  '/admin/contracting': typeof ProtectedAdminContractingRoute
   '/admin/conversations': typeof ProtectedAdminConversationsRoute
   '/admin/data-room': typeof ProtectedAdminDataRoomRoute
   '/admin/integrations': typeof ProtectedAdminIntegrationsRoute
@@ -479,7 +462,6 @@ export interface FileRoutesByTo {
   '/founder/meetings': typeof ProtectedFounderMeetingsRoute
   '/founder/submit': typeof ProtectedFounderSubmitRoute
   '/investor/activity': typeof ProtectedInvestorActivityRoute
-  '/investor/contracting': typeof ProtectedInvestorContractingRoute
   '/investor/data-room': typeof ProtectedInvestorDataRoomRoute
   '/investor/messaging': typeof ProtectedInvestorMessagingRoute
   '/investor/notes': typeof ProtectedInvestorNotesRoute
@@ -526,7 +508,6 @@ export interface FileRoutesById {
   '/auth/magic-link': typeof AuthMagicLinkRoute
   '/_protected/admin/agents': typeof ProtectedAdminAgentsRoute
   '/_protected/admin/analytics': typeof ProtectedAdminAnalyticsRoute
-  '/_protected/admin/contracting': typeof ProtectedAdminContractingRoute
   '/_protected/admin/conversations': typeof ProtectedAdminConversationsRoute
   '/_protected/admin/data-room': typeof ProtectedAdminDataRoomRoute
   '/_protected/admin/integrations': typeof ProtectedAdminIntegrationsRoute
@@ -542,7 +523,6 @@ export interface FileRoutesById {
   '/_protected/founder/meetings': typeof ProtectedFounderMeetingsRoute
   '/_protected/founder/submit': typeof ProtectedFounderSubmitRoute
   '/_protected/investor/activity': typeof ProtectedInvestorActivityRoute
-  '/_protected/investor/contracting': typeof ProtectedInvestorContractingRoute
   '/_protected/investor/data-room': typeof ProtectedInvestorDataRoomRoute
   '/_protected/investor/messaging': typeof ProtectedInvestorMessagingRoute
   '/_protected/investor/notes': typeof ProtectedInvestorNotesRoute
@@ -589,7 +569,6 @@ export interface FileRouteTypes {
     | '/auth/magic-link'
     | '/admin/agents'
     | '/admin/analytics'
-    | '/admin/contracting'
     | '/admin/conversations'
     | '/admin/data-room'
     | '/admin/integrations'
@@ -605,7 +584,6 @@ export interface FileRouteTypes {
     | '/founder/meetings'
     | '/founder/submit'
     | '/investor/activity'
-    | '/investor/contracting'
     | '/investor/data-room'
     | '/investor/messaging'
     | '/investor/notes'
@@ -646,7 +624,6 @@ export interface FileRouteTypes {
     | '/auth/magic-link'
     | '/admin/agents'
     | '/admin/analytics'
-    | '/admin/contracting'
     | '/admin/conversations'
     | '/admin/data-room'
     | '/admin/integrations'
@@ -662,7 +639,6 @@ export interface FileRouteTypes {
     | '/founder/meetings'
     | '/founder/submit'
     | '/investor/activity'
-    | '/investor/contracting'
     | '/investor/data-room'
     | '/investor/messaging'
     | '/investor/notes'
@@ -708,7 +684,6 @@ export interface FileRouteTypes {
     | '/auth/magic-link'
     | '/_protected/admin/agents'
     | '/_protected/admin/analytics'
-    | '/_protected/admin/contracting'
     | '/_protected/admin/conversations'
     | '/_protected/admin/data-room'
     | '/_protected/admin/integrations'
@@ -724,7 +699,6 @@ export interface FileRouteTypes {
     | '/_protected/founder/meetings'
     | '/_protected/founder/submit'
     | '/_protected/investor/activity'
-    | '/_protected/investor/contracting'
     | '/_protected/investor/data-room'
     | '/_protected/investor/messaging'
     | '/_protected/investor/notes'
@@ -1008,13 +982,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedInvestorDataRoomRouteImport
       parentRoute: typeof ProtectedInvestorRoute
     }
-    '/_protected/investor/contracting': {
-      id: '/_protected/investor/contracting'
-      path: '/contracting'
-      fullPath: '/investor/contracting'
-      preLoaderRoute: typeof ProtectedInvestorContractingRouteImport
-      parentRoute: typeof ProtectedInvestorRoute
-    }
     '/_protected/investor/activity': {
       id: '/_protected/investor/activity'
       path: '/activity'
@@ -1120,13 +1087,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedAdminConversationsRouteImport
       parentRoute: typeof ProtectedAdminRoute
     }
-    '/_protected/admin/contracting': {
-      id: '/_protected/admin/contracting'
-      path: '/contracting'
-      fullPath: '/admin/contracting'
-      preLoaderRoute: typeof ProtectedAdminContractingRouteImport
-      parentRoute: typeof ProtectedAdminRoute
-    }
     '/_protected/admin/analytics': {
       id: '/_protected/admin/analytics'
       path: '/analytics'
@@ -1196,7 +1156,6 @@ declare module '@tanstack/react-router' {
 interface ProtectedAdminRouteChildren {
   ProtectedAdminAgentsRoute: typeof ProtectedAdminAgentsRoute
   ProtectedAdminAnalyticsRoute: typeof ProtectedAdminAnalyticsRoute
-  ProtectedAdminContractingRoute: typeof ProtectedAdminContractingRoute
   ProtectedAdminConversationsRoute: typeof ProtectedAdminConversationsRoute
   ProtectedAdminDataRoomRoute: typeof ProtectedAdminDataRoomRoute
   ProtectedAdminIntegrationsRoute: typeof ProtectedAdminIntegrationsRoute
@@ -1215,7 +1174,6 @@ interface ProtectedAdminRouteChildren {
 const ProtectedAdminRouteChildren: ProtectedAdminRouteChildren = {
   ProtectedAdminAgentsRoute: ProtectedAdminAgentsRoute,
   ProtectedAdminAnalyticsRoute: ProtectedAdminAnalyticsRoute,
-  ProtectedAdminContractingRoute: ProtectedAdminContractingRoute,
   ProtectedAdminConversationsRoute: ProtectedAdminConversationsRoute,
   ProtectedAdminDataRoomRoute: ProtectedAdminDataRoomRoute,
   ProtectedAdminIntegrationsRoute: ProtectedAdminIntegrationsRoute,
@@ -1258,7 +1216,6 @@ const ProtectedFounderRouteWithChildren =
 
 interface ProtectedInvestorRouteChildren {
   ProtectedInvestorActivityRoute: typeof ProtectedInvestorActivityRoute
-  ProtectedInvestorContractingRoute: typeof ProtectedInvestorContractingRoute
   ProtectedInvestorDataRoomRoute: typeof ProtectedInvestorDataRoomRoute
   ProtectedInvestorMessagingRoute: typeof ProtectedInvestorMessagingRoute
   ProtectedInvestorNotesRoute: typeof ProtectedInvestorNotesRoute
@@ -1276,7 +1233,6 @@ interface ProtectedInvestorRouteChildren {
 
 const ProtectedInvestorRouteChildren: ProtectedInvestorRouteChildren = {
   ProtectedInvestorActivityRoute: ProtectedInvestorActivityRoute,
-  ProtectedInvestorContractingRoute: ProtectedInvestorContractingRoute,
   ProtectedInvestorDataRoomRoute: ProtectedInvestorDataRoomRoute,
   ProtectedInvestorMessagingRoute: ProtectedInvestorMessagingRoute,
   ProtectedInvestorNotesRoute: ProtectedInvestorNotesRoute,

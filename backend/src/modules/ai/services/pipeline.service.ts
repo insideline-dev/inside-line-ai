@@ -1015,7 +1015,7 @@ export class PipelineService {
     startupId: string,
     phase: PipelinePhase,
     options?: { skipDownstream?: boolean },
-  ): Promise<void> {
+  ): Promise<string> {
     const rerunStartedAt = Date.now();
     const state = await this.getPipelineStateWithSnapshotFallback(startupId);
     if (!state) {
@@ -1082,6 +1082,7 @@ export class PipelineService {
     this.logger.log(
       `[Pipeline] Manual rerun prepared | Startup: ${startupId} | Phase: ${phase} | Run: ${newRunId} | Total setup duration: ${Date.now() - rerunStartedAt}ms`,
     );
+    return newRunId;
   }
 
   async retryAgent(startupId: string, request: RetryAgentRequest): Promise<void> {

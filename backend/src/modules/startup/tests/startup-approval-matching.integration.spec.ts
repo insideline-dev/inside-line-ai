@@ -12,6 +12,7 @@ import { PipelineFeedbackService } from "../../ai/services/pipeline-feedback.ser
 import { StartupMatchingPipelineService } from "../../ai/services/startup-matching-pipeline.service";
 import { DataRoomService } from "../data-room.service";
 import { DealEventService } from "../deal-event.service";
+import { DataGateService } from "../data-gate.service";
 import { EnrichmentService } from "../../ai/services/enrichment.service";
 import { PipelineTemplateService } from "../../ai/services/pipeline-template.service";
 import { NotificationService } from "../../../notification/notification.service";
@@ -421,6 +422,9 @@ describe("Startup lifecycle integration: submit -> pipeline complete -> approve 
       {
         record: jest.fn().mockResolvedValue({ id: "event-1" }),
       } as unknown as DealEventService,
+      {
+        rerunDueDiligence: jest.fn().mockResolvedValue("dd-run-id"),
+      } as unknown as DataGateService,
     );
 
     const phaseTransition = {

@@ -30,6 +30,7 @@ import { screeningDecision } from "../ai/entities/screening-decision.schema";
 import { PipelineFeedbackService } from "../ai/services/pipeline-feedback.service";
 import { StartupMatchingPipelineService } from "../ai/services/startup-matching-pipeline.service";
 import { DataRoomService } from "./data-room.service";
+import { DataGateService } from "./data-gate.service";
 import { DealEventService } from "./deal-event.service";
 import { PipelineStateService } from "../ai/services/pipeline-state.service";
 import {
@@ -43,6 +44,7 @@ import {
   StartupSourcePath,
   StartupStatus,
   StartupStage,
+  PrivateInvestorPipelineStatus,
 } from "./entities/startup.schema";
 import { agentConversation } from "../agent/entities/agent.schema";
 import { investorInboxSubmission } from "../integrations/agentmail/entities/investor-inbox-submission.schema";
@@ -248,6 +250,7 @@ export class StartupService {
     private startupMatching: StartupMatchingPipelineService,
     private dataRoomService: DataRoomService,
     private dealEvents: DealEventService,
+    private dataGate: DataGateService,
     @Optional() private pipelineState?: PipelineStateService,
     @Optional() private fundingEnrichmentService?: FundingEnrichmentService,
   ) {}
@@ -818,8 +821,36 @@ export class StartupService {
 
     let jobId: string;
     if (this.aiConfig.isPipelineEnabled()) {
-      await this.aiPipeline.prepareFreshAnalysis(id);
-      jobId = await this.aiPipeline.startPipeline(id, adminId);
+      // A deal already in Due Diligence (it cleared the screening gate) must NOT
+      // be re-screened on re-evaluate. Reuse the Deal Screening outputs and
+      // re-run research → evaluation → synthesis only, mirroring the same
+      // reuse-vs-re-extract decision the data gate makes. Note: this skips
+      // prepareFreshAnalysis on purpose — that wipes the evaluation row and
+      // extraction cache, which would force a full re-screen.
+      const isDueDiligence =
+        Boolean(found.dataGateStatus) ||
+        found.privateInvestorPipelineStatus ===
+          PrivateInvestorPipelineStatus.REVIEWING ||
+        found.privateInvestorPipelineStatus ===
+          PrivateInvestorPipelineStatus.ENGAGED ||
+        found.privateInvestorPipelineStatus ===
+          PrivateInvestorPipelineStatus.CLOSED;
+
+      if (isDueDiligence) {
+        // rerunDueDiligence already falls back to a full fresh run when no
+        // reusable pipeline state/snapshot survives (nothing to reuse), so a
+        // null result here means the run genuinely failed to start.
+        const runId = await this.dataGate.rerunDueDiligence(id, adminId);
+        if (!runId) {
+          throw new BadRequestException(
+            "Could not start Due Diligence re-evaluation — no run was queued. Check the pipeline logs.",
+          );
+        }
+        jobId = runId;
+      } else {
+        await this.aiPipeline.prepareFreshAnalysis(id);
+        jobId = await this.aiPipeline.startPipeline(id, adminId);
+      }
     } else {
       await this.drizzle.db.transaction(async (tx) => {
         await tx

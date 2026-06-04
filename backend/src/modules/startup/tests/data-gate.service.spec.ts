@@ -362,7 +362,7 @@ describe("DataGateService.skip / complete — #8 compare-and-swap guard", () => 
   });
 });
 
-describe("DataGateService.triggerDdPipeline — #10 re-extraction race", () => {
+describe("DataGateService.rerunDueDiligence — #10 re-extraction race", () => {
   beforeEach(() => jest.clearAllMocks());
 
   const advanceScenario = (extra: Partial<Scenario>): Scenario => ({

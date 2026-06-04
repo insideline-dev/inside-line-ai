@@ -11,7 +11,13 @@ import { DrizzleService } from "../../../database";
 import { QueueService } from "../../../queue";
 import { StorageService } from "../../../storage";
 import { UserRole } from "../../../auth/entities/auth.schema";
-import { startup, StartupStatus, StartupStage } from "../entities/startup.schema";
+import {
+  startup,
+  StartupStatus,
+  StartupStage,
+  DataGateStatus,
+  PrivateInvestorPipelineStatus,
+} from "../entities/startup.schema";
 import { AiConfigService } from "../../ai/services/ai-config.service";
 import { PipelineService } from "../../ai/services/pipeline.service";
 import { PipelineFeedbackService } from "../../ai/services/pipeline-feedback.service";
@@ -35,6 +41,7 @@ describe("StartupService", () => {
   let pipelineService: jest.Mocked<PipelineService>;
   let pipelineFeedbackService: jest.Mocked<PipelineFeedbackService>;
   let startupMatchingService: jest.Mocked<StartupMatchingPipelineService>;
+  let dataGateService: { rerunDueDiligence: jest.Mock };
 
   const createMockDb = () => ({
     select: jest.fn().mockReturnThis(),
@@ -150,6 +157,10 @@ describe("StartupService", () => {
       }),
     } as unknown as jest.Mocked<StartupMatchingPipelineService>;
 
+    dataGateService = {
+      rerunDueDiligence: jest.fn().mockResolvedValue("dd-run-id"),
+    };
+
     service = new StartupService(
       drizzleService,
       queueService,
@@ -167,6 +178,8 @@ describe("StartupService", () => {
         record: jest.fn().mockResolvedValue(null),
         forStartup: jest.fn().mockResolvedValue([]),
       } as never,
+      // DataGateService — DD re-evaluate reuses screening via rerunDueDiligence.
+      dataGateService as never,
     );
   });
 
@@ -869,6 +882,60 @@ describe("StartupService", () => {
         }),
       );
       expect(queueService.addJob).toHaveBeenCalled();
+    });
+
+    it("reuses Deal Screening for a DD deal (dataGateStatus) instead of re-screening", async () => {
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          ...mockStartup,
+          status: StartupStatus.ANALYZING,
+          dataGateStatus: DataGateStatus.COMPLETE,
+        },
+      ]);
+
+      const result = await service.reanalyze(mockStartupId, mockUserId);
+
+      expect(result).toEqual({ jobId: "dd-run-id" });
+      expect(dataGateService.rerunDueDiligence).toHaveBeenCalledWith(
+        mockStartupId,
+        mockUserId,
+      );
+      // Must NOT wipe the evaluation / restart the screening flow.
+      expect(pipelineService.prepareFreshAnalysis).not.toHaveBeenCalled();
+      expect(pipelineService.startPipeline).not.toHaveBeenCalled();
+    });
+
+    it("reuses Deal Screening for a DD deal in the private investor pipeline", async () => {
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          ...mockStartup,
+          status: StartupStatus.ANALYZING,
+          privateInvestorPipelineStatus: PrivateInvestorPipelineStatus.REVIEWING,
+        },
+      ]);
+
+      await service.reanalyze(mockStartupId, mockUserId);
+
+      expect(dataGateService.rerunDueDiligence).toHaveBeenCalledWith(
+        mockStartupId,
+        mockUserId,
+      );
+      expect(pipelineService.prepareFreshAnalysis).not.toHaveBeenCalled();
+    });
+
+    it("throws when a DD re-evaluation could not be queued", async () => {
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          ...mockStartup,
+          status: StartupStatus.ANALYZING,
+          dataGateStatus: DataGateStatus.COMPLETE,
+        },
+      ]);
+      dataGateService.rerunDueDiligence.mockResolvedValueOnce(undefined);
+
+      await expect(
+        service.reanalyze(mockStartupId, mockUserId),
+      ).rejects.toThrow(/could not start due diligence/i);
     });
   });
 

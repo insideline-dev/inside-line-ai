@@ -177,11 +177,11 @@ const PHASE_RERUN_META: Record<
   },
   [RetryPhaseDtoPhase.research]: {
     label: "From Research",
-    description: "Reuse extraction/enrichment/scraping, re-run research onward",
+    description: "Reuse Deal Screening, re-run research → evaluation → synthesis",
   },
   [RetryPhaseDtoPhase.screening]: {
     label: "From Screening",
-    description: "Reuse research output, re-run screening onward",
+    description: "Reuse extraction/enrichment/scraping, re-run screening onward",
   },
   [RetryPhaseDtoPhase.evaluation]: {
     label: "From Evaluation",
@@ -198,8 +198,19 @@ const PHASE_RERUN_ORDER: RetryPhaseValue[] = [
   RetryPhaseDtoPhase.extraction,
   RetryPhaseDtoPhase.enrichment,
   RetryPhaseDtoPhase.scraping,
-  RetryPhaseDtoPhase.research,
   RetryPhaseDtoPhase.screening,
+  RetryPhaseDtoPhase.research,
+  RetryPhaseDtoPhase.evaluation,
+  RetryPhaseDtoPhase.synthesis,
+];
+
+// A deal already in Due Diligence has cleared the screening gate. Re-running
+// the Deal Screening phases (classification → … → screening) would needlessly
+// re-screen it, so the DD view only offers the Due Diligence phases — screening
+// outputs are reused. A separate "re-screen from scratch" escape hatch covers
+// the rare case where an operator deliberately wants to rebuild from the deck.
+const DD_RERUN_ORDER: RetryPhaseValue[] = [
+  RetryPhaseDtoPhase.research,
   RetryPhaseDtoPhase.evaluation,
   RetryPhaseDtoPhase.synthesis,
 ];
@@ -792,11 +803,18 @@ function AdminReviewPage() {
                   >
                     <span>Phase Re-run Unavailable</span>
                     <span className="text-xs text-muted-foreground">
-                      No saved pipeline state was found. Use Full Reanalysis (Fresh).
+                      No saved pipeline state was found. Use{" "}
+                      {isDueDiligenceStageDeal
+                        ? "Re-run Due Diligence"
+                        : "Full Reanalysis (Fresh)"}{" "}
+                      below.
                     </span>
                   </DropdownMenuItem>
                 )}
-                {PHASE_RERUN_ORDER.map((phase) => {
+                {(isDueDiligenceStageDeal
+                  ? DD_RERUN_ORDER
+                  : PHASE_RERUN_ORDER
+                ).map((phase) => {
                   const option = PHASE_RERUN_META[phase];
                   return (
                     <DropdownMenuItem
@@ -828,11 +846,36 @@ function AdminReviewPage() {
                   onClick={() => reanalyzeMutation.mutate({ id })}
                   className="flex flex-col items-start gap-0.5 py-2"
                 >
-                  <span>Full Reanalysis (Fresh)</span>
+                  <span>
+                    {isDueDiligenceStageDeal
+                      ? "Re-run Due Diligence"
+                      : "Full Reanalysis (Fresh)"}
+                  </span>
                   <span className="text-xs text-muted-foreground">
-                    Start a new full analysis run without relying on existing pipeline state
+                    {isDueDiligenceStageDeal
+                      ? "Reuse the Deal Screening results; re-run research → evaluation → synthesis. Re-extracts only if new documents were added."
+                      : "Start a new full analysis run without relying on existing pipeline state"}
                   </span>
                 </DropdownMenuItem>
+                {isDueDiligenceStageDeal && (
+                  <DropdownMenuItem
+                    disabled={
+                      !canRerunFromPhase ||
+                      retryPhaseMutation.isPending ||
+                      reanalyzeMutation.isPending
+                    }
+                    onClick={() =>
+                      handlePhaseRerun(RetryPhaseDtoPhase.classification)
+                    }
+                    className="flex flex-col items-start gap-0.5 py-2 text-destructive focus:text-destructive"
+                  >
+                    <span>Re-screen from scratch</span>
+                    <span className="text-xs text-muted-foreground">
+                      Re-runs the full Deal Screening flow (classification →
+                      extraction → screening) from the deck. Rarely needed.
+                    </span>
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
             {isStartupAnalyzingUi && (

@@ -291,7 +291,7 @@ export class DataGateService {
       payload: {},
     });
 
-    await this.triggerDdPipeline(startupId, userId);
+    await this.rerunDueDiligence(startupId, userId);
   }
 
   async complete(startupId: string, userId: string): Promise<void> {
@@ -317,7 +317,7 @@ export class DataGateService {
       payload: {},
     });
 
-    await this.triggerDdPipeline(startupId, userId);
+    await this.rerunDueDiligence(startupId, userId);
   }
 
   private async assertStartupExists(startupId: string): Promise<void> {
@@ -431,7 +431,7 @@ export class DataGateService {
         payload: { trigger: 'auto_advance' },
       });
 
-      await this.triggerDdPipeline(startupId, investorId);
+      await this.rerunDueDiligence(startupId, investorId);
       return { status: 'advanced' };
     }
 
@@ -465,13 +465,28 @@ export class DataGateService {
     return (result?.count ?? 0) > 0;
   }
 
-  private async triggerDdPipeline(
+  /**
+   * (Re)trigger the Due Diligence pipeline for a startup, REUSING the Deal
+   * Screening outputs (classification → … → screening) instead of re-running
+   * them — it runs research → evaluation → synthesis only. The exception is
+   * when new data-room documents were uploaded since the last extraction, in
+   * which case it re-extracts from classification.
+   *
+   * Shared by the data-gate actions (skip / complete / auto-advance) and the
+   * admin "Re-evaluate" on a DD-stage deal, so both honour the same
+   * reuse-vs-re-extract decision and a DD deal is never needlessly re-screened.
+   *
+   * Returns the new pipeline run id (or the fresh-run job id on the
+   * state-missing fallback); undefined if the pipeline service is unavailable
+   * or the run could not be started.
+   */
+  async rerunDueDiligence(
     startupId: string,
     userId: string,
-  ): Promise<void> {
+  ): Promise<string | undefined> {
     if (!this.pipelineCoreService) {
       this.logger.warn(`[DataGate] PipelineService not available — cannot start DD pipeline for ${startupId}`);
-      return;
+      return undefined;
     }
 
     const needsReExtraction = await this.hasNewDocsSinceExtraction(startupId);
@@ -484,7 +499,7 @@ export class DataGateService {
     );
 
     try {
-      await this.pipelineCoreService.rerunFromPhase(startupId, startPhase);
+      return await this.pipelineCoreService.rerunFromPhase(startupId, startPhase);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       const isStateMissing = /not found/i.test(message);
@@ -492,17 +507,18 @@ export class DataGateService {
         this.logger.error(
           `[DataGate] Failed to start DD pipeline for ${startupId}: ${message}`,
         );
-        return;
+        return undefined;
       }
 
       try {
-        await this.pipelineCoreService.startPipeline(startupId, userId);
+        return await this.pipelineCoreService.startPipeline(startupId, userId);
       } catch (fallbackErr) {
         const fallbackMessage =
           fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
         this.logger.error(
           `[DataGate] Failed to start full pipeline for ${startupId}: ${fallbackMessage}`,
         );
+        return undefined;
       }
     }
   }

@@ -186,6 +186,12 @@ export abstract class BaseLensAgent<TOutput extends LensOutput> {
       // reasoning turn that never lands the JSON). Retry once before giving up
       // and surfacing the synthetic fallback. Schema/validation errors are not
       // retried here — they won't self-heal.
+      //
+      // The retry DROPS web-search tools: a slow web-search lens (~2m/pass)
+      // cannot afford a second full search within the phase budget, and the
+      // retry routes through the fast, reliable `responses.parse` path instead.
+      // By the retry we only need *some* valid structured output — the lens
+      // already has its scoped deck / enrichment / scraping context.
       let output: TOutput | undefined;
       let usage: Awaited<
         ReturnType<typeof this.modelExec.generateText<TOutput>>
@@ -197,7 +203,7 @@ export abstract class BaseLensAgent<TOutput extends LensOutput> {
           prompt: userPrompt,
           schema: this.outputSchema,
           temperature: 0.2,
-          ...toolOptions,
+          ...(attempt === 1 ? toolOptions : {}),
         });
         if (result.output) {
           output = result.output;

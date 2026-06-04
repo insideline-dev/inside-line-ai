@@ -58,6 +58,8 @@ function evidence(
 async function buildLens(opts: {
   generateText: jest.Mock;
   resolveModel?: jest.Mock;
+  // Inject web-search tools into resolveForPrompt to exercise the tool path.
+  tools?: Record<string, unknown>;
 }) {
   const moduleRef = await Test.createTestingModule({
     providers: [
@@ -74,8 +76,8 @@ async function buildLens(opts: {
             resolvedConfig: { provider: "openai", modelName: "gpt-test" },
             generateTextOptions: {
               model: {},
-              tools: undefined,
-              toolChoice: undefined,
+              tools: opts.tools,
+              toolChoice: opts.tools ? "auto" : undefined,
               providerOptions: undefined,
             },
             searchEnforcement: {
@@ -245,5 +247,36 @@ describe("MarketLens", () => {
     expect(result.usedFallback).toBe(false);
     expect(result.output.score).toBe(82);
     expect(result.output.signal).toBe("advance");
+  });
+
+  it("drops web-search tools on the retry to stay within the phase budget", async () => {
+    const generateText = jest
+      .fn()
+      .mockResolvedValueOnce({ output: undefined })
+      .mockResolvedValueOnce({
+        output: {
+          score: 55,
+          signal: "review",
+          rationale: "Recovered via fast tool-less path.",
+          evidence: [],
+        },
+      });
+
+    const lens = await buildLens({
+      generateText,
+      // First attempt is wired with web-search tools.
+      tools: { web_search: {}, brave_search: {} },
+    });
+    const result = await lens.run(CTX);
+
+    expect(generateText).toHaveBeenCalledTimes(2);
+    // Attempt 1 carries the web-search tools…
+    expect(generateText.mock.calls[0][0].tools).toBeDefined();
+    expect(generateText.mock.calls[0][0].toolChoice).toBe("auto");
+    // …the retry drops them so it takes the fast `responses.parse` path.
+    expect(generateText.mock.calls[1][0].tools).toBeUndefined();
+    expect(generateText.mock.calls[1][0].toolChoice).toBeUndefined();
+    expect(result.usedFallback).toBe(false);
+    expect(result.output.score).toBe(55);
   });
 });

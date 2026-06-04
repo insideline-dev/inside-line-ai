@@ -444,4 +444,67 @@ describe("DataGateService.triggerDdPipeline — #10 re-extraction race", () => {
       PipelinePhase.CLASSIFICATION,
     );
   });
+
+  // The investor-facing actions (Skip to Analysis / Request via Clara → complete)
+  // must honour the same reuse-vs-re-extract decision, not just the auto-advance
+  // path. These assert the user's exact scenario through the real entry points.
+  it("complete() re-extracts (CLASSIFICATION) when a new data-room doc was uploaded", async () => {
+    const { db } = makeDb({
+      startupRow: {
+        userId: SUBMITTER,
+        dataGateStatus: DataGateStatus.PENDING,
+        lastExtractionAt: new Date("2026-06-01T00:00:00Z"),
+      },
+      newDocsCount: 1,
+      updateReturns: [{ id: STARTUP_ID }],
+    });
+    const { svc, pipeline } = buildService(db);
+
+    await svc.complete(STARTUP_ID, ACTING_INVESTOR);
+
+    expect(pipeline.rerunFromPhase).toHaveBeenCalledWith(
+      STARTUP_ID,
+      PipelinePhase.CLASSIFICATION,
+    );
+  });
+
+  it("complete() reuses DS data (RESEARCH) when nothing changed since extraction", async () => {
+    const { db } = makeDb({
+      startupRow: {
+        userId: SUBMITTER,
+        dataGateStatus: DataGateStatus.PENDING,
+        lastExtractionAt: new Date("2026-06-01T00:00:00Z"),
+      },
+      newDocsCount: 0,
+      updateReturns: [{ id: STARTUP_ID }],
+    });
+    const { svc, pipeline } = buildService(db);
+
+    await svc.complete(STARTUP_ID, ACTING_INVESTOR);
+
+    expect(pipeline.rerunFromPhase).toHaveBeenCalledWith(
+      STARTUP_ID,
+      PipelinePhase.RESEARCH,
+    );
+  });
+
+  it("skip() reuses DS data (RESEARCH) when nothing changed since extraction", async () => {
+    const { db } = makeDb({
+      startupRow: {
+        userId: SUBMITTER,
+        dataGateStatus: DataGateStatus.PENDING,
+        lastExtractionAt: new Date("2026-06-01T00:00:00Z"),
+      },
+      newDocsCount: 0,
+      updateReturns: [{ id: STARTUP_ID }],
+    });
+    const { svc, pipeline } = buildService(db);
+
+    await svc.skip(STARTUP_ID, ACTING_INVESTOR);
+
+    expect(pipeline.rerunFromPhase).toHaveBeenCalledWith(
+      STARTUP_ID,
+      PipelinePhase.RESEARCH,
+    );
+  });
 });

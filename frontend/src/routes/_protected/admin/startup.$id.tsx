@@ -204,11 +204,17 @@ const PHASE_RERUN_ORDER: RetryPhaseValue[] = [
   RetryPhaseDtoPhase.synthesis,
 ];
 
-// Phases shown in the DD "Pipeline Live" panel. Deal Screening owns
-// classification → extraction → enrichment/gap-fill → scraping → screening
-// on /admin/screening/:id; the DD page must not render those phases as a DD
-// pipeline.
+// Phases shown in the DD "Pipeline Live" panel. The Due Diligence run reuses
+// the Deal Screening outputs (classification → extraction → enrichment →
+// scraping → screening) and then runs research → evaluation → synthesis. We
+// surface ALL phases here so the DD live view mirrors the DS one — the reused
+// upstream phases render as completed (or re-run when new docs were uploaded).
 const DD_PHASES = [
+  "classification",
+  "extraction",
+  "enrichment",
+  "scraping",
+  "screening",
   "research",
   "evaluation",
   "synthesis",

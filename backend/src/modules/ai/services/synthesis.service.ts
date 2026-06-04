@@ -5,6 +5,7 @@ import { DrizzleService } from "../../../database";
 import { startup } from "../../startup/entities";
 import { startupEvaluation } from "../../analysis/entities";
 import { PipelineStateService } from "./pipeline-state.service";
+import { PipelineStateSnapshotService } from "./pipeline-state-snapshot.service";
 import { ModelPurpose, PipelinePhase } from "../interfaces/pipeline.interface";
 import { EVALUATION_AGENT_KEYS, MEMO_SYNTHESIS_AGENT_KEY, REPORT_SYNTHESIS_AGENT_KEY } from "../constants/agent-keys";
 import type {
@@ -12,6 +13,7 @@ import type {
   ExtractionResult,
   ResearchResult,
   ScrapingResult,
+  ScreeningResult,
   SynthesisResult,
 } from "../interfaces/phase-results.interface";
 import { ExitScenarioSchema } from "../schemas/evaluations/exit-potential.schema";
@@ -73,6 +75,7 @@ export class SynthesisService {
   constructor(
     private drizzle: DrizzleService,
     private pipelineState: PipelineStateService,
+    private pipelineStateSnapshots: PipelineStateSnapshotService,
     private memoSynthesisAgent: MemoSynthesisAgent,
     private reportSynthesisAgent: ReportSynthesisAgent,
     private scoreComputation: ScoreComputationService,
@@ -229,7 +232,7 @@ export class SynthesisService {
   }
 
   private async loadPhaseResults(startupId: string) {
-    const [extraction, research, scraping, evaluation, screening] = await Promise.all([
+    let [extraction, research, scraping, evaluation, screening] = await Promise.all([
       this.pipelineState.getPhaseResult(startupId, PipelinePhase.EXTRACTION),
       this.pipelineState.getPhaseResult(startupId, PipelinePhase.RESEARCH),
       this.pipelineState.getPhaseResult(startupId, PipelinePhase.SCRAPING),
@@ -237,19 +240,150 @@ export class SynthesisService {
       this.pipelineState.getPhaseResult(startupId, PipelinePhase.SCREENING),
     ]);
 
-    if (!extraction || !scraping || !research || !evaluation) {
+    // Seatbelt: the live Redis/in-memory pipeline state can lose a phase result
+    // (TTL expiry, in-memory fallback after a restart, or a lost-update on the
+    // state blob). Rather than fail the whole DD run, recover the missing inputs
+    // from durable stores before giving up. The DD-reuse path (advance from the
+    // data gate) is the common case where upstream DS results live only in the
+    // reusable snapshot.
+    if (!extraction || !scraping || !research || !screening) {
+      const snapshotResults = await this.recoverUpstreamFromSnapshot(startupId);
+      if (snapshotResults) {
+        extraction ??= snapshotResults.extraction ?? null;
+        scraping ??= snapshotResults.scraping ?? null;
+        research ??= snapshotResults.research ?? null;
+        screening ??= snapshotResults.screening ?? null;
+      }
+    }
+
+    if (!evaluation) {
+      evaluation = await this.recoverEvaluationFromDb(startupId);
+      if (evaluation) {
+        this.logger.warn(
+          `[Synthesis] Recovered evaluation result from startup_evaluations DB for ${startupId} (live pipeline state was missing it)`,
+        );
+      }
+    }
+
+    const missing: string[] = [];
+    if (!extraction) missing.push("extraction");
+    if (!scraping) missing.push("scraping");
+    if (!research) missing.push("research");
+    if (!evaluation) missing.push("evaluation");
+    if (missing.length > 0) {
       throw new Error(
-        "Synthesis requires extraction, research, and evaluation results",
+        `Synthesis is missing required input(s) and could not recover them: ${missing.join(", ")}`,
       );
     }
 
+    // Validated above — every required input is present at this point.
     return {
-      extraction,
-      research,
-      scraping,
-      evaluation,
+      extraction: extraction as ExtractionResult,
+      research: research as ResearchResult,
+      scraping: scraping as ScrapingResult,
+      evaluation: evaluation as EvaluationResult,
       screening,
     };
+  }
+
+  /**
+   * Pulls upstream phase results (extraction/scraping/research/screening) from
+   * the latest reusable DB snapshot. Used when the live pipeline state has lost
+   * them — typically the DS→DD reuse path where the snapshot holds the screening
+   * run's outputs.
+   */
+  private async recoverUpstreamFromSnapshot(startupId: string): Promise<{
+    extraction: ExtractionResult | null;
+    scraping: ScrapingResult | null;
+    research: ResearchResult | null;
+    screening: ScreeningResult | null;
+  } | null> {
+    try {
+      const snapshot = (await this.pipelineStateSnapshots.getLatestReusableSnapshot(
+        startupId,
+      )) as { results?: Record<string, unknown> } | null;
+      const results = snapshot?.results;
+      if (!results) return null;
+      return {
+        extraction: (results[PipelinePhase.EXTRACTION] as ExtractionResult) ?? null,
+        scraping: (results[PipelinePhase.SCRAPING] as ScrapingResult) ?? null,
+        research: (results[PipelinePhase.RESEARCH] as ResearchResult) ?? null,
+        screening: (results[PipelinePhase.SCREENING] as ScreeningResult) ?? null,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `[Synthesis] Failed to recover upstream results from snapshot for ${startupId}: ${message}`,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Reconstructs the evaluation result from the durable `startup_evaluations`
+   * row. The evaluation phase persists every section (with its score) to that
+   * table BEFORE synthesis is queued (see persistEvaluationSectionData in
+   * pipeline.service), so it is a reliable fallback when the in-memory state
+   * loses the result. The `summary` is not persisted, so it is reconstructed
+   * from the recovered sections. Returns null if any section is missing/invalid.
+   */
+  private async recoverEvaluationFromDb(
+    startupId: string,
+  ): Promise<EvaluationResult | null> {
+    try {
+      const [row] = await this.drizzle.db
+        .select()
+        .from(startupEvaluation)
+        .where(eq(startupEvaluation.startupId, startupId))
+        .limit(1);
+      if (!row) return null;
+
+      const sections: Record<keyof Omit<EvaluationResult, "summary">, unknown> = {
+        team: row.teamData,
+        market: row.marketData,
+        product: row.productData,
+        traction: row.tractionData,
+        businessModel: row.businessModelData,
+        gtm: row.gtmData,
+        financials: row.financialsData,
+        competitiveAdvantage: row.competitiveAdvantageData,
+        legal: row.legalData,
+        dealTerms: row.dealTermsData,
+        exitPotential: row.exitPotentialData,
+      };
+
+      // Every section must be present and carry a numeric score, otherwise the
+      // recovered evaluation is not safe to score against.
+      for (const [key, value] of Object.entries(sections)) {
+        if (
+          !value ||
+          typeof value !== "object" ||
+          typeof (value as { score?: unknown }).score !== "number"
+        ) {
+          this.logger.warn(
+            `[Synthesis] Cannot recover evaluation from DB for ${startupId}: section "${key}" missing or has no numeric score`,
+          );
+          return null;
+        }
+      }
+
+      const summary: EvaluationResult["summary"] = {
+        completedAgents: EVALUATION_AGENT_KEYS.length,
+        failedAgents: 0,
+        minimumRequired: EVALUATION_AGENT_KEYS.length,
+        failedKeys: [],
+        errors: [],
+        degraded: false,
+      };
+
+      return { ...(sections as Omit<EvaluationResult, "summary">), summary } as EvaluationResult;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `[Synthesis] Failed to recover evaluation from DB for ${startupId}: ${message}`,
+      );
+      return null;
+    }
   }
 
   private computeSectionScores(evaluation: EvaluationResult): SectionScores {

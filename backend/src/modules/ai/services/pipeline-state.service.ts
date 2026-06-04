@@ -34,6 +34,7 @@ const PipelineStateSchema = z.object({
   userId: z.string(),
   status: z.nativeEnum(PipelineStatus),
   quality: z.enum(["standard", "degraded"]),
+  skipScreening: z.boolean().optional().default(false),
   currentPhase: z.nativeEnum(PipelinePhase),
   phases: z.record(z.nativeEnum(PipelinePhase), z.object({
     status: z.nativeEnum(PhaseStatus),
@@ -367,6 +368,18 @@ export class PipelineStateService implements OnModuleDestroy {
     await this.withStateMutationLock(async () => {
       const current = await this.requireState(startupId);
       current.quality = quality;
+      current.updatedAt = new Date().toISOString();
+      await this.persist(current);
+    });
+  }
+
+  async setSkipScreening(
+    startupId: string,
+    skipScreening: boolean,
+  ): Promise<void> {
+    await this.withStateMutationLock(async () => {
+      const current = await this.requireState(startupId);
+      current.skipScreening = skipScreening;
       current.updatedAt = new Date().toISOString();
       await this.persist(current);
     });

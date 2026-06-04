@@ -140,6 +140,25 @@ describe("PipelineStateService", () => {
     expect(state?.telemetry.completedAt).toBeDefined();
   });
 
+  it("defaults skipScreening to false for state that never set it", async () => {
+    await service.init("startup-skip-default", "user", "run");
+
+    const state = await service.get("startup-skip-default");
+    expect(state?.skipScreening).toBe(false);
+  });
+
+  it("persists skipScreening across a state round-trip (schema does not strip it)", async () => {
+    await service.init("startup-skip", "user", "run");
+    await service.setSkipScreening("startup-skip", true);
+    // A later, unrelated mutation re-reads (Zod parse) and re-persists; the flag
+    // must survive — this is the exact round-trip that would silently strip an
+    // unschematized field.
+    await service.setStatus("startup-skip", PipelineStatus.RUNNING);
+
+    const state = await service.get("startup-skip");
+    expect(state?.skipScreening).toBe(true);
+  });
+
   it("state expires after TTL and returns null", async () => {
     const shortTtlConfig = {
       get: jest.fn((key: string, fallback?: unknown) => {

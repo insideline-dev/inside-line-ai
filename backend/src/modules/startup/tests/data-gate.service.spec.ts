@@ -402,6 +402,7 @@ describe("DataGateService.rerunDueDiligence — #10 re-extraction race", () => {
     expect(pipeline.rerunFromPhase).toHaveBeenCalledWith(
       STARTUP_ID,
       PipelinePhase.CLASSIFICATION,
+      { skipScreening: true },
     );
   });
 
@@ -424,6 +425,7 @@ describe("DataGateService.rerunDueDiligence — #10 re-extraction race", () => {
     expect(pipeline.rerunFromPhase).toHaveBeenCalledWith(
       STARTUP_ID,
       PipelinePhase.RESEARCH,
+      { skipScreening: true },
     );
   });
 
@@ -446,6 +448,7 @@ describe("DataGateService.rerunDueDiligence — #10 re-extraction race", () => {
     expect(pipeline.rerunFromPhase).toHaveBeenCalledWith(
       STARTUP_ID,
       PipelinePhase.CLASSIFICATION,
+      { skipScreening: true },
     );
   });
 
@@ -469,6 +472,7 @@ describe("DataGateService.rerunDueDiligence — #10 re-extraction race", () => {
     expect(pipeline.rerunFromPhase).toHaveBeenCalledWith(
       STARTUP_ID,
       PipelinePhase.CLASSIFICATION,
+      { skipScreening: true },
     );
   });
 
@@ -489,6 +493,7 @@ describe("DataGateService.rerunDueDiligence — #10 re-extraction race", () => {
     expect(pipeline.rerunFromPhase).toHaveBeenCalledWith(
       STARTUP_ID,
       PipelinePhase.RESEARCH,
+      { skipScreening: true },
     );
   });
 
@@ -509,6 +514,7 @@ describe("DataGateService.rerunDueDiligence — #10 re-extraction race", () => {
     expect(pipeline.rerunFromPhase).toHaveBeenCalledWith(
       STARTUP_ID,
       PipelinePhase.RESEARCH,
+      { skipScreening: true },
     );
   });
 
@@ -534,6 +540,7 @@ describe("DataGateService.rerunDueDiligence — #10 re-extraction race", () => {
     expect(pipeline.rerunFromPhase).toHaveBeenCalledWith(
       STARTUP_ID,
       PipelinePhase.CLASSIFICATION,
+      { skipScreening: true },
     );
   });
 });

@@ -118,6 +118,12 @@ export interface PipelineState {
   userId: string;
   status: PipelineStatus;
   quality: "standard" | "degraded";
+  /**
+   * When true, the SCREENING phase is skipped for this run (the deal already
+   * passed screening into Due Diligence and must not be re-screened). Set per
+   * run in beginManualRun; read in applyTransitions. Defaults to false.
+   */
+  skipScreening?: boolean;
   currentPhase: PipelinePhase;
   phases: Record<PipelinePhase, PhaseResult>;
   results: Partial<{ [K in PipelinePhase]: PhaseResultMap[K] }>;

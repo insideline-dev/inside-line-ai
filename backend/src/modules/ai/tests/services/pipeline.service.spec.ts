@@ -323,6 +323,7 @@ describe("PipelineService", () => {
         }),
       incrementRetryCount: jest.fn().mockResolvedValue(1),
       setQuality: jest.fn().mockResolvedValue(undefined),
+      setSkipScreening: jest.fn().mockResolvedValue(undefined),
       getPhaseResult: jest.fn().mockResolvedValue(null),
     } as unknown as jest.Mocked<PipelineStateService>;
 
@@ -704,6 +705,77 @@ describe("PipelineService", () => {
         startupId: "startup-1",
       }),
       expect.any(Object),
+    );
+  });
+
+  it("skips screening for a skipScreening run and proceeds to research", async () => {
+    stateService.get.mockResolvedValue(createState({ skipScreening: true }));
+    phaseTransition.decideNextPhases
+      .mockReturnValueOnce({
+        queue: [PipelinePhase.SCREENING],
+        blockedByRequiredFailure: false,
+        pipelineComplete: false,
+        degraded: false,
+      })
+      .mockReturnValueOnce({
+        queue: [PipelinePhase.RESEARCH],
+        blockedByRequiredFailure: false,
+        pipelineComplete: false,
+        degraded: false,
+      });
+
+    await service.onPhaseCompleted("startup-1", PipelinePhase.SCRAPING);
+
+    expect(stateService.updatePhase).toHaveBeenCalledWith(
+      "startup-1",
+      PipelinePhase.SCREENING,
+      PhaseStatus.SKIPPED,
+      expect.any(String),
+    );
+    expect(queue.addJob).toHaveBeenCalledWith(
+      "ai-research",
+      expect.objectContaining({ type: "ai_research" }),
+      expect.any(Object),
+    );
+    expect(queue.addJob).not.toHaveBeenCalledWith(
+      "ai-screening",
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it("does not skip screening when the run is not flagged skipScreening", async () => {
+    stateService.get.mockResolvedValue(createState());
+    phaseTransition.decideNextPhases.mockReturnValueOnce({
+      queue: [PipelinePhase.SCREENING],
+      blockedByRequiredFailure: false,
+      pipelineComplete: false,
+      degraded: false,
+    });
+
+    await service.onPhaseCompleted("startup-1", PipelinePhase.SCRAPING);
+
+    // Screening is left in the queue to run normally — the skip branch must not
+    // fire for an un-flagged run (first intake, investor advance, re-screen).
+    expect(stateService.updatePhase).not.toHaveBeenCalledWith(
+      "startup-1",
+      PipelinePhase.SCREENING,
+      PhaseStatus.SKIPPED,
+      expect.any(String),
+    );
+  });
+
+  it("resets a stale skipScreening flag to false on a rerun that does not request a skip", async () => {
+    // The rescreen hatch: a deal carrying skipScreening:true from a prior DD
+    // run must still be re-screenable. beginManualRun overwrites the stale flag
+    // unconditionally, so SCREENING is not silently skipped.
+    stateService.get.mockResolvedValue(createState({ skipScreening: true }));
+
+    await service.rerunFromPhase("startup-1", PipelinePhase.RESEARCH);
+
+    expect(stateService.setSkipScreening).toHaveBeenCalledWith(
+      "startup-1",
+      false,
     );
   });
 

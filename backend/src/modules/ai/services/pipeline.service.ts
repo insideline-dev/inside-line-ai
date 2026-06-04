@@ -1014,7 +1014,7 @@ export class PipelineService {
   async rerunFromPhase(
     startupId: string,
     phase: PipelinePhase,
-    options?: { skipDownstream?: boolean },
+    options?: { skipDownstream?: boolean; skipScreening?: boolean },
   ): Promise<string> {
     const rerunStartedAt = Date.now();
     const state = await this.getPipelineStateWithSnapshotFallback(startupId);
@@ -1031,7 +1031,11 @@ export class PipelineService {
     }
 
     let stepStartedAt = Date.now();
-    const newRunId = await this.beginManualRun(state, phase);
+    const newRunId = await this.beginManualRun(
+      state,
+      phase,
+      options?.skipScreening ?? false,
+    );
     this.logger.debug(
       `[Pipeline] Manual rerun setup | Step: beginManualRun | Startup: ${startupId} | Phase: ${phase} | Run: ${newRunId} | Duration: ${Date.now() - stepStartedAt}ms`,
     );
@@ -2236,11 +2240,42 @@ export class PipelineService {
     }
   }
 
+  private async skipScreeningForDueDiligence(
+    state: PipelineState,
+  ): Promise<void> {
+    const reason = "Already in Due Diligence — screening is not re-run";
+    this.errorRecovery.clearPhaseTimeout(
+      state.startupId,
+      PipelinePhase.SCREENING,
+    );
+    await this.pipelineState.updatePhase(
+      state.startupId,
+      PipelinePhase.SCREENING,
+      PhaseStatus.SKIPPED,
+      reason,
+    );
+    await this.pipelineState.resetRetryCount(
+      state.startupId,
+      PipelinePhase.SCREENING,
+    );
+    await this.progressTracker.updatePhaseProgress({
+      startupId: state.startupId,
+      userId: state.userId,
+      pipelineRunId: state.pipelineRunId,
+      phase: PipelinePhase.SCREENING,
+      status: PhaseStatus.SKIPPED,
+      error: reason,
+    });
+    this.logger.log(
+      `[Pipeline] Skipping screening for ${state.startupId} — deal already in Due Diligence`,
+    );
+  }
+
   private async applyTransitions(
     startupId: string,
     lastError?: string,
   ): Promise<void> {
-    const refreshed = await this.pipelineState.get(startupId);
+    let refreshed = await this.pipelineState.get(startupId);
     if (!refreshed) {
       return;
     }
@@ -2249,7 +2284,25 @@ export class PipelineService {
       refreshed.status !== PipelineStatus.CANCELLED &&
       refreshed.status !== PipelineStatus.FAILED;
 
-    const decision = this.phaseTransition.decideNextPhases(refreshed);
+    let decision = this.phaseTransition.decideNextPhases(refreshed);
+
+    // A deal already advanced to Due Diligence must not be re-screened. When
+    // this run is flagged skipScreening and the transition would queue
+    // SCREENING — only ever after enrichment+scraping are terminal, so the
+    // extraction/scraping data research needs is already produced — mark it
+    // SKIPPED instead and re-decide so research proceeds. Single pass, no
+    // recursion: screening is terminal on the second decision so it can't loop.
+    if (
+      refreshed.skipScreening &&
+      decision.queue.includes(PipelinePhase.SCREENING)
+    ) {
+      await this.skipScreeningForDueDiligence(refreshed);
+      const afterSkip = await this.pipelineState.get(startupId);
+      if (afterSkip) {
+        refreshed = afterSkip;
+        decision = this.phaseTransition.decideNextPhases(afterSkip);
+      }
+    }
 
     this.logger.debug(
       `[Pipeline] Phase transition decision | Startup: ${startupId} | NextPhases: ${decision.queue.join(", ") || "none"} | Degraded: ${decision.degraded} | Complete: ${decision.pipelineComplete}`,
@@ -2806,6 +2859,7 @@ export class PipelineService {
   private async beginManualRun(
     state: PipelineState,
     currentPhase: PipelinePhase,
+    skipScreening = false,
   ): Promise<string> {
     const startedAt = Date.now();
     const nextRunId = randomUUID();
@@ -2838,6 +2892,9 @@ export class PipelineService {
     this.logger.debug(
       `[Pipeline] beginManualRun | Step: setPipelineStatus(state) | Startup: ${state.startupId} | NextRun: ${nextRunId} | Duration: ${Date.now() - stepStartedAt}ms`,
     );
+    // Set unconditionally so a value carried in from a restored snapshot can
+    // never leak into this run — only an explicit skip request flips it on.
+    await this.pipelineState.setSkipScreening(state.startupId, skipScreening);
     stepStartedAt = Date.now();
     await this.createPipelineRunRecord({
       ...state,

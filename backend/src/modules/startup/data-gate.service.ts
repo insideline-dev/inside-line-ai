@@ -512,7 +512,12 @@ export class DataGateService {
     );
 
     try {
-      return await this.pipelineCoreService.rerunFromPhase(startupId, startPhase);
+      // A deal in DD already passed screening — never re-run it. The flag makes
+      // the pipeline skip SCREENING even on the CLASSIFICATION (re-extract)
+      // path, so research runs on rebuilt data without re-screening.
+      return await this.pipelineCoreService.rerunFromPhase(startupId, startPhase, {
+        skipScreening: true,
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       const isStateMissing = /not found/i.test(message);

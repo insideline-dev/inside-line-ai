@@ -16,7 +16,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { CitedText } from "@/components/CitedText";
-import { FitChips } from "@/components/investor/FitChips";
 import { StartupFavicon } from "@/components/investor/StartupFavicon";
 import { ScoreRing } from "@/components/analysis/ScoreRing";
 import { ScreeningPitchDeckViewer } from "@/components/investor/ScreeningPitchDeckViewer";
@@ -411,10 +410,7 @@ export function ScreeningDetailBody({
             Thesis fit — per axis
           </h3>
           {row.fit ? (
-            <>
-              <FitChips fit={row.fit} />
-              <FitTable fit={row.fit} />
-            </>
+            <FitTable fit={row.fit} />
           ) : (
             <p className="text-sm text-muted-foreground">
               Fit assessment pending.

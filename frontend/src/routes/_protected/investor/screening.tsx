@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, Inbox, Loader2 } from "lucide-react";
@@ -248,24 +248,20 @@ function ScreeningPage() {
           <h2 className="text-sm font-medium text-muted-foreground">
             Processing ({processingStartups.length})
           </h2>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="grid max-w-3xl grid-cols-1 gap-3">
             {processingStartups.map((s) => (
               <Card key={s.id} className="border-dashed">
-                <CardContent className="flex items-center gap-4 p-4">
+                <CardContent className="flex items-start gap-4 p-4 sm:items-center">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
                     <span className="text-sm font-semibold text-muted-foreground">
                       {s.name.charAt(0).toUpperCase()}
                     </span>
                   </div>
-                  <div className="min-w-0 flex-1 space-y-1.5">
-                    <div className="flex items-center gap-2">
-                      <Link
-                        to="/investor/startup/$id"
-                        params={{ id: s.id }}
-                        className="text-sm font-semibold hover:underline truncate"
-                      >
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <p className="min-w-0 truncate text-sm font-semibold">
                         {s.name}
-                      </Link>
+                      </p>
                       <Badge variant="outline" className="gap-1 text-[11px] shrink-0">
                         <Loader2 className="h-3 w-3 animate-spin" />
                         Analyzing
@@ -388,4 +384,3 @@ function ScreeningPage() {
     </div>
   );
 }
-

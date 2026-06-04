@@ -1,0 +1,24 @@
+{
+  "name": "DAIVIN",
+  "tagline": "",
+  "website": "https://www.daivin.tech/",
+  "industry": "Diving",
+  "stage": "seed",
+  "fundingTarget": 3000000,
+  "location": "SF, CA",
+  "contactName": "Karim Nassereddine",
+  "contactEmail": "karim.nassereddine@gmail.com",
+  "teamSize": 1,
+  "description": "",
+  "files": [
+    "daivin_deck.pdf"
+  ],
+  "_meta": {
+    "sourceStartupId": "f13d783b-662e-4e37-b4e9-f19ab83e705a",
+    "status": "pending_review",
+    "slug": "daivin",
+    "pitchDeckPath": "70bec25c-fe4c-4367-955a-af4d44431651/transcripts/bYTSITqsumWV.pdf",
+    "pitchDeckUrl": "https://pub-d29207d7fd544252bcd8748f8fa80b88.r2.dev/70bec25c-fe4c-4367-955a-af4d44431651/transcripts/bYTSITqsumWV.pdf",
+    "exportedAt": "2026-06-03T21:17:10.678Z"
+  }
+}

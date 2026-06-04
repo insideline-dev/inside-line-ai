@@ -1,0 +1,24 @@
+{
+  "name": "Reliable robotics",
+  "tagline": "Autonomous Systems for Aviation",
+  "website": "https://reliable.co/",
+  "industry": "artificial_intelligence_other",
+  "stage": "series_d",
+  "fundingTarget": 150000000,
+  "location": "San Francisco, CA",
+  "contactName": "Robert Rose",
+  "contactEmail": null,
+  "teamSize": 1,
+  "description": "More than 70 percent of fatal general aviation accidents in the United States can be prevented with advanced automation systems. We are building technology that will make aviation safer and will save lives.\n\nOur FAA certifiable system enables continuous autopilot engagement through all phases of flight, including auto-taxi, auto-takeoff and auto-landing. This automation will significantly reduce the occurrence of common causes of fatal aviation accidents, such as controlled flight into terrain and loss of control in flight.\n\nAdvanced automation will also fundamentally transform how goods and people move around the planet. Since 2019, more than 300 rural communities have experienced reduced or eliminated air service. Our technologies will improve access to thousands of general aviation airports across the United States, only a fraction of which are served today by major carriers.\n\nStarting with a certification-forward approach, Reliable Robotics first demonstrated fully automated operation of regional cargo aircraft from departure gate to arrival gate and is now working towards commercialization of technologies for Federal Aviation Regulations Part 23 cargo and Part 25 passenger vehicles.",
+  "files": [
+    "reliable-robotics_deck.pdf"
+  ],
+  "_meta": {
+    "sourceStartupId": "6461c895-8760-4858-8c35-78db7dbd26fd",
+    "status": "pending_review",
+    "slug": "reliable-robotics",
+    "pitchDeckPath": null,
+    "pitchDeckUrl": "https://pub-d29207d7fd544252bcd8748f8fa80b88.r2.dev/70bec25c-fe4c-4367-955a-af4d44431651/transcripts/kMsvTUSFLoQS.pdf",
+    "exportedAt": "2026-06-03T21:17:10.678Z"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "name": "LeadBay",
+  "tagline": "",
+  "website": "https://wow.leadbay.ai/",
+  "industry": "saas",
+  "stage": "seed",
+  "fundingTarget": 3000000,
+  "location": "Paris, France",
+  "contactName": "Karim Nassereddine",
+  "contactEmail": "karim.nassereddine@gmail.com",
+  "teamSize": 1,
+  "description": "",
+  "files": [
+    "leadbay_deck.pdf"
+  ],
+  "_meta": {
+    "sourceStartupId": "57fb9193-d7cf-41ca-a933-7c824b78d9b7",
+    "status": "pending_review",
+    "slug": "leadbay",
+    "pitchDeckPath": "70bec25c-fe4c-4367-955a-af4d44431651/transcripts/gDM5giynYvP-.pdf",
+    "pitchDeckUrl": "https://pub-d29207d7fd544252bcd8748f8fa80b88.r2.dev/70bec25c-fe4c-4367-955a-af4d44431651/transcripts/gDM5giynYvP-.pdf",
+    "exportedAt": "2026-06-03T21:17:10.681Z"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "name": "Impulse Space",
+  "tagline": "Mobilizing space",
+  "website": "https://www.impulsespace.com/",
+  "industry": "Space",
+  "stage": "series_d",
+  "fundingTarget": 500000000,
+  "location": "CF, USA",
+  "contactName": "Karim Nassereddine",
+  "contactEmail": "karim.nassereddine@gmail.com",
+  "teamSize": 1,
+  "description": "We're unlocking efficient in-space mobility. Our vehicles move payloads across and between orbits — rapidly, reliably, and affordably — enabling a new era of commercial, civil, and government missions.",
+  "files": [
+    "impulse-space_deck.pdf"
+  ],
+  "_meta": {
+    "sourceStartupId": "8f92544c-f96d-44f4-834d-f8d0896058cb",
+    "status": "pending_review",
+    "slug": "impulse-space",
+    "pitchDeckPath": "70bec25c-fe4c-4367-955a-af4d44431651/transcripts/fLhUnMqzr5mt.pdf",
+    "pitchDeckUrl": "https://pub-d29207d7fd544252bcd8748f8fa80b88.r2.dev/70bec25c-fe4c-4367-955a-af4d44431651/transcripts/fLhUnMqzr5mt.pdf",
+    "exportedAt": "2026-06-03T21:17:10.682Z"
+  }
+}

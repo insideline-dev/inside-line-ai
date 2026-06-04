@@ -1,0 +1,24 @@
+{
+  "name": "Parasail",
+  "tagline": "Fast, cost-efficient AI inference network",
+  "website": "https://parasail.io/",
+  "industry": "cloud_infrastructure",
+  "stage": "series_a",
+  "fundingTarget": 20000000,
+  "location": "NY,USA",
+  "contactName": "test",
+  "contactEmail": "test@gmail.com",
+  "teamSize": 1,
+  "description": "Parasail is a high-performance AI inference platform that delivers fast, scalable, and cost-efficient compute without vendor lock-in.",
+  "files": [
+    "parasail_deck.pdf"
+  ],
+  "_meta": {
+    "sourceStartupId": "dc9bb90e-3064-49c1-81e2-028265bc5b83",
+    "status": "approved",
+    "slug": "parasail",
+    "pitchDeckPath": "80ab277f-62aa-4ed9-bc9f-9a99112d0f2c/transcripts/SCGXFsK0-aEW.pdf",
+    "pitchDeckUrl": "https://pub-d29207d7fd544252bcd8748f8fa80b88.r2.dev/80ab277f-62aa-4ed9-bc9f-9a99112d0f2c/transcripts/SCGXFsK0-aEW.pdf",
+    "exportedAt": "2026-06-03T21:17:10.681Z"
+  }
+}

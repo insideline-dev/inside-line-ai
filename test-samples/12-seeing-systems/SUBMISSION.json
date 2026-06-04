@@ -1,0 +1,24 @@
+{
+  "name": "Seeing Systems",
+  "tagline": "",
+  "website": "https://www.seeing-systems.com/",
+  "industry": "defence",
+  "stage": "seed",
+  "fundingTarget": 4500000,
+  "location": "california",
+  "contactName": "Karim Nassereddine",
+  "contactEmail": "karim.nassereddine@gmail.com",
+  "teamSize": 1,
+  "description": "",
+  "files": [
+    "seeing-systems_deck.pdf"
+  ],
+  "_meta": {
+    "sourceStartupId": "792fd0ea-b15e-48ca-9e2e-a08e8419373f",
+    "status": "pending_review",
+    "slug": "seeing-systems",
+    "pitchDeckPath": "70bec25c-fe4c-4367-955a-af4d44431651/transcripts/yKU_rzHhm_Mq.pdf",
+    "pitchDeckUrl": "https://pub-d29207d7fd544252bcd8748f8fa80b88.r2.dev/70bec25c-fe4c-4367-955a-af4d44431651/transcripts/yKU_rzHhm_Mq.pdf",
+    "exportedAt": "2026-06-03T21:17:10.679Z"
+  }
+}

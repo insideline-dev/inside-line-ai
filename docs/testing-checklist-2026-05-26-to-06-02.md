@@ -17,16 +17,16 @@ by feature area. Check off as you verify. Commit hashes are in `(…)`.
 ## 1. Epic #113 — Data Gates / DD sub-stages / Engaged
 
 ### 1a. Stage rename & DD sub-tabs (#114 · e63ef3d)
-- [ ] Investor sidebar/stage nav: **"Contracting" tab is now labelled "Engaged"** (both investor `contracting.tsx` and admin).
-- [ ] Investor DD page shows three sub-tabs: **Data Gates / Analyzed / Engaged**.
-- [ ] Admin DD page shows the same sub-tabs; **DD header + stats stay visible above the sub-tabs** on every sub-tab.
-- [ ] Switching sub-tabs filters the deal list correctly (no leakage of deals between sub-tabs).
+- [x] Investor sidebar/stage nav: **"Contracting" tab is now labelled "Engaged"** (both investor `contracting.tsx` and admin).
+- [x] Investor DD page shows three sub-tabs: **Data Gates / Analyzed / Engaged**.
+- [x] Admin DD page shows the same sub-tabs; **DD header + stats stay visible above the sub-tabs** on every sub-tab.
+- [x] Switching sub-tabs filters the deal list correctly (no leakage of deals between sub-tabs).
 
 ### 1b. Data Gates gate logic (#115 · 82436de)
-- [ ] Advancing a deal from **Screening** no longer immediately runs research→eval→synthesis — it lands in **DD / Data Gates** with `data_gate_status = pending`.
-- [ ] A `due_diligence.data_gate_entered` deal event is recorded on advance.
+- [x] Advancing a deal from **Screening** no longer immediately runs research→eval→synthesis — it lands in **DD / Data Gates** with `data_gate_status = pending`.
+- [x] A `due_diligence.data_gate_entered` deal event is recorded on advance.
 - [ ] Data Gates card shows the **missing-materials checklist** + open questions.
-- [ ] **Skip** button → DD pipeline starts; deal moves to Analyzed; query invalidates (list updates without manual refresh).
+- [x] **Skip** button → DD pipeline starts; deal moves to Analyzed; query invalidates (list updates without manual refresh).
 - [ ] Per-card polling only runs on the **active** sub-tab (no background polling on hidden tabs).
 
 ### 1c. Auto-advance default (bea6bc7 · 08ce484)
@@ -43,7 +43,7 @@ by feature area. Check off as you verify. Commit hashes are in `(…)`.
 
 ### 1e. Re-extraction on new docs (#117 · c3bdc4d)
 - [ ] After new founder docs arrive, **re-extraction runs** (full re-classify + extract) before the DD pipeline starts.
-- [ ] `lastExtractionAt` is stamped on the startup after the EXTRACTION phase.
+- [ ] `lastExtractionAt` is stamped on the startup when the EXTRACTION phase **starts** (changed from "after" — stamping at the start so docs uploaded mid-run aren't silently skipped; see the re-extraction race fix).
 - [ ] `hasNewDocsSinceExtraction` correctly gates whether re-extraction fires.
 
 ### 1f. Circular-dependency boot fix (053442f · 56c256f)

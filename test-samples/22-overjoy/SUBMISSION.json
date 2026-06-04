@@ -1,0 +1,24 @@
+{
+  "name": "Overjoy",
+  "tagline": "",
+  "website": "https://overjoy.ai/",
+  "industry": "ecommerce_platforms",
+  "stage": "seed",
+  "fundingTarget": 500000,
+  "location": "Sf, CA",
+  "contactName": "Karim Nassereddine",
+  "contactEmail": "karim.nassereddine@gmail.com",
+  "teamSize": 1,
+  "description": "",
+  "files": [
+    "overjoy_deck.pdf"
+  ],
+  "_meta": {
+    "sourceStartupId": "9318e7d2-6bfd-470e-b760-8dc9e95d9330",
+    "status": "pending_review",
+    "slug": "overjoy",
+    "pitchDeckPath": "70bec25c-fe4c-4367-955a-af4d44431651/transcripts/kELP1fWdXbar.pdf",
+    "pitchDeckUrl": "https://pub-d29207d7fd544252bcd8748f8fa80b88.r2.dev/70bec25c-fe4c-4367-955a-af4d44431651/transcripts/kELP1fWdXbar.pdf",
+    "exportedAt": "2026-06-03T21:17:10.681Z"
+  }
+}

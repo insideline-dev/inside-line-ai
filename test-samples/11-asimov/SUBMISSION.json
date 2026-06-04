@@ -1,0 +1,24 @@
+{
+  "name": "Asimov",
+  "tagline": "",
+  "website": "https://tryasimov.ai/",
+  "industry": "artificial_intelligence_other",
+  "stage": "seed",
+  "fundingTarget": 2000000,
+  "location": "India",
+  "contactName": "Karim Nassereddine",
+  "contactEmail": "karim.nassereddine@gmail.com",
+  "teamSize": 1,
+  "description": "",
+  "files": [
+    "asimov_deck.pdf"
+  ],
+  "_meta": {
+    "sourceStartupId": "76470224-135a-4795-ae4c-1643f1a053aa",
+    "status": "pending_review",
+    "slug": "asimov",
+    "pitchDeckPath": "70bec25c-fe4c-4367-955a-af4d44431651/transcripts/A2mZ-gxVAUDQ.pdf",
+    "pitchDeckUrl": "https://pub-d29207d7fd544252bcd8748f8fa80b88.r2.dev/70bec25c-fe4c-4367-955a-af4d44431651/transcripts/A2mZ-gxVAUDQ.pdf",
+    "exportedAt": "2026-06-03T21:17:10.679Z"
+  }
+}

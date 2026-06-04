@@ -1,0 +1,24 @@
+{
+  "name": "Height Labs",
+  "tagline": "",
+  "website": "https://www.heightslabs.com/",
+  "industry": "blockchain_crypto_other",
+  "stage": "series_b",
+  "fundingTarget": 20000000,
+  "location": "NY,USA",
+  "contactName": "Karim Nassereddine",
+  "contactEmail": "karim.nassereddine@gmail.com",
+  "teamSize": 1,
+  "description": "",
+  "files": [
+    "height-labs_deck.pdf"
+  ],
+  "_meta": {
+    "sourceStartupId": "c320b35f-adec-44af-be15-fb1c29747644",
+    "status": "pending_review",
+    "slug": "height-labs",
+    "pitchDeckPath": "70bec25c-fe4c-4367-955a-af4d44431651/transcripts/UMizBhhsYDlb.pdf",
+    "pitchDeckUrl": "https://pub-d29207d7fd544252bcd8748f8fa80b88.r2.dev/70bec25c-fe4c-4367-955a-af4d44431651/transcripts/UMizBhhsYDlb.pdf",
+    "exportedAt": "2026-06-03T21:17:10.679Z"
+  }
+}

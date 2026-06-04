@@ -1,0 +1,24 @@
+{
+  "name": "pasqal",
+  "tagline": "pasqal",
+  "website": "https://www.pasqal.com/",
+  "industry": "quantum",
+  "stage": "series_c",
+  "fundingTarget": 170000000,
+  "location": "SF,CA",
+  "contactName": "karim",
+  "contactEmail": "karim.nassereddine@gmail.com",
+  "teamSize": 1,
+  "description": "Pasqal Solution: Pasqal leverages Neutral Atom technology.\n\n\n\n\n\nScalability: Uses lasers to hold atoms in 3D arrays. Can pack thousands of qubits into a small footprint without complex wiring.\n\n\n\nRoom Temperature Operation: The atoms are cooled, but the system itself operates in standard room-temperature environments, drastically reducing energy costs.\n\n\n\nIndustrial Readiness: Pasqal is the only company delivering commercially ready Neutral Atom QPUs to HPC centers today (e.g., Julich Supercomputing Centre in Germany).",
+  "files": [
+    "pasqal_deck.pdf"
+  ],
+  "_meta": {
+    "sourceStartupId": "4f4830c9-977d-4ffe-9161-f06ba4c4e1ce",
+    "status": "approved",
+    "slug": "pasqal",
+    "pitchDeckPath": "70bec25c-fe4c-4367-955a-af4d44431651/transcripts/Z_7W53xe8798.pdf",
+    "pitchDeckUrl": "https://pub-d29207d7fd544252bcd8748f8fa80b88.r2.dev/70bec25c-fe4c-4367-955a-af4d44431651/transcripts/Z_7W53xe8798.pdf",
+    "exportedAt": "2026-06-03T21:17:10.679Z"
+  }
+}

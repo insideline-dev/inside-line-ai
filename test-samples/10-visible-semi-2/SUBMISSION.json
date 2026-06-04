@@ -1,0 +1,24 @@
+{
+  "name": "Visible Semi 2",
+  "tagline": "",
+  "website": "https://www.visiblsemi.com/",
+  "industry": "semiconductor",
+  "stage": "seed",
+  "fundingTarget": 3000000,
+  "location": "SF, ca",
+  "contactName": "Karim Nassereddine",
+  "contactEmail": "karim.nassereddine@gmail.com",
+  "teamSize": 1,
+  "description": "",
+  "files": [
+    "visible-semi-2_deck.pdf"
+  ],
+  "_meta": {
+    "sourceStartupId": "4f525282-66f7-44c8-8020-01bd2b6eae85",
+    "status": "pending_review",
+    "slug": "visible-semi-2",
+    "pitchDeckPath": "70bec25c-fe4c-4367-955a-af4d44431651/transcripts/bn4vPTFepTSK.pdf",
+    "pitchDeckUrl": "https://pub-d29207d7fd544252bcd8748f8fa80b88.r2.dev/70bec25c-fe4c-4367-955a-af4d44431651/transcripts/bn4vPTFepTSK.pdf",
+    "exportedAt": "2026-06-03T21:17:10.678Z"
+  }
+}

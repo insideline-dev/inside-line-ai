@@ -1,0 +1,24 @@
+{
+  "name": "Ancient Crunch",
+  "tagline": "",
+  "website": "https://ancientcrunch.com/",
+  "industry": "food_beverage_other",
+  "stage": "series_a",
+  "fundingTarget": 20000000,
+  "location": "SF, CA",
+  "contactName": "Karim Nassereddine",
+  "contactEmail": "karim.nassereddine@gmail.com",
+  "teamSize": 1,
+  "description": "",
+  "files": [
+    "ancient-crunch_deck.pdf"
+  ],
+  "_meta": {
+    "sourceStartupId": "a0af31f4-d93b-48f3-8e4d-26c31c964346",
+    "status": "pending_review",
+    "slug": "ancient-crunch",
+    "pitchDeckPath": "70bec25c-fe4c-4367-955a-af4d44431651/transcripts/rv8OC2bw98d0.pdf",
+    "pitchDeckUrl": "https://pub-d29207d7fd544252bcd8748f8fa80b88.r2.dev/70bec25c-fe4c-4367-955a-af4d44431651/transcripts/rv8OC2bw98d0.pdf",
+    "exportedAt": "2026-06-03T21:17:10.680Z"
+  }
+}

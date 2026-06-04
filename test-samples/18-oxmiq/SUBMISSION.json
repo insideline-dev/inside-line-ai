@@ -1,0 +1,24 @@
+{
+  "name": "oxmiq",
+  "tagline": "OXMIQ™ is rearchitecting the GPU full stack from Atoms to Agents to meet the demands of next-generation gaming, graphics and multimodal AI.",
+  "website": "https://oxmiq.ai/",
+  "industry": "semiconductor",
+  "stage": "series_a",
+  "fundingTarget": 30000000,
+  "location": "SF, CA",
+  "contactName": "Karim Nassereddine",
+  "contactEmail": "karim.nassereddine@gmail.com",
+  "teamSize": 1,
+  "description": "OXMIQ™ is rearchitecting the GPU full stack from Atoms to Agents to meet the demands of next-generation gaming, graphics and multimodal AI. The company develops licensable GPU software and hardware IP that balances flexibility and performance by integrating breakthrough technologies—including nano agents in silicon based on RISC-V, near- and in-memory computing, advanced light transport, and other innovations. OXMIQ’s architecture is designed to scale seamlessly from physical AI devices all the way to Data Center scale.",
+  "files": [
+    "oxmiq_deck.pdf"
+  ],
+  "_meta": {
+    "sourceStartupId": "79d4e5de-3d0c-4b25-a911-fc8b65087557",
+    "status": "pending_review",
+    "slug": "oxmiq",
+    "pitchDeckPath": "89359f07-1f24-44b9-95bb-1c4e9fb12dd1/transcripts/o6mFQIb3aTwK.pdf",
+    "pitchDeckUrl": "https://pub-d29207d7fd544252bcd8748f8fa80b88.r2.dev/89359f07-1f24-44b9-95bb-1c4e9fb12dd1/transcripts/o6mFQIb3aTwK.pdf",
+    "exportedAt": "2026-06-03T21:17:10.680Z"
+  }
+}

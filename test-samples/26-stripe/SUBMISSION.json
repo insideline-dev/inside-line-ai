@@ -1,0 +1,22 @@
+{
+  "name": "Stripe",
+  "tagline": "Online payment processing for internet businesses",
+  "website": "https://stripe.com",
+  "industry": "Fintech",
+  "stage": "seed",
+  "fundingTarget": 2000000,
+  "location": "San Francisco, CA",
+  "contactName": null,
+  "contactEmail": null,
+  "teamSize": 2,
+  "description": "Stripe is a technology company that builds economic infrastructure for the internet. Businesses of every size use Stripe's software and APIs to accept payments, send payouts, and manage their businesses online. Stripe's products power payments for online and in-person retailers, subscription businesses, software platforms, and marketplaces.",
+  "files": [],
+  "_meta": {
+    "sourceStartupId": "78b796ab-50fd-4dbf-b82c-83e0ba463b61",
+    "status": "pending_review",
+    "slug": "stripe-n040",
+    "pitchDeckPath": null,
+    "pitchDeckUrl": null,
+    "exportedAt": "2026-06-03T21:17:10.681Z"
+  }
+}

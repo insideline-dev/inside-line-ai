@@ -1,0 +1,24 @@
+{
+  "name": "Visible Semi",
+  "tagline": "the coordination layer of chip design",
+  "website": "https://www.visiblsemi.com/",
+  "industry": "computer_hardware",
+  "stage": "seed",
+  "fundingTarget": 3000000,
+  "location": "SF, USA",
+  "contactName": "Karim Nassereddine",
+  "contactEmail": "karim.nassereddine@gmail.com",
+  "teamSize": 1,
+  "description": "Visibl makes custom ASIC development dramatically faster and cheaper, unlocking custom silicon economics beyond the hyperscalers.",
+  "files": [
+    "visible-semi_deck.pdf"
+  ],
+  "_meta": {
+    "sourceStartupId": "970e3cd3-0f0c-49c6-9d57-446f3a23a1e0",
+    "status": "pending_review",
+    "slug": "visible-semi",
+    "pitchDeckPath": "70bec25c-fe4c-4367-955a-af4d44431651/transcripts/Sf6w4Uv3PNmW.pdf",
+    "pitchDeckUrl": "https://pub-d29207d7fd544252bcd8748f8fa80b88.r2.dev/70bec25c-fe4c-4367-955a-af4d44431651/transcripts/Sf6w4Uv3PNmW.pdf",
+    "exportedAt": "2026-06-03T21:17:10.678Z"
+  }
+}

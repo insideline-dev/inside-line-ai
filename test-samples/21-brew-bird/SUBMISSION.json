@@ -1,0 +1,24 @@
+{
+  "name": "Brew Bird",
+  "tagline": "This Is Coffee, Transformed",
+  "website": "https://brewbird.com/",
+  "industry": "coffee",
+  "stage": "series_a",
+  "fundingTarget": 6000000,
+  "location": "Sf, CA",
+  "contactName": "Karim Nassereddine",
+  "contactEmail": "karim.nassereddine@gmail.com",
+  "teamSize": 1,
+  "description": "BrewBird reinvents B2B coffee. Now offices and hospitality spaces can offer self-serve, whole-bean, specialty coffee — brewed fresh with zero fuss.",
+  "files": [
+    "brew-bird_deck.pdf"
+  ],
+  "_meta": {
+    "sourceStartupId": "d4f50b11-84c4-4800-8c7b-ea92cb3cb622",
+    "status": "approved",
+    "slug": "brew-bird",
+    "pitchDeckPath": "70bec25c-fe4c-4367-955a-af4d44431651/transcripts/Lg_W9h8syfGK.pdf",
+    "pitchDeckUrl": "https://pub-d29207d7fd544252bcd8748f8fa80b88.r2.dev/70bec25c-fe4c-4367-955a-af4d44431651/transcripts/Lg_W9h8syfGK.pdf",
+    "exportedAt": "2026-06-03T21:17:10.680Z"
+  }
+}

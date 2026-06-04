@@ -107,3 +107,6 @@ INVESTIGATION.md
 .claude/YUSUP_PROJECT_MEMORY.md
 .claude/*.xlsx
 .claude/*.json
+
+# Test sample deck PDFs (large binaries / real deal materials) — keep JSON only
+test-samples/**/*.pdf

@@ -1,0 +1,22 @@
+{
+  "name": "Airbnb",
+  "tagline": "Book unique homes and experiences all over the world",
+  "website": "https://airbnb.com",
+  "industry": "Travel & Hospitality",
+  "stage": "seed",
+  "fundingTarget": 600000,
+  "location": "San Francisco, CA",
+  "contactName": null,
+  "contactEmail": null,
+  "teamSize": 3,
+  "description": "Airbnb is an online marketplace for lodging, primarily homestays for vacation rentals, and tourism activities. The platform allows hosts to list their properties for short-term rental and enables guests to search and book unique accommodations worldwide. Founded in 2008, Airbnb disrupted the traditional hospitality industry by creating a peer-to-peer marketplace that connects travelers with local hosts.",
+  "files": [],
+  "_meta": {
+    "sourceStartupId": "15d5f912-0187-4445-8308-dbe00a5fde81",
+    "status": "pending_review",
+    "slug": "airbnb-i8za",
+    "pitchDeckPath": null,
+    "pitchDeckUrl": null,
+    "exportedAt": "2026-06-03T21:17:10.679Z"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "name": "Sigma genetics",
+  "tagline": "",
+  "website": "https://sigmagenetics.com/",
+  "industry": "genetics",
+  "stage": "seed",
+  "fundingTarget": 2000000,
+  "location": "sf, ca",
+  "contactName": "Karim Nassereddine",
+  "contactEmail": "karim.nassereddine@gmail.com",
+  "teamSize": 1,
+  "description": "",
+  "files": [
+    "sigma-genetics_deck.pdf"
+  ],
+  "_meta": {
+    "sourceStartupId": "cdfc9a8b-f182-48fa-8bab-e6e9c3d305fe",
+    "status": "pending_review",
+    "slug": "sigma-genetics",
+    "pitchDeckPath": "70bec25c-fe4c-4367-955a-af4d44431651/transcripts/W1Y1-eTnZLUa.pdf",
+    "pitchDeckUrl": "https://pub-d29207d7fd544252bcd8748f8fa80b88.r2.dev/70bec25c-fe4c-4367-955a-af4d44431651/transcripts/W1Y1-eTnZLUa.pdf",
+    "exportedAt": "2026-06-03T21:17:10.681Z"
+  }
+}

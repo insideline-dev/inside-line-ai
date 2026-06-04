@@ -18,6 +18,43 @@ const CTX: LensInput = {
   contextNotes: "",
 };
 
+/**
+ * Build a fully-populated LensEvidence item. `LensEvidenceSchema` keys
+ * (`sourceType`, `sourceLabel`, `sourceRef`, `url`, `pageNumber`, `quote`) are
+ * nullable but NOT optional, so the LLM is expected to emit them — tests must
+ * too, or Zod parse fails and the lens falls back.
+ */
+function evidence(
+  over: {
+    claim: string;
+    source: string;
+    confidence?: "low" | "medium" | "high";
+    sourceType?:
+      | "deck_page"
+      | "public_url"
+      | "enrichment_call"
+      | "research_source"
+      | "internal_trace";
+    sourceLabel?: string | null;
+    sourceRef?: string | null;
+    url?: string | null;
+    pageNumber?: number | null;
+    quote?: string | null;
+  },
+) {
+  return {
+    claim: over.claim,
+    source: over.source,
+    confidence: over.confidence ?? "medium",
+    sourceType: over.sourceType ?? "public_url",
+    sourceLabel: over.sourceLabel ?? null,
+    sourceRef: over.sourceRef ?? null,
+    url: over.url ?? null,
+    pageNumber: over.pageNumber ?? null,
+    quote: over.quote ?? null,
+  };
+}
+
 async function buildLens(opts: {
   generateText: jest.Mock;
   resolveModel?: jest.Mock;
@@ -96,11 +133,11 @@ describe("MarketLens", () => {
         signal: "advance",
         rationale: "TAM is large with credible expansion.",
         evidence: [
-          {
+          evidence({
             claim: "Public IDC report cites $40B TAM",
             source: "https://idc.com/reports/market-2025",
             confidence: "medium",
-          },
+          }),
         ],
       },
     });
@@ -150,8 +187,8 @@ describe("MarketLens", () => {
         signal: "review",
         rationale: "Mixed.",
         evidence: [
-          { claim: "A", source: "https://example.com/1", confidence: "high" },
-          { claim: "B", source: "deck:p3", confidence: "medium" },
+          evidence({ claim: "A", source: "https://example.com/1", confidence: "high" }),
+          evidence({ claim: "B", source: "deck:p3", confidence: "medium" }),
         ],
       },
     });
@@ -182,5 +219,31 @@ describe("MarketLens", () => {
 
     expect(result.usedFallback).toBe(true);
     expect(result.output.signal).toBe("review");
+    // Both attempts were exhausted before giving up.
+    expect(generateText).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries once and recovers when the first call returns empty output", async () => {
+    const generateText = jest
+      .fn()
+      .mockResolvedValueOnce({ output: undefined })
+      .mockResolvedValueOnce({
+        output: {
+          score: 82,
+          signal: "advance",
+          rationale: "Recovered on retry.",
+          evidence: [
+            evidence({ claim: "A", source: "https://example.com/1", confidence: "high" }),
+          ],
+        },
+      });
+
+    const lens = await buildLens({ generateText });
+    const result = await lens.run(CTX);
+
+    expect(generateText).toHaveBeenCalledTimes(2);
+    expect(result.usedFallback).toBe(false);
+    expect(result.output.score).toBe(82);
+    expect(result.output.signal).toBe("advance");
   });
 });

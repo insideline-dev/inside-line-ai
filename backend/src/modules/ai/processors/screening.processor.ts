@@ -173,8 +173,8 @@ export class ScreeningProcessor
       throw new Error("Invalid job type for screening processor");
     }
 
-    let runResult: Awaited<ReturnType<typeof runPipelinePhase>>;
-    runResult = await runPipelinePhase({
+    const runResult: Awaited<ReturnType<typeof runPipelinePhase>> =
+      await runPipelinePhase({
       job,
       phase: PipelinePhase.SCREENING,
       jobType: "ai_screening",

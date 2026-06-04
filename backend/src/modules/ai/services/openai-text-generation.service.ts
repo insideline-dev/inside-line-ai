@@ -328,16 +328,48 @@ export class OpenAiTextGenerationService {
 
     let text = this.extractOutputText(response).trim();
 
-    if (!text && params.schema) {
+    // A tool-using structured call (e.g. the web-search market lens) can end
+    // the tool loop without ever emitting the final message: the roundtrip
+    // budget is exhausted while a tool call is still pending, or a reasoning
+    // model spends the closing turn on reasoning items only. In both cases
+    // `output_text` is empty (or `status: "incomplete"`), `parseStructuredText`
+    // returns null, and the caller throws "empty structured output".
+    //
+    // Recover by forcing a clean finalization turn: answer any dangling tool
+    // calls so the conversation is valid, forbid further tool use with
+    // `tool_choice: "none"`, and drop reasoning effort so the model spends the
+    // turn emitting the structured JSON instead of thinking again.
+    const finalizationNeeded =
+      Boolean(params.schema) &&
+      (!text || this.readString(response, "status") === "incomplete");
+
+    if (finalizationNeeded) {
+      const pendingCalls = response.output.filter(
+        (item): item is OpenAI.Responses.ResponseFunctionToolCall =>
+          item.type === "function_call",
+      );
+      const finalizeInput: OpenAI.Responses.ResponseInputItem[] =
+        pendingCalls.map((call) => ({
+          type: "function_call_output",
+          call_id: call.call_id,
+          output: JSON.stringify({ error: "search budget reached" }),
+        }));
+
       response = await client.responses.create(
         {
           model: params.modelName,
           previous_response_id: response.id,
-          input: [],
+          input: finalizeInput,
+          // Keep the tool definitions in scope but forbid using them — some
+          // model/SDK combinations reject `tool_choice` without `tools`, and
+          // OpenAI's hosted web_search + json_schema can return an empty turn,
+          // so this turn is dedicated purely to emitting the structured JSON.
+          tools: tools.length > 0 ? tools : undefined,
+          tool_choice: "none",
           text: textConfig,
           temperature,
           max_output_tokens: params.maxOutputTokens,
-          reasoning: this.toReasoningConfig(params.reasoningEffort),
+          reasoning: this.toReasoningConfig("low"),
         },
         { signal: params.abortSignal },
       );

@@ -182,14 +182,32 @@ export abstract class BaseLensAgent<TOutput extends LensOutput> {
         model = this.resolveModel(modelId);
       }
 
-      const { output, usage } = await this.modelExec.generateText<TOutput>({
-        model,
-        system,
-        prompt: userPrompt,
-        schema: this.outputSchema,
-        temperature: 0.2,
-        ...toolOptions,
-      });
+      // Empty structured output is intermittent (transient API hiccups, a
+      // reasoning turn that never lands the JSON). Retry once before giving up
+      // and surfacing the synthetic fallback. Schema/validation errors are not
+      // retried here — they won't self-heal.
+      let output: TOutput | undefined;
+      let usage: Awaited<
+        ReturnType<typeof this.modelExec.generateText<TOutput>>
+      >["usage"];
+      for (let attempt = 1; attempt <= 2; attempt += 1) {
+        const result = await this.modelExec.generateText<TOutput>({
+          model,
+          system,
+          prompt: userPrompt,
+          schema: this.outputSchema,
+          temperature: 0.2,
+          ...toolOptions,
+        });
+        if (result.output) {
+          output = result.output;
+          usage = result.usage;
+          break;
+        }
+        this.logger.warn(
+          `Lens '${this.key}' returned empty structured output (attempt ${attempt}/2)`,
+        );
+      }
 
       if (!output) {
         throw new Error("Lens model returned empty structured output");

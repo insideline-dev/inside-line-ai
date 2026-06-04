@@ -16,10 +16,14 @@ export const CALIBRATION_DISABLED_MESSAGE =
   'Calibration is temporarily disabled (DS-E11 two-loop redesign). See GitHub issue #32.';
 
 export function isCalibrationEnabled(): boolean {
-  const raw = process.env.ENABLE_CALIBRATION;
-  if (raw === 'false' || raw === '0') return false;
-  // Default ON. Explicit env-flag opt-out kept for rollback.
-  return true;
+  // Hard-disabled for now (DS-E11 two-loop redesign pending, issue #32).
+  // Forced OFF regardless of the ENABLE_CALIBRATION env flag. To re-enable,
+  // restore the env-driven check below.
+  return false;
+  // const raw = process.env.ENABLE_CALIBRATION;
+  // if (raw === 'false' || raw === '0') return false;
+  // // Default ON. Explicit env-flag opt-out kept for rollback.
+  // return true;
 }
 
 export function assertCalibrationEnabled(): void {

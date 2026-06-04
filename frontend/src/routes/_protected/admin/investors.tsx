@@ -33,14 +33,15 @@ import {
   TrendingUp,
   ShieldAlert,
   Scale,
-  RefreshCw,
+  // RefreshCw, // Calibration temporarily hidden (issue #32)
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import {
-  useInvestorCalibration,
-  useRecomputeInvestorCalibration,
-  useInvestorCalibrationSocket,
-} from "@/lib/calibration/useCalibration";
+// import { Button } from "@/components/ui/button"; // Calibration temporarily hidden (issue #32)
+// Calibration temporarily hidden (issue #32)
+// import {
+//   useInvestorCalibration,
+//   useRecomputeInvestorCalibration,
+//   useInvestorCalibrationSocket,
+// } from "@/lib/calibration/useCalibration";
 
 export const Route = createFileRoute("/_protected/admin/investors")({
   component: AdminInvestorsPage,
@@ -332,7 +333,8 @@ function AdminInvestorsPage() {
                     Matches ({detail.matches.length})
                   </TabsTrigger>
                   <TabsTrigger value="scoring">Scoring</TabsTrigger>
-                  <TabsTrigger value="calibration">Calibration</TabsTrigger>
+                  {/* Calibration temporarily hidden (issue #32) */}
+                  {/* <TabsTrigger value="calibration">Calibration</TabsTrigger> */}
                 </TabsList>
 
                 <ScrollArea className="flex-1">
@@ -640,10 +642,10 @@ function AdminInvestorsPage() {
                     )}
                   </TabsContent>
 
-                  {/* ---- Tab: Calibration ---- */}
-                  <TabsContent value="calibration" className="px-6 pb-6">
+                  {/* ---- Tab: Calibration (temporarily hidden, issue #32) ---- */}
+                  {/* <TabsContent value="calibration" className="px-6 pb-6">
                     <AdminCalibrationTab userId={selectedUserId} />
-                  </TabsContent>
+                  </TabsContent> */}
                 </ScrollArea>
               </Tabs>
             </div>
@@ -654,6 +656,7 @@ function AdminInvestorsPage() {
   );
 }
 
+/* Calibration temporarily hidden (issue #32)
 function AdminCalibrationTab({ userId }: { userId: string | null }) {
   const { data: snapshot, isLoading, error } = useInvestorCalibration(userId);
   const recompute = useRecomputeInvestorCalibration(userId);
@@ -843,3 +846,4 @@ function AdminCalibrationTab({ userId }: { userId: string | null }) {
     </div>
   );
 }
+*/

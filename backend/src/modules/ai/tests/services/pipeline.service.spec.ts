@@ -1729,6 +1729,38 @@ describe("PipelineService", () => {
     );
   });
 
+  it("hasReusableScreeningResults is true when extraction and scraping results exist", async () => {
+    stateService.get.mockResolvedValueOnce(
+      createState({
+        results: {
+          [PipelinePhase.EXTRACTION]: {},
+          [PipelinePhase.SCRAPING]: {},
+        } as never,
+      }),
+    );
+
+    expect(await service.hasReusableScreeningResults("startup-1")).toBe(true);
+  });
+
+  it("hasReusableScreeningResults is false when a screening result is missing", async () => {
+    stateService.get.mockResolvedValueOnce(
+      createState({
+        results: { [PipelinePhase.EXTRACTION]: {} } as never,
+      }),
+    );
+
+    expect(await service.hasReusableScreeningResults("startup-1")).toBe(false);
+  });
+
+  it("hasReusableScreeningResults is false when no reusable state exists at all", async () => {
+    // getPipelineStateWithSnapshotFallback returns null (no live state, no
+    // reusable snapshot) → no reusable results → false → caller re-screens.
+    stateService.get.mockResolvedValueOnce(null);
+    pipelineStateSnapshots.getLatestReusableSnapshot.mockResolvedValueOnce(null);
+
+    expect(await service.hasReusableScreeningResults("startup-1")).toBe(false);
+  });
+
   it("queues targeted research agent retry and resets downstream phases", async () => {
     stateService.get.mockResolvedValueOnce(
       createState({}, {

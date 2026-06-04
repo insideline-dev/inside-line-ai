@@ -1085,6 +1085,29 @@ export class PipelineService {
     return newRunId;
   }
 
+  /**
+   * True only when the reusable pipeline state still holds the Deal Screening
+   * outputs the Due Diligence phases depend on — extraction AND scraping
+   * results. A DD re-run may reuse screening (start at RESEARCH) only when this
+   * is true; otherwise it must restart from CLASSIFICATION so those inputs are
+   * produced before research runs. Mirrors the input guard in
+   * `ResearchService.run` so we never queue research without its inputs (which
+   * would fail with "Research requires extraction and scraping results").
+   *
+   * Resolves state through the SAME source as `rerunFromPhase`
+   * (`getPipelineStateWithSnapshotFallback` — live Redis OR the reusable DB
+   * snapshot) so the reuse decision and the actual rerun can never diverge: a
+   * completed DD deal whose Redis state expired (24h TTL) but whose snapshot
+   * survives is still correctly allowed to reuse rather than re-screened.
+   */
+  async hasReusableScreeningResults(startupId: string): Promise<boolean> {
+    const state = await this.getPipelineStateWithSnapshotFallback(startupId);
+    return Boolean(
+      state?.results[PipelinePhase.EXTRACTION] &&
+        state?.results[PipelinePhase.SCRAPING],
+    );
+  }
+
   async retryAgent(startupId: string, request: RetryAgentRequest): Promise<void> {
     const state = await this.getPipelineStateWithSnapshotFallback(startupId);
     if (!state) {

@@ -489,13 +489,26 @@ export class DataGateService {
       return undefined;
     }
 
+    // Only reuse Deal Screening (start at RESEARCH) when there are no new docs
+    // AND the screening results actually still exist. Otherwise restart from
+    // CLASSIFICATION — reusing when extraction/scraping results are missing
+    // (lost state, or a prior run still mid-extraction) would queue research /
+    // evaluation without their inputs and fail them immediately.
     const needsReExtraction = await this.hasNewDocsSinceExtraction(startupId);
-    const startPhase = needsReExtraction
-      ? PipelinePhase.CLASSIFICATION
-      : PipelinePhase.RESEARCH;
+    const canReuseScreening =
+      !needsReExtraction &&
+      (await this.pipelineCoreService.hasReusableScreeningResults(startupId));
+    const startPhase = canReuseScreening
+      ? PipelinePhase.RESEARCH
+      : PipelinePhase.CLASSIFICATION;
 
+    const reason = canReuseScreening
+      ? ' (reusing screening results)'
+      : needsReExtraction
+        ? ' (new documents detected — re-extracting)'
+        : ' (no reusable screening results — running full screening)';
     this.logger.log(
-      `[DataGate] Starting DD pipeline for ${startupId} from ${startPhase}${needsReExtraction ? ' (new documents detected — re-extracting)' : ''}`,
+      `[DataGate] Starting DD pipeline for ${startupId} from ${startPhase}${reason}`,
     );
 
     try {

@@ -132,7 +132,11 @@ function makeDb(s: Scenario) {
 function buildService(db: unknown) {
   const dealEvents = { record: jest.fn() };
   const openQuestionService = { listForStartup: jest.fn().mockResolvedValue([]) };
-  const pipeline = { rerunFromPhase: jest.fn(), startPipeline: jest.fn() };
+  const pipeline = {
+    rerunFromPhase: jest.fn(),
+    startPipeline: jest.fn(),
+    hasReusableScreeningResults: jest.fn().mockResolvedValue(true),
+  };
   const svc = new DataGateService(
     { db } as never,
     dealEvents as never,
@@ -505,6 +509,31 @@ describe("DataGateService.rerunDueDiligence — #10 re-extraction race", () => {
     expect(pipeline.rerunFromPhase).toHaveBeenCalledWith(
       STARTUP_ID,
       PipelinePhase.RESEARCH,
+    );
+  });
+
+  it("restarts from CLASSIFICATION when screening results are missing, even with no new docs", async () => {
+    // The Maven case: lastExtractionAt is set and no doc changed, but the
+    // extraction/scraping results are not present (prior run still mid-run, or
+    // state lost). Reusing here would queue research/evaluation without inputs
+    // and fail them — so we must run the full screening flow from the start.
+    const { db } = makeDb({
+      startupRow: {
+        userId: SUBMITTER,
+        dataGateStatus: DataGateStatus.PENDING,
+        lastExtractionAt: new Date("2026-06-01T00:00:00Z"),
+      },
+      newDocsCount: 0,
+      updateReturns: [{ id: STARTUP_ID }],
+    });
+    const { svc, pipeline } = buildService(db);
+    pipeline.hasReusableScreeningResults.mockResolvedValueOnce(false);
+
+    await svc.complete(STARTUP_ID, ACTING_INVESTOR);
+
+    expect(pipeline.rerunFromPhase).toHaveBeenCalledWith(
+      STARTUP_ID,
+      PipelinePhase.CLASSIFICATION,
     );
   });
 });

@@ -226,23 +226,6 @@ describe("ScreeningOutputService", () => {
     expect(out.handoff.openIssues).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          key: "missing:evidence_claims",
-          label: "Source-linked evidence (≥3 claims)",
-          source: "screening-output",
-        }),
-        expect.objectContaining({
-          key: "missing:deck",
-          label: "Pitch deck",
-          summary: "Pitch deck is still missing from screening.",
-          source: "screening-output",
-        }),
-        expect.objectContaining({
-          key: "missing:team",
-          label: "Team info",
-          summary: "Team info is still missing from screening.",
-          source: "screening-output",
-        }),
-        expect.objectContaining({
           key: "decision:borderline_overall_score",
           label: "Borderline scores",
           summary: "The overall screening score is still in the review band.",
@@ -256,7 +239,7 @@ describe("ScreeningOutputService", () => {
         }),
       ]),
     );
-    expect(out.handoff.openIssues).toHaveLength(5);
+    expect(out.handoff.openIssues).toHaveLength(3);
   });
 
   it("falls back to lens signals when no triage decision exists", async () => {
@@ -478,14 +461,14 @@ describe("ScreeningOutputService", () => {
     website: "https://example.com",
   };
 
-  it("downgrades all-advance verdict to review when materials are missing", async () => {
+  it("does not downgrade DS verdict when Data Gate materials are missing", async () => {
     const rows = [
       row({ lensKey: "market", score: 80, signal: "advance" }),
       row({ lensKey: "team", score: 75, signal: "advance" }),
       row({ lensKey: "traction", score: 70, signal: "advance" }),
     ];
-    // Material gap: no pitch deck, no team. Lenses unanimous advance,
-    // but the REVIEW hold prevents under-resourced DD.
+    // Material gap: no pitch deck, no team. DS still remains verdict-only;
+    // required document checks happen in Data Gates after advance to DD.
     const startupRow = {
       ...FULLY_RESOURCED,
       pitchDeckUrl: null,
@@ -495,9 +478,9 @@ describe("ScreeningOutputService", () => {
 
     const out = await service.buildForStartup(STARTUP_ID, RUN_ID);
 
-    expect(out.overall.signal).toBe("review");
-    expect(out.overall.nextAction).toBe("request_materials");
-    expect(out.overall.missingMaterials.sort()).toEqual(["deck", "team"]);
+    expect(out.overall.signal).toBe("advance");
+    expect(out.overall.nextAction).toBe("continue_evaluation");
+    expect(out.overall.missingMaterials).toEqual([]);
   });
 
   it("treats pitchDeckPath as satisfying the deck requirement", async () => {
@@ -518,7 +501,7 @@ describe("ScreeningOutputService", () => {
     expect(out.overall.missingMaterials).not.toContain("deck");
   });
 
-  it("keeps reject signal when materials are missing (reject still wins)", async () => {
+  it("keeps reject signal without surfacing Data Gate materials in DS", async () => {
     const rows = [
       row({ lensKey: "market", score: 80, signal: "advance" }),
       row({ lensKey: "team", score: 20, signal: "reject" }),
@@ -530,7 +513,7 @@ describe("ScreeningOutputService", () => {
 
     expect(out.overall.signal).toBe("reject");
     expect(out.overall.nextAction).toBe("stop");
-    expect(out.overall.missingMaterials).toEqual(["deck"]);
+    expect(out.overall.missingMaterials).toEqual([]);
   });
 
   it("emits empty missingMaterials when startup is fully resourced", async () => {
@@ -565,7 +548,7 @@ describe("ScreeningOutputService", () => {
     expect(out.overall.missingMaterials).toEqual([]);
   });
 
-  it("flags evidence_claims when fewer than three linked evidence seeds", async () => {
+  it("does not flag evidence_claims as DS missing materials", async () => {
     const rows = [
       row({
         lensKey: "team",
@@ -591,7 +574,7 @@ describe("ScreeningOutputService", () => {
     const out = await service.buildForStartup(STARTUP_ID, RUN_ID);
 
     expect(out.handoff.evidenceSeeds).toHaveLength(1);
-    expect(out.overall.missingMaterials).toContain("evidence_claims");
+    expect(out.overall.missingMaterials).toEqual([]);
   });
 
   it("returns empty missingMaterials when startup row is not found", async () => {

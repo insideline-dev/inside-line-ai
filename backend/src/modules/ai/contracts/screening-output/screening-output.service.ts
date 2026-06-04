@@ -9,7 +9,6 @@ import {
 import { screeningDecision } from "../../entities/screening-decision.schema";
 import { startup } from "../../../startup/entities/startup.schema";
 import {
-  detectMissingMaterials,
   type MaterialsInput,
 } from "./missing-materials";
 import { resolveCanonicalScreeningOutcome } from "./screening-outcome";
@@ -523,32 +522,21 @@ export class ScreeningOutputService {
    * v1 aggregation policy:
    *   - score: use the persisted triage score when available; otherwise fall
    *     back to the simple unweighted average of lens scores.
-   *   - signal: canonicalize the triage classification with the missing
-   *     materials gate so the contract mirrors the decision and the UI gate.
-   *   - nextAction: shared user-facing action derived from the same canonical
-   *     state.
+   *   - signal: canonicalize the triage classification only from screening
+   *     judgment. Required document checks belong to Epic 113 Data Gates after
+   *     a deal advances into DD, never to DS.
+   *   - nextAction: shared user-facing action derived from the canonical state.
    */
   private computeOverall(
     lenses: ScreeningLensV1[],
-    materials: MaterialsInput | null,
+    _materials: MaterialsInput | null,
     decision: { signal: ScreeningSignal; score: number; reasonCodes: string[] } | null,
   ): ScreeningOverallV1 {
-    let missingMaterials = materials ? detectMissingMaterials(materials) : [];
-    const linkedEvidenceCount = lenses.reduce(
-      (sum, lens) =>
-        sum +
-        lens.evidence.filter((e) => typeof e.source === "string" && e.source.trim().length > 0)
-          .length,
-      0,
-    );
-    if (linkedEvidenceCount < 3 && !missingMaterials.includes("evidence_claims")) {
-      missingMaterials = [...missingMaterials, "evidence_claims"];
-    }
     const canonicalBase = decision ?? this.computeFallbackDecision(lenses);
     const canonical = resolveCanonicalScreeningOutcome({
       signal: canonicalBase.signal,
       reasonCodes: canonicalBase.reasonCodes,
-      missingMaterials,
+      missingMaterials: [],
     });
 
     return {
@@ -634,7 +622,7 @@ export class ScreeningOutputService {
       });
     }
 
-    if (decision?.signal === "reject" && decision.reasonCodes.length) {
+    if (decision?.signal && decision.signal !== "advance" && decision.reasonCodes.length) {
       for (const code of decision.reasonCodes) {
         if (code === "missing_materials") continue;
         push({

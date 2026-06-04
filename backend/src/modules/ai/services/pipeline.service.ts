@@ -313,99 +313,6 @@ export class PipelineService {
     }
   }
 
-  private async notifyClaraMissingMaterialsForScreening(
-    startupId: string,
-    missingMaterials: MissingMaterialCode[],
-    options?: {
-      pipelineRunId?: string | null;
-    },
-  ): Promise<void> {
-    const clara = this.getClaraService();
-    if (!clara?.isEnabled()) {
-      this.logger.warn(
-        `[Pipeline] Clara screening follow-up notification skipped for startup ${startupId}: Clara is unavailable or disabled`,
-      );
-      return;
-    }
-
-    let startupLabel = `Startup ${startupId}`;
-    let startupOwnerUserId: string | null = null;
-    try {
-      const [startupRecord] = await this.drizzle.db
-        .select({
-          name: startup.name,
-          userId: startup.userId,
-        })
-        .from(startup)
-        .where(eq(startup.id, startupId))
-        .limit(1);
-      if (startupRecord) {
-        startupLabel = startupRecord.name ?? startupLabel;
-        startupOwnerUserId = startupRecord.userId ?? null;
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.warn(
-        `[Pipeline] Failed to load startup owner for screening follow-up notification on ${startupId}: ${message}`,
-      );
-    }
-
-    try {
-      await clara.notifyScreeningMissingMaterials(startupId, missingMaterials, {
-        pipelineRunId: options?.pipelineRunId ?? null,
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.warn(
-        `Unable to send Clara screening follow-up for startup ${startupId}: ${message}`,
-      );
-      return;
-    }
-
-    if (!startupOwnerUserId) {
-      return;
-    }
-
-    const missingLabels = missingMaterials
-      .map((material) => this.humanizeScreeningMissingMaterial(material))
-      .filter((label): label is string => Boolean(label));
-    try {
-      await this.notifications.createAndBroadcast(
-        startupOwnerUserId,
-        `Clara needs missing materials: ${startupLabel}`,
-        `Clara emailed the startup contact and is waiting on: ${missingLabels.join(", ")}`,
-        NotificationType.WARNING,
-        `/admin/startup/${startupId}`,
-      );
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.warn(
-        `Unable to send in-app screening follow-up notification for startup ${startupId}: ${message}`,
-      );
-    }
-  }
-
-  private humanizeScreeningMissingMaterial(
-    material: MissingMaterialCode,
-  ): string {
-    switch (material) {
-      case "deck":
-        return "pitch deck / presentation";
-      case "product_description":
-        return "product description";
-      case "team":
-        return "team members and roles";
-      case "deal_terms":
-        return "deal terms";
-      case "website":
-        return "company website URL";
-      case "evidence_claims":
-        return "at least 3 source-linked evidence claims";
-      case "traction_data":
-        return "early traction data (customers, users, churn, or notable wins)";
-    }
-  }
-
   private buildAwaitingFounderInfoReason(
     missingFields: Array<"website" | "stage">,
     context:
@@ -2003,23 +1910,12 @@ export class PipelineService {
   }
 
   private normalizeScreeningMissingMaterials(
-    missingMaterials: ScreeningResult["missingMaterials"] | null | undefined,
+    _missingMaterials: ScreeningResult["missingMaterials"] | null | undefined,
   ): MissingMaterialCode[] {
-    return (
-      missingMaterials?.filter(
-        (material): material is
-          | "deck"
-          | "product_description"
-          | "team"
-          | "deal_terms"
-          | "website" =>
-          material === "deck" ||
-          material === "product_description" ||
-          material === "team" ||
-          material === "deal_terms" ||
-          material === "website",
-      ) ?? []
-    );
+    // Epic 113 boundary: DS is verdict-only. Required document/material checks
+    // are resolved by Data Gates after a deal advances into DD, so legacy
+    // screening material codes must not trigger DS notifications or Clara mail.
+    return [];
   }
 
   /**
@@ -2165,18 +2061,6 @@ export class PipelineService {
     }
 
     if (!screening) return;
-    const missingMaterials = this.normalizeScreeningMissingMaterials(
-      screening.missingMaterials,
-    );
-    if (screening.classification === "review" && missingMaterials.length > 0) {
-      await this.notifyClaraMissingMaterialsForScreening(
-        state.startupId,
-        missingMaterials,
-        {
-          pipelineRunId: state.pipelineRunId,
-        },
-      );
-    }
   }
 
   private async updatePipelineQualityFromEvaluation(

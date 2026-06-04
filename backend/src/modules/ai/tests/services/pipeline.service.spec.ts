@@ -136,6 +136,7 @@ describe("PipelineService", () => {
       return this;
     }),
     from: jest.fn().mockReturnThis(),
+    orderBy: jest.fn().mockReturnThis(),
     limit: jest.fn().mockImplementation(function (this: { mode: string }) {
       if (this.mode === "select") {
         return Promise.resolve([
@@ -731,7 +732,13 @@ describe("PipelineService", () => {
       notifyMissingStartupInfo: jest.fn().mockResolvedValue(undefined),
       notifyPipelineComplete: jest.fn(),
     };
-    moduleRef.get.mockReturnValueOnce(clara as unknown as ClaraService);
+    moduleRef.get.mockImplementation((token: unknown) =>
+      typeof token === "function" && token.name === "ClaraService"
+        ? (clara as never)
+        : typeof token === "function" && token.name === "DealEventService"
+          ? ({ record: jest.fn() } as never)
+          : null,
+    );
 
     await service.onPhaseCompleted("startup-1", PipelinePhase.ENRICHMENT);
 
@@ -768,7 +775,13 @@ describe("PipelineService", () => {
       notifyMissingStartupInfo: jest.fn().mockResolvedValue(undefined),
       notifyPipelineComplete: jest.fn(),
     };
-    moduleRef.get.mockReturnValueOnce(clara as unknown as ClaraService);
+    moduleRef.get.mockImplementation((token: unknown) =>
+      typeof token === "function" && token.name === "ClaraService"
+        ? (clara as never)
+        : typeof token === "function" && token.name === "DealEventService"
+          ? ({ record: jest.fn() } as never)
+          : null,
+    );
 
     await (service as unknown as { queuePhase: (opts: { startupId: string; pipelineRunId: string; userId: string; phase: PipelinePhase }) => Promise<void> }).queuePhase({
       startupId: "startup-1",
@@ -790,53 +803,48 @@ describe("PipelineService", () => {
     );
   });
 
-  it("sends Clara screening follow-up email and in-app notification for missing materials", async () => {
+  it("does not send Clara screening follow-up email during screening", async () => {
     const clara = {
       isEnabled: jest.fn().mockReturnValue(true),
       notifyScreeningMissingMaterials: jest.fn().mockResolvedValue(undefined),
       notifyMissingStartupInfo: jest.fn(),
       notifyPipelineComplete: jest.fn(),
     };
-    moduleRef.get.mockReturnValueOnce(clara as unknown as ClaraService);
-    mockDb.limit.mockResolvedValueOnce([
-      {
-        name: "Test Startup",
-        userId: "owner-1",
-      },
-    ]);
-
-    await (service as unknown as {
-      notifyClaraMissingMaterialsForScreening: (
-        startupId: string,
-        missingMaterials: Array<"deck" | "product_description" | "team" | "deal_terms" | "website">,
-        options?: { pipelineRunId?: string | null },
-      ) => Promise<void>;
-    }).notifyClaraMissingMaterialsForScreening("startup-1", ["deck", "team"], {
-      pipelineRunId: "run-1",
+    moduleRef.get.mockImplementation((token: unknown) =>
+      typeof token === "function" && token.name === "DealEventService"
+        ? ({ record: jest.fn() } as never)
+        : null,
+    );
+    stateService.get.mockResolvedValueOnce(createState());
+    stateService.getPhaseResult.mockResolvedValue({
+      classification: "review",
+      missingMaterials: ["deck", "team"],
+      reasonCodes: ["missing_materials"],
+    });
+    phaseTransition.decideNextPhases.mockReturnValueOnce({
+      queue: [],
+      blockedByRequiredFailure: false,
+      pipelineComplete: true,
+      degraded: false,
     });
 
-    expect(clara.notifyScreeningMissingMaterials).toHaveBeenCalledWith(
-      "startup-1",
-      ["deck", "team"],
-      { pipelineRunId: "run-1" },
-    );
-    expect(notifications.createAndBroadcast).toHaveBeenCalledWith(
-      "owner-1",
-      "Clara needs missing materials: Test Startup",
-      expect.stringContaining("pitch deck / presentation"),
-      NotificationType.WARNING,
-      "/admin/startup/startup-1",
-    );
+    await service.onPhaseCompleted("startup-1", PipelinePhase.SCREENING);
+
+    expect(clara.notifyScreeningMissingMaterials).not.toHaveBeenCalled();
   });
 
-  it("skips Clara completion emails when screening requests materials", async () => {
+  it("does not surface legacy screening material codes as Data Gate warnings", async () => {
     const clara = {
       isEnabled: jest.fn().mockReturnValue(true),
       notifyScreeningMissingMaterials: jest.fn().mockResolvedValue(undefined),
       notifyMissingStartupInfo: jest.fn().mockResolvedValue(undefined),
       notifyPipelineComplete: jest.fn().mockResolvedValue(undefined),
     };
-    moduleRef.get.mockReturnValueOnce(clara as unknown as ClaraService);
+    moduleRef.get.mockImplementation((token: unknown) =>
+      typeof token === "function" && token.name === "DealEventService"
+        ? ({ record: jest.fn() } as never)
+        : null,
+    );
     stateService.get.mockResolvedValueOnce(createState());
     mockDb.limit.mockResolvedValueOnce([
       {
@@ -858,15 +866,11 @@ describe("PipelineService", () => {
 
     await service.onPhaseCompleted("startup-1", PipelinePhase.SCREENING);
 
-    expect(clara.notifyScreeningMissingMaterials).toHaveBeenCalledWith(
-      "startup-1",
-      ["deck"],
-      { pipelineRunId: "run-1" },
-    );
+    expect(clara.notifyScreeningMissingMaterials).not.toHaveBeenCalled();
     expect(notifications.createAndBroadcast).toHaveBeenCalledWith(
-      "owner-1",
-      expect.stringContaining("Clara needs missing materials"),
-      expect.stringContaining("pitch deck / presentation"),
+      "user-1",
+      expect.stringContaining("Analysis needs manual review"),
+      expect.stringContaining("manual review"),
       NotificationType.WARNING,
       "/admin/startup/startup-1",
     );
@@ -887,7 +891,11 @@ describe("PipelineService", () => {
       notifyMissingStartupInfo: jest.fn().mockResolvedValue(undefined),
       notifyPipelineComplete: jest.fn().mockResolvedValue(undefined),
     };
-    moduleRef.get.mockReturnValueOnce(clara as unknown as ClaraService);
+    moduleRef.get.mockImplementation((token: unknown) =>
+      typeof token === "function" && token.name === "DealEventService"
+        ? ({ record: jest.fn() } as never)
+        : null,
+    );
     stateService.get.mockResolvedValueOnce(createState());
     stateService.getPhaseResult.mockResolvedValue({
       classification: "review",

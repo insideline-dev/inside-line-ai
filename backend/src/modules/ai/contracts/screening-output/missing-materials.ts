@@ -1,7 +1,5 @@
-// DS-E7-F4-S1 — define what counts as a "key material" for the
-// screening REVIEW hold. The contract surfaces these via
-// `overall.missingMaterials[]`; the partner sees a checklist on the
-// deal card and DD knows the deal isn't under-resourced.
+// Legacy DS-E7-F4-S1 helper for non-gating screening material diagnostics.
+// Epic 113 Data Gates are now the only required-document gate before DD.
 //
 // Stay deterministic and conservative — every entry on this checklist
 // must be cheap to verify from the startup row alone, no LLM required.
@@ -11,7 +9,7 @@ export type MissingMaterialCode =
   | "deck"
   | "product_description"
   | "team"
-  | "deal_terms"
+  | "deal_terms" // legacy persisted value; no longer emitted by DS
   | "website"
   | "evidence_claims"
   // DS-E7-F4 part (c): "traction data stated". Flagged when the deck
@@ -53,7 +51,7 @@ function isEmptyString(v: string | null | undefined): boolean {
 
 /**
  * Returns the list of material codes that are MISSING from the startup.
- * Empty array = fully resourced. Order = checklist order in the UI.
+ * Empty array = no legacy diagnostic gaps. Order = historical checklist order.
  */
 export function detectMissingMaterials(
   input: MaterialsInput,
@@ -82,18 +80,7 @@ export function detectMissingMaterials(
     missing.push("team");
   }
 
-  // 4. Deal terms — at least ONE of fundingTarget, valuation, raiseType.
-  //    DD can't start without knowing what's being raised.
-  const hasFundingTarget =
-    typeof input.fundingTarget === "number" && input.fundingTarget > 0;
-  const hasValuation =
-    typeof input.valuation === "number" && input.valuation > 0;
-  const hasRaiseType = !isEmptyString(input.raiseType);
-  if (!hasFundingTarget && !hasValuation && !hasRaiseType) {
-    missing.push("deal_terms");
-  }
-
-  // 5. Website — minimal external footprint check.
+  // 4. Website — minimal external footprint check.
   if (isEmptyString(input.website)) {
     missing.push("website");
   }

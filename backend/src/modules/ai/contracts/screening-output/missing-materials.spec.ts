@@ -20,6 +20,16 @@ function resourcedBaseline() {
 }
 
 describe("detectMissingMaterials traction_data (DS-E7-F4)", () => {
+  it("does not flag deal_terms from missing funding fields", () => {
+    const missing = detectMissingMaterials({
+      ...resourcedBaseline(),
+      fundingTarget: null,
+      valuation: null,
+      raiseType: null,
+    });
+    expect(missing).not.toContain("deal_terms");
+  });
+
   it("does NOT flag traction_data when no snapshot was captured (silent miss)", () => {
     const missing = detectMissingMaterials(resourcedBaseline());
     expect(missing).not.toContain("traction_data");

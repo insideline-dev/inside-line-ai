@@ -1,5 +1,6 @@
 export type StartupStatus = "draft" | "submitted" | "analyzing" | "pending_review" | "approved" | "rejected";
 export type PrivateInvestorPipelineStatus = "new" | "reviewing" | "engaged" | "closed" | "passed";
+export type DataGateStatus = "pending" | "complete" | "skipped";
 
 export type FundingStage = "pre_seed" | "seed" | "series_a" | "series_b" | "series_c" | "series_d" | "series_e" | "series_f_plus";
 
@@ -68,6 +69,7 @@ export interface Startup {
   previousRoundType?: string;
   status: StartupStatus;
   privateInvestorPipelineStatus?: PrivateInvestorPipelineStatus | null;
+  dataGateStatus?: DataGateStatus | null;
   submittedAt?: string;
   approvedAt?: string;
   rejectedAt?: string;

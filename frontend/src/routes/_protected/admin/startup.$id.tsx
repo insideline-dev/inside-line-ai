@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { customFetch } from "@/api/client";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { z } from "zod";
 import { cn } from "@/lib/utils";
@@ -203,6 +204,16 @@ const PHASE_RERUN_ORDER: RetryPhaseValue[] = [
   RetryPhaseDtoPhase.synthesis,
 ];
 
+// Phases shown in the DD "Pipeline Live" panel. Deal Screening owns
+// classification → extraction → enrichment/gap-fill → scraping → screening
+// on /admin/screening/:id; the DD page must not render those phases as a DD
+// pipeline.
+const DD_PHASES = [
+  "research",
+  "evaluation",
+  "synthesis",
+] as const;
+
 const EVAL_AGENT_OPTIONS = [
   { key: "team", label: "Team" },
   { key: "market", label: "Market" },
@@ -290,16 +301,52 @@ function AdminReviewPage() {
   const terminalStartupSyncKeyRef = useRef<string | null>(null);
 
   const { data: startupResponse, isLoading } = useStartupControllerFindOne(id);
+
+  // Stage guard: a deal still in Deal Screening belongs on the dedicated
+  // Screening pipeline page, not the DD startup view. A running startup with no
+  // dataGateStatus is still in DS even if no screening_decision row exists yet.
+  // Reuses the ["admin","screening"] cache shared with the screening queue so
+  // this is usually a cache hit, not an extra round-trip.
+  const { data: screeningQueue } = useQuery({
+    queryKey: ["admin", "screening"],
+    queryFn: () =>
+      customFetch<Array<{ id: string; verdict?: string }>>("/admin/screening"),
+    staleTime: 30_000,
+  });
+  const startup = startupResponse
+    ? unwrapApiResponse<StartupDetail>(startupResponse)
+    : undefined;
+  const evaluation = startup?.evaluation as Evaluation | undefined;
+
+  const isDueDiligenceStageDeal = Boolean(
+    startup?.dataGateStatus ||
+      startup?.privateInvestorPipelineStatus === "reviewing" ||
+      startup?.privateInvestorPipelineStatus === "engaged" ||
+      startup?.privateInvestorPipelineStatus === "closed",
+  );
+  const isScreeningStageDeal = useMemo(() => {
+    if (isDueDiligenceStageDeal) return false;
+    if (startup?.status === "analyzing") return true;
+    if (!Array.isArray(screeningQueue)) return false;
+    const row = screeningQueue.find((r) => r.id === id);
+    return Boolean(row && row.verdict !== "advance");
+  }, [isDueDiligenceStageDeal, screeningQueue, id, startup?.status]);
+  useEffect(() => {
+    if (isScreeningStageDeal) {
+      void navigate({
+        to: "/admin/screening/$id",
+        params: { id },
+        replace: true,
+      });
+    }
+  }, [isScreeningStageDeal, id, navigate]);
+
   const progressQuery = useStartupControllerGetProgress(id, {
     query: {
       enabled: Boolean(id),
       staleTime: 30_000,
     },
   });
-  const startup = startupResponse
-    ? unwrapApiResponse<StartupDetail>(startupResponse)
-    : undefined;
-  const evaluation = startup?.evaluation as Evaluation | undefined;
   const { data: dataRoomResponse } = useStartupControllerGetDataRoom(id, {
     query: {
       enabled: Boolean(id),
@@ -846,7 +893,8 @@ function AdminReviewPage() {
             <AdminPipelineLivePanel
               startupId={startup.id}
               startupStatus={startup.status}
-              phaseFilter={["research", "evaluation", "synthesis"]}
+              phaseFilter={DD_PHASES}
+              title="Due Diligence Pipeline Live"
               onRetryAgent={handleLiveAgentRetry}
               trackedRetry={trackedRetry}
               onClearTrackedRetry={() => setTrackedRetry(null)}

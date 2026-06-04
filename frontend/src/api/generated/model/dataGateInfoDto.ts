@@ -16,4 +16,6 @@ export interface DataGateInfoDto {
   missingMaterials: string[];
   requiredDocTypes: string[];
   presentDocTypes: string[];
+  /** @nullable */
+  founderEmail: string | null;
 }

@@ -13,6 +13,8 @@ import { Clock, Sparkles, CheckCircle, XCircle, Users, Target, Building2, Eye, F
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { StageNav } from "@/components/investor/StageNav";
+import { unwrapApiResponse } from "@/lib/api-utils";
+import { DataGateDocsModal } from "@/components/data-gate/DataGateDocsModal";
 
 export const Route = createFileRoute("/_protected/admin/")({
   component: AdminDashboard,
@@ -46,6 +48,7 @@ interface StartupItem {
   createdAt: string;
   percentileRank?: number;
   logoUrl?: string | null;
+  dataGateStatus?: "pending" | "skipped" | "complete" | null;
 }
 
 const TAB_TO_STATUS: Record<string, AdminControllerGetAllStartupsStatus | undefined> = {
@@ -71,6 +74,14 @@ function getStatusBadge(status: string) {
       {variant.label}
     </Badge>
   );
+}
+
+function countByStatus(items: StartupItem[]): Record<string, number> {
+  const acc: Record<string, number> = {};
+  for (const s of items) {
+    acc[s.status] = (acc[s.status] ?? 0) + 1;
+  }
+  return acc;
 }
 
 function formatStage(stage: string) {
@@ -181,9 +192,63 @@ function AdminStartupRow({ startup }: { startup: StartupItem }) {
   );
 }
 
+function AdminDataGateRow({
+  startup,
+  onOpen,
+}: {
+  startup: StartupItem;
+  onOpen: (s: { startupId: string; displayName: string }) => void;
+}) {
+  return (
+    <Card className="hover:shadow-md transition-shadow group">
+      <CardContent className="p-4">
+        <button
+          type="button"
+          onClick={() => onOpen({ startupId: startup.id, displayName: startup.name })}
+          className="flex w-full items-start gap-4 text-left"
+        >
+          <StartupLogo name={startup.name} logoUrl={startup.logoUrl} />
+
+          <div className="flex-1 min-w-0 space-y-1.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-[15px] font-semibold leading-tight group-hover:underline">
+                {startup.name}
+              </h3>
+              {getStatusBadge(startup.status)}
+              {startup.stage && <Badge variant="outline" className="text-[11px] px-1.5 py-0">{formatStage(startup.stage)}</Badge>}
+              {startup.industry && <Badge variant="secondary" className="text-[11px] px-1.5 py-0">{startup.industry}</Badge>}
+            </div>
+            {startup.description && (
+              <p className="text-[13px] text-muted-foreground line-clamp-1">{startup.description}</p>
+            )}
+            <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+              {startup.website && (
+                <span className="flex items-center gap-1">
+                  <Building2 className="w-3.5 h-3.5" />
+                  {startup.website}
+                </span>
+              )}
+              <span className="flex items-center gap-1">
+                <Clock className="w-3.5 h-3.5" />
+                {format(new Date(startup.createdAt), "MMM d, yyyy")}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0 text-sm text-muted-foreground">
+            <FileText className="w-4 h-4" />
+            Review docs
+          </div>
+        </button>
+      </CardContent>
+    </Card>
+  );
+}
+
 type DDSubTab = "data-gates" | "analyzed" | "engaged";
 
 function AdminDashboard() {
+  const [dataGateModal, setDataGateModal] = useState<{ startupId: string; displayName: string } | null>(null);
   const [ddSubTab, setDdSubTab] = useState<DDSubTab>("analyzed");
   const prevAnalyzingCountRef = useRef<number>(0);
   const [activeTab, setActiveTab] = useState("all");
@@ -218,8 +283,33 @@ function AdminDashboard() {
     }
   );
 
+  // All DD-advanced deals in one fetch (large limit, no status filter so
+  // client-side grouping isn't truncated by pagination). excludePreScreening
+  // means this is scoped to deals advanced to DD — the same scope as the list
+  // below — so the counts derived from it match what's actually rendered.
+  // Powers both the Data Gates sub-tab and the DD-scoped counts.
+  const { data: ddDealsResponse, isLoading: isLoadingDataGate } = useAdminControllerGetAllStartups(
+    { limit: 100, page: 1, excludePreScreening: "true" },
+    {
+      query: {
+        staleTime: 30_000,
+      },
+    }
+  );
+
   const statsData = statsResponse as unknown as PlatformStats | undefined;
-  const startups = ((startupsResponse as unknown as { data: StartupItem[] } | undefined)?.data) ?? [];
+  const startups = unwrapApiResponse<StartupItem[]>(startupsResponse) ?? [];
+  const analyzedStartups = startups.filter((s) => s.dataGateStatus !== "pending");
+
+  const ddDeals = unwrapApiResponse<StartupItem[]>(ddDealsResponse) ?? [];
+  const dataGateStartups = ddDeals.filter((s) => s.dataGateStatus === "pending");
+  // DD-scoped status breakdown. The top stat cards summarize the whole DD
+  // board (every advanced deal); the Analyzed status-filter tabs summarize the
+  // Analyzed subset only (gate not pending — pending-gate deals live in the
+  // Data Gates sub-tab).
+  const ddByStatus = countByStatus(ddDeals);
+  const analyzedDeals = ddDeals.filter((s) => s.dataGateStatus !== "pending");
+  const analyzedByStatus = countByStatus(analyzedDeals);
 
   // Toast notification when analyzing count drops
   useEffect(() => {
@@ -240,32 +330,33 @@ function AdminDashboard() {
     setPage(1);
   };
 
-  const byStatus = statsData?.startups?.byStatus;
+  // Stat cards: scoped to the DD board (deals advanced to DD), not the whole
+  // platform. Investors / Matches remain platform-wide.
   const stats = [
     {
       label: "Pending",
-      value: (byStatus?.pending_review ?? 0) + (byStatus?.submitted ?? 0),
+      value: (ddByStatus.pending_review ?? 0) + (ddByStatus.submitted ?? 0),
       icon: Clock,
       accent: "border-l-amber-500",
       iconColor: "text-amber-600",
     },
     {
       label: "Analyzing",
-      value: byStatus?.analyzing ?? 0,
+      value: ddByStatus.analyzing ?? 0,
       icon: Sparkles,
       accent: "border-l-violet-500",
       iconColor: "text-violet-600",
     },
     {
       label: "Approved",
-      value: byStatus?.approved ?? 0,
+      value: ddByStatus.approved ?? 0,
       icon: CheckCircle,
       accent: "border-l-emerald-500",
       iconColor: "text-emerald-600",
     },
     {
       label: "Rejected",
-      value: byStatus?.rejected ?? 0,
+      value: ddByStatus.rejected ?? 0,
       icon: XCircle,
       accent: "border-l-red-500",
       iconColor: "text-red-600",
@@ -286,16 +377,18 @@ function AdminDashboard() {
     },
   ];
 
+  // Status-filter tab counts: scoped to the Analyzed subset (DD-advanced,
+  // gate not pending) so the badges match the rendered list.
   const tabs = [
-    { value: "all", label: "All", count: statsData?.startups?.total ?? 0 },
+    { value: "all", label: "All", count: analyzedDeals.length },
     {
       value: "pending_review",
       label: "Pending Review",
-      count: (byStatus?.pending_review ?? 0) + (byStatus?.submitted ?? 0),
+      count: (analyzedByStatus.pending_review ?? 0) + (analyzedByStatus.submitted ?? 0),
     },
-    { value: "analyzing", label: "Analyzing", count: byStatus?.analyzing ?? 0 },
-    { value: "approved", label: "Approved", count: byStatus?.approved ?? 0 },
-    { value: "rejected", label: "Rejected", count: byStatus?.rejected ?? 0 },
+    { value: "analyzing", label: "Analyzing", count: analyzedByStatus.analyzing ?? 0 },
+    { value: "approved", label: "Approved", count: analyzedByStatus.approved ?? 0 },
+    { value: "rejected", label: "Rejected", count: analyzedByStatus.rejected ?? 0 },
   ];
 
   return (
@@ -335,7 +428,14 @@ function AdminDashboard() {
       {/* ─── DD Sub-stage Tabs ─── */}
       <Tabs value={ddSubTab} onValueChange={(v) => setDdSubTab(v as DDSubTab)}>
         <TabsList>
-          <TabsTrigger value="data-gates">Data Gates</TabsTrigger>
+          <TabsTrigger value="data-gates">
+            Data Gates
+            {dataGateStartups.length > 0 ? (
+              <Badge variant="secondary" className="ml-2">
+                {dataGateStartups.length}
+              </Badge>
+            ) : null}
+          </TabsTrigger>
           <TabsTrigger value="analyzed">Analyzed</TabsTrigger>
           <TabsTrigger value="engaged">
             <Handshake className="mr-1.5 h-4 w-4" />
@@ -343,18 +443,35 @@ function AdminDashboard() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="data-gates" className="mt-6">
-          <Card className="border-dashed">
-            <CardContent className="flex flex-col items-center gap-2 py-12 text-center text-muted-foreground">
-              <FileText className="h-8 w-8 opacity-60" />
-              <h3 className="text-lg font-semibold text-foreground">Data Gates</h3>
-              <p className="text-sm">
-                Deals waiting for missing documents before the DD pipeline runs.
-                Investors can skip or request docs via Clara.
-              </p>
-              <p className="text-xs">Admin global view coming soon — use the investor view to manage individual deals.</p>
-            </CardContent>
-          </Card>
+        <TabsContent value="data-gates" className="mt-6 space-y-4">
+          {isLoadingDataGate ? (
+            <div className="grid gap-4">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-32 rounded-lg" />
+              ))}
+            </div>
+          ) : dataGateStartups.length > 0 ? (
+            <div className="grid gap-4">
+              {dataGateStartups.map((startup) => (
+                <AdminDataGateRow
+                  key={startup.id}
+                  startup={startup}
+                  onOpen={setDataGateModal}
+                />
+              ))}
+            </div>
+          ) : (
+            <Card className="border-dashed">
+              <CardContent className="flex flex-col items-center gap-2 py-12 text-center text-muted-foreground">
+                <FileText className="h-8 w-8 opacity-60" />
+                <h3 className="text-lg font-semibold text-foreground">No deals waiting in Data Gates</h3>
+                <p className="text-sm">
+                  Deals waiting for missing documents before the DD pipeline runs.
+                  Investors can skip or request docs via Clara.
+                </p>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="engaged" className="mt-6">
@@ -395,9 +512,9 @@ function AdminDashboard() {
                   <Skeleton key={i} className="h-32 rounded-lg" />
                 ))}
               </div>
-            ) : startups.length > 0 ? (
+            ) : analyzedStartups.length > 0 ? (
               <div className="grid gap-4">
-                {startups.map((startup) => (
+                {analyzedStartups.map((startup) => (
                   <AdminStartupRow key={startup.id} startup={startup} />
                 ))}
 
@@ -447,6 +564,17 @@ function AdminDashboard() {
 
         </TabsContent>
       </Tabs>
+
+      {dataGateModal && (
+        <DataGateDocsModal
+          startupId={dataGateModal.startupId}
+          displayName={dataGateModal.displayName}
+          open={dataGateModal !== null}
+          onOpenChange={(o) => {
+            if (!o) setDataGateModal(null);
+          }}
+        />
+      )}
     </div>
   );
 }

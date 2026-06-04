@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef, type DragEvent } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { customFetch, ApiError } from "@/api/client";
+import { customFetch } from "@/api/client";
 import { format } from "date-fns";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -10,13 +10,13 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScoreRing } from "@/components/analysis/ScoreRing";
-import { DealCard } from "@/components/deal-card";
 import {
   ThesisAxisFilter,
   matchesThesisAxis,
 } from "@/components/investor/ThesisAxisFilter";
 import { StageNav } from "@/components/investor/StageNav";
-import { CalibrationCard } from "@/components/investor/CalibrationCard";
+// Calibration temporarily hidden (issue #32)
+// import { CalibrationCard } from "@/components/investor/CalibrationCard";
 import { useFilterStore } from "@/stores";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SearchAndFilters, defaultFilters, type FilterState, STAGES, REGIONS, SOURCE_OPTIONS } from "@/components/SearchAndFilters";
@@ -63,8 +63,14 @@ import {
   useStartupControllerGetDataGates,
   useStartupControllerSkipDataGate,
   useStartupControllerRequestDocuments,
+  getStartupControllerGetDataGatesQueryKey,
 } from "@/api/generated/startups/startups";
+import { getAdminControllerGetAllStartupsQueryKey } from "@/api/generated/admin/admin";
+import type { DataGateInfoDto } from "@/api/generated/model";
+import { ApiError } from "@/api/client";
+import { unwrapApiResponse } from "@/lib/api-utils";
 import { useToast } from "@/hooks/use-toast";
+import { DataGateDocsModal } from "@/components/data-gate/DataGateDocsModal";
 import {
   Target,
   Star,
@@ -74,9 +80,9 @@ import {
   Columns3,
   FileSearch,
   FileText,
-  MessageSquare,
   Lock,
   Loader2,
+  Info,
   Search,
   GripVertical,
   Sparkles,
@@ -86,6 +92,7 @@ import {
   Bookmark,
   Wand2,
   AlertTriangle,
+  MessageSquare,
   Handshake,
   X,
 } from "lucide-react";
@@ -377,6 +384,10 @@ function groupPipelineItems(items: PipelineCardItem[]): Record<Status, PipelineC
   ) as Record<Status, PipelineCardItem[]>;
 }
 
+function isDueDiligenceItem(item: PipelineCardItem): boolean {
+  return item.dataGateStatus === "pending" || item.dataGateStatus === "skipped" || item.dataGateStatus === "complete";
+}
+
 function filterPipelineItems(
   items: PipelineCardItem[],
   search: string,
@@ -556,7 +567,7 @@ function PipelineCard({
           )}
 
           {item.isAnalyzing && (
-            <AnalysisProgressBar startupId={Number(item.startupId)} compact />
+            <AnalysisProgressBar startupId={item.startupId} compact />
           )}
 
           {/* Scores row */}
@@ -974,7 +985,7 @@ function KanbanCard({
       onClick={handleClick}
       className={
         item.isAnalyzing
-          ? "cursor-pointer opacity-75"
+          ? "cursor-default opacity-75"
           : dragId === draggingMatchId
             ? "cursor-grabbing opacity-60"
             : "cursor-grab active:cursor-grabbing"
@@ -1262,36 +1273,16 @@ function CloseDealDialog({
 
 type DDSubTab = "data-gates" | "analyzed" | "engaged";
 
-const DOC_TYPE_LABELS: Record<string, string> = {
-  pitch_deck: "Pitch Deck",
-  financial: "Financials",
-  cap_table: "Cap Table",
-  legal: "Legal Documents",
-  technical_product: "Technical / Product",
-  business_plan: "Business Plan",
-  market_research: "Market Research",
-  contract: "Contracts",
-  team_hr: "Team / HR",
-};
-
 function DataGateCard({
   item,
-  onSkip,
-  isSkipping,
-  onRequestDocs,
-  isRequesting,
-  needsEmailInput,
   isTabActive,
 }: {
   item: PipelineCardItem;
-  onSkip: (startupId: string) => void;
-  isSkipping: boolean;
-  onRequestDocs: (startupId: string, founderEmail?: string) => Promise<void> | void;
-  isRequesting: boolean;
-  needsEmailInput?: boolean;
   isTabActive: boolean;
 }) {
-  const [founderEmail, setFounderEmail] = useState("");
+  const [docModalOpen, setDocModalOpen] = useState(false);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const { data: gateResponse } = useStartupControllerGetDataGates(item.startupId, {
     query: {
@@ -1300,10 +1291,58 @@ function DataGateCard({
       enabled: isTabActive,
     },
   });
-  const gateData = gateResponse?.data;
+  // `customFetch` returns the raw body (no `{ data }` envelope), so unwrap
+  // defensively rather than reading `gateResponse.data` (undefined at runtime).
+  const gateData = unwrapApiResponse<DataGateInfoDto | undefined>(gateResponse);
 
   const openCount = gateData?.openQuestions?.filter((q) => q.status === "open").length ?? 0;
   const alreadyRequested = Boolean(gateData?.docRequestedAt);
+  const missingRequiredCount = gateData?.missingMaterials?.length ?? 0;
+
+  const invalidatePipeline = () => {
+    queryClient.invalidateQueries({ queryKey: getInvestorControllerGetPipelineQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getStartupControllerFindAllQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getAdminControllerGetAllStartupsQueryKey() });
+    queryClient.invalidateQueries({
+      queryKey: getStartupControllerGetDataGatesQueryKey(item.startupId),
+    });
+  };
+
+  const skipMutation = useStartupControllerSkipDataGate({
+    mutation: {
+      onSuccess: () => {
+        toast.success("Data gate skipped — DD pipeline starting");
+        invalidatePipeline();
+      },
+      onError: () => toast.error("Failed to skip data gate"),
+    },
+  });
+
+  const requestDocsMutation = useStartupControllerRequestDocuments({
+    mutation: {
+      onSuccess: (response) => {
+        const result = unwrapApiResponse<{ sentTo?: string | null }>(response);
+        if (result.sentTo) toast.success(`Document request sent to ${result.sentTo}`);
+        invalidatePipeline();
+      },
+      onError: (error) => {
+        // No founder email on file — open the modal so the user can enter one.
+        if (
+          error instanceof ApiError &&
+          error.status === 400 &&
+          error.message.includes("founder email")
+        ) {
+          setDocModalOpen(true);
+          toast.error("No founder email found — please enter one");
+        } else {
+          toast.error("Failed to send document request");
+        }
+      },
+    },
+  });
+
+  const isSkipping = skipMutation.isPending;
+  const isRequesting = requestDocsMutation.isPending;
 
   return (
     <Card className="overflow-hidden">
@@ -1318,13 +1357,13 @@ function DataGateCard({
             </AvatarFallback>
           </Avatar>
           <div className="min-w-0 flex-1">
-            <Link
-              to="/investor/startup/$id"
-              params={{ id: item.startupId }}
-              className="font-semibold hover:underline"
+            <button
+              type="button"
+              onClick={() => setDocModalOpen(true)}
+              className="text-left font-semibold hover:underline"
             >
               {item.displayName}
-            </Link>
+            </button>
             <div className="flex flex-wrap gap-1.5 mt-1">
               {item.stage && (
                 <Badge variant="outline" className="text-[11px] capitalize">
@@ -1346,78 +1385,51 @@ function DataGateCard({
         </div>
 
         {gateData && (
-          <div className="space-y-2">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Required Documents
-            </p>
-            <div className="space-y-1">
-              {gateData.requiredDocTypes.map((docType) => {
-                const present = gateData.presentDocTypes.includes(docType);
-                return (
-                  <div key={docType} className="flex items-center gap-2 text-sm">
-                    {present ? (
-                      <Check className="h-4 w-4 text-green-600 shrink-0" />
-                    ) : (
-                      <X className="h-4 w-4 text-muted-foreground/40 shrink-0" />
-                    )}
-                    <span className={present ? "text-foreground" : "text-muted-foreground"}>
-                      {DOC_TYPE_LABELS[docType] ?? docType}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          <p
+            className={cn(
+              "text-sm font-medium",
+              missingRequiredCount > 0 ? "text-amber-600" : "text-green-600",
+            )}
+          >
+            {missingRequiredCount > 0
+              ? `${missingRequiredCount} required doc${missingRequiredCount !== 1 ? "s" : ""} missing`
+              : "All required docs in"}
+          </p>
         )}
 
         {openCount > 0 && (
-          <Link
-            to="/investor/startup/$id"
-            params={{ id: item.startupId }}
+          <button
+            type="button"
+            onClick={() => setDocModalOpen(true)}
             className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
           >
             <AlertTriangle className="h-3.5 w-3.5" />
             {openCount} open question{openCount !== 1 ? "s" : ""}
-          </Link>
+          </button>
         )}
 
-        {needsEmailInput && (
-          <div className="flex items-center gap-2">
-            <Input
-              placeholder="founder@company.com"
-              value={founderEmail}
-              onChange={(e) => setFounderEmail(e.target.value)}
-              className="h-8 text-sm"
-            />
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={!founderEmail.trim() || isRequesting}
-              onClick={() => {
-                onRequestDocs(item.startupId, founderEmail.trim());
-                setFounderEmail("");
-              }}
-            >
-              Send
-            </Button>
-          </div>
-        )}
+        <button
+          type="button"
+          onClick={() => setDocModalOpen(true)}
+          className="self-start text-sm font-medium text-primary hover:underline"
+        >
+          See details
+        </button>
 
-        <div className="flex items-center gap-2 pt-1">
+        <div className="flex flex-wrap gap-2 pt-1">
           <Button
             variant="outline"
             size="sm"
-            onClick={() => onSkip(item.startupId)}
+            onClick={() => skipMutation.mutate({ id: item.startupId })}
             disabled={isSkipping}
           >
             {isSkipping ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
             Skip to Analysis
           </Button>
           <Button
-            variant="ghost"
             size="sm"
             disabled={isRequesting || alreadyRequested}
-            onClick={() => onRequestDocs(item.startupId)}
+            onClick={() => requestDocsMutation.mutate({ id: item.startupId, data: {} })}
           >
             {isRequesting ? (
               <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
@@ -1428,65 +1440,19 @@ function DataGateCard({
           </Button>
         </div>
       </CardContent>
+
+      <DataGateDocsModal
+        startupId={item.startupId}
+        displayName={item.displayName}
+        open={docModalOpen}
+        onOpenChange={setDocModalOpen}
+        isTabActive={isTabActive}
+      />
     </Card>
   );
 }
 
 function DataGatesView({ items, isActive }: { items: PipelineCardItem[]; isActive: boolean }) {
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
-
-  const invalidateDataGates = () =>
-    queryClient.invalidateQueries({
-      predicate: (query) =>
-        typeof query.queryKey[0] === "string" &&
-        query.queryKey[0].startsWith("/startups/") &&
-        query.queryKey[0].endsWith("/data-gates"),
-    });
-
-  const skipMutation = useStartupControllerSkipDataGate({
-    mutation: {
-      onSuccess: () => {
-        toast.success("Data gate skipped — DD pipeline starting");
-        queryClient.invalidateQueries({ queryKey: getInvestorControllerGetPipelineQueryKey() });
-        queryClient.invalidateQueries({ queryKey: getStartupControllerFindAllQueryKey() });
-        void invalidateDataGates();
-      },
-      onError: () => {
-        toast.error("Failed to skip data gate");
-      },
-    },
-  });
-
-  const [emailPromptStartupId, setEmailPromptStartupId] = useState<string | null>(null);
-
-  const requestDocsMutation = useStartupControllerRequestDocuments({
-    mutation: {
-      onSuccess: (response) => {
-        if (response.data.sentTo) {
-          toast.success(`Document request sent to ${response.data.sentTo}`);
-        }
-        setEmailPromptStartupId(null);
-        void invalidateDataGates();
-      },
-      onError: (error) => {
-        if (error instanceof ApiError && error.status === 400 && error.message.includes("founder email")) {
-          setEmailPromptStartupId(requestDocsMutation.variables?.id ?? null);
-          toast.error("No founder email found — please enter one below");
-        } else {
-          toast.error("Failed to send document request");
-        }
-      },
-    },
-  });
-
-  const handleRequestDocs = (startupId: string, founderEmail?: string) => {
-    requestDocsMutation.mutate({
-      id: startupId,
-      data: founderEmail ? { founderEmail } : {},
-    });
-  };
-
   if (items.length === 0) {
     return (
       <Card className="border-dashed">
@@ -1504,16 +1470,7 @@ function DataGatesView({ items, isActive }: { items: PipelineCardItem[]; isActiv
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
       {items.map((item) => (
-        <DataGateCard
-          key={item.startupId}
-          item={item}
-          onSkip={(id) => skipMutation.mutate({ id })}
-          isSkipping={skipMutation.isPending && skipMutation.variables?.id === item.startupId}
-          onRequestDocs={handleRequestDocs}
-          isRequesting={requestDocsMutation.isPending && requestDocsMutation.variables?.id === item.startupId}
-          needsEmailInput={emailPromptStartupId === item.startupId}
-          isTabActive={isActive}
-        />
+        <DataGateCard key={item.startupId} item={item} isTabActive={isActive} />
       ))}
     </div>
   );
@@ -1549,7 +1506,9 @@ function InvestorDashboard() {
 
   const pipelineItemsByStatus = useMemo(() => {
     if (!pipeline) return null;
-    return groupPipelineItems(applyStatusOverrides(mergeStartups(pipeline, []).allItems, statusOverrides));
+    return groupPipelineItems(
+      applyStatusOverrides(mergeStartups(pipeline, []).allItems, statusOverrides).filter(isDueDiligenceItem),
+    );
   }, [pipeline, statusOverrides]);
 
   // ─ Private startups
@@ -1699,7 +1658,7 @@ function InvestorDashboard() {
 
   // ─ Merged & filtered data
   const allItems = useMemo(
-    () => applyStatusOverrides(mergeStartups(pipeline, myStartups).allItems, statusOverrides),
+    () => applyStatusOverrides(mergeStartups(pipeline, myStartups).allItems, statusOverrides).filter(isDueDiligenceItem),
     [pipeline, myStartups, statusOverrides],
   );
 
@@ -1709,7 +1668,7 @@ function InvestorDashboard() {
   );
 
   const analyzedItems = useMemo(
-    () => allItems.filter((item) => item.dataGateStatus !== "pending"),
+    () => allItems.filter((item) => item.dataGateStatus === "skipped" || item.dataGateStatus === "complete"),
     [allItems],
   );
 
@@ -1784,7 +1743,7 @@ function InvestorDashboard() {
       passed: items.filter(i => i.pipelineStatus === "passed").length,
       bookmarked: items.filter((i) => i.pipelineStatus === "bookmarked").length,
     };
-  }, [allItems, filters.source]);
+  }, [analyzedItems, filters.source]);
 
   // ─ Handlers
   const handleDrop = (dragId: string, newStatus: Status) => {
@@ -1892,7 +1851,7 @@ function InvestorDashboard() {
               <Handshake className="h-8 w-8 opacity-60" />
               <h3 className="text-lg font-semibold text-foreground">DD / Engaged</h3>
               <p className="text-sm">
-                Deals you are actively reviewing within Due Diligence, before promoting to top-level Engaged.
+                Deals you are actively engaging with — term sheets, meetings, closing.
               </p>
               <p className="text-xs">Move deals here manually from the Analyzed board.</p>
             </CardContent>
@@ -1904,7 +1863,7 @@ function InvestorDashboard() {
       {inFlightDeals.length > 0 && (
         <div className="flex flex-col gap-2 rounded-md border border-sky-300 bg-sky-50 p-4 text-sky-900">
           <div className="flex items-center gap-2 font-semibold">
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Info className="h-4 w-4 shrink-0" />
             {inFlightDeals.length} deal{inFlightDeals.length === 1 ? "" : "s"} in due diligence
           </div>
           <ul className="text-sm pl-6 list-disc space-y-0.5">
@@ -2057,29 +2016,19 @@ function InvestorDashboard() {
           Renders only when the investor's thesis declares industries. */}
       <ThesisAxisFilter className="px-1" />
 
-      <CalibrationCard />
+      {/* Calibration temporarily hidden (DS-E11 two-loop redesign pending, issue #32) */}
+      {/* <CalibrationCard /> */}
 
 
-      {/* ─── Content Area ───
-          Small shortlists render as triage DealCards (one-screen, no-scroll).
-          Larger lists fall back to the existing CardsView. Mutually exclusive
-          to avoid double-rendering the same startup. */}
+      {/* ─── Content Area ─── */}
       {viewMode === "list" ? (
-        filteredItems.length > 0 && filteredItems.length <= 3 ? (
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
-            {filteredItems.map((item) => (
-              <DealCard key={item.startupId} startupId={item.startupId} />
-            ))}
-          </div>
-        ) : (
-          <CardsView
-            items={filteredItems}
-            onStatusChange={handleDrop}
-            onToggleBookmark={handleToggleBookmark}
-            onRunMatching={handleRunMatching}
-            matchingJobs={matchingJobs}
-          />
-        )
+        <CardsView
+          items={filteredItems}
+          onStatusChange={handleDrop}
+          onToggleBookmark={handleToggleBookmark}
+          onRunMatching={handleRunMatching}
+          matchingJobs={matchingJobs}
+        />
       ) : (
         <BoardView
           grouped={filteredGrouped}

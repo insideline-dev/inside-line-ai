@@ -93,8 +93,6 @@ const ACTIVITY_FILTERS: { value: ActivityFilter; label: string }[] = [
   { value: "events", label: "Events" },
 ];
 
-const DS_PHASES = new Set(["classification", "extraction", "enrichment", "scraping", "screening"]);
-
 const PHASE_LABELS: Record<string, string> = {
   classification: "Classification",
   extraction: "Extraction",
@@ -1603,17 +1601,8 @@ export function AdminPipelineLivePanel({
         )}
 
         <div className="space-y-3">
-          {([
-            { label: "Deal Screening", filter: (e: { phase: string }) => DS_PHASES.has(e.phase) },
-            { label: "Due Diligence", filter: (e: { phase: string }) => !DS_PHASES.has(e.phase) },
-          ] as const).map((group) => {
-            const groupEntries = phaseEntries.filter(group.filter);
-            if (groupEntries.length === 0) return null;
-            return (
-            <div key={group.label} className="space-y-1.5">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group.label}</h3>
-              <div className="rounded-lg border divide-y">
-              {groupEntries.map((entry) => {
+          <div className="rounded-lg border divide-y">
+              {phaseEntries.map((entry) => {
                 const runningAgents = Object.entries(entry.data.agents ?? {})
                   .filter(([k, a]) => a.status === "running" && !PHASE_STEP_AGENT_KEYS.has(k));
                 const hasSignals = entry.failedAgentCount > 0 || entry.fallbackAgentCount > 0 || entry.retriedAgentCount > 0 || entry.retryingAgentCount > 0;
@@ -1697,10 +1686,7 @@ export function AdminPipelineLivePanel({
                   </div>
                 );
               })}
-              </div>
-            </div>
-          );
-          })}
+          </div>
         </div>
 
         <details className="group">

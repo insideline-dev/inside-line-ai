@@ -23,12 +23,72 @@ import {
 import { getInvestorControllerGetPipelineQueryKey } from "@/api/generated/investor/investor";
 import { storageControllerGetUploadUrl } from "@/api/generated/storage/storage";
 import type { CreateStartupDto, ExtractDeckMetadataResponseDto } from "@/api/generated/model";
+import { CreateStartupDtoStage } from "@/api/generated/model/createStartupDtoStage";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
 import { unwrapApiResponse } from "@/lib/api-utils";
 import { Upload, FileText, Loader2, CheckCircle2, Sparkles } from "lucide-react";
 
 type Phase = "uploading" | "extracting" | "review" | "submitting" | "done" | "error";
 
 type ExtractionResult = ExtractDeckMetadataResponseDto;
+
+// ─── Stage normalization ──────────────────────────────────────────────────────
+
+const STAGE_VALUES = Object.values(CreateStartupDtoStage) as CreateStartupDtoStage[];
+
+const STAGE_LABELS: Record<CreateStartupDtoStage, string> = {
+  pre_seed: "Pre-Seed",
+  seed: "Seed",
+  series_a: "Series A",
+  series_b: "Series B",
+  series_c: "Series C",
+  series_d: "Series D",
+  series_e: "Series E",
+  series_f_plus: "Series F+",
+};
+
+/** Maps free-form AI-extracted stage text to a valid enum value, or "" when unknown. */
+function normalizeStage(raw: string | null | undefined): CreateStartupDtoStage | "" {
+  if (!raw) return "";
+
+  const slug = raw
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_")
+    .replace(/[^a-z_]/g, "");
+
+  if (!slug) return "";
+
+  // Direct enum match.
+  if ((STAGE_VALUES as string[]).includes(slug)) {
+    return slug as CreateStartupDtoStage;
+  }
+
+  // Pre-seed variants.
+  if (/^pre_?seed/.test(slug)) return "pre_seed";
+
+  // Seed (but not pre-seed, handled above).
+  if (slug.startsWith("seed")) return "seed";
+
+  // Series A–E, with anything F and beyond folded into series_f_plus.
+  const seriesMatch = slug.match(/series_?([a-z])/);
+  if (seriesMatch) {
+    const letter = seriesMatch[1];
+    if (letter >= "a" && letter <= "e") {
+      return `series_${letter}` as CreateStartupDtoStage;
+    }
+    return "series_f_plus";
+  }
+
+  if (slug.includes("f_plus")) return "series_f_plus";
+
+  return "";
+}
 
 // ─── Drop Zone ──────────────────────────────────────────────────────────────
 
@@ -159,7 +219,7 @@ async function uploadAndExtract(
   return {
     key: data.key,
     publicUrl: data.publicUrl || "",
-    extraction: extraction.data,
+    extraction: unwrapApiResponse<ExtractionResult>(extraction),
   };
 }
 
@@ -168,7 +228,8 @@ async function createAndSubmit(
   upload: { key: string; publicUrl: string },
   name: string,
   website: string,
-  extra: Pick<ExtractionResult, "industry" | "stage" | "description">,
+  stage: CreateStartupDto["stage"] | undefined,
+  extra: Pick<ExtractionResult, "industry" | "description">,
 ) {
   let normalizedWebsite = website.trim();
   if (!/^https?:\/\//i.test(normalizedWebsite)) {
@@ -181,7 +242,7 @@ async function createAndSubmit(
     pitchDeckUrl: upload.publicUrl,
     pitchDeckPath: upload.key,
     industry: extra.industry || undefined,
-    stage: (extra.stage || undefined) as CreateStartupDto["stage"],
+    stage: stage,
     description: extra.description || undefined,
   };
 
@@ -189,7 +250,7 @@ async function createAndSubmit(
 
   // The generated response types `data` as `void`; the backend returns the
   // created startup, so narrow it to read the id.
-  const created = unwrapApiResponse<{ id?: string }>(createResult.data);
+  const created = unwrapApiResponse<{ id?: string }>(createResult);
   if (!created?.id) throw new Error("Startup created but no ID returned");
 
   await startupControllerRegisterDataRoomFilesBulk(created.id, {
@@ -219,6 +280,7 @@ export function QuickSubmitDialog({
 }) {
   const [companyName, setCompanyName] = useState("");
   const [website, setWebsite] = useState("");
+  const [stage, setStage] = useState<CreateStartupDtoStage | "">("");
   const [phase, setPhase] = useState<Phase>("uploading");
   const [progress, setProgress] = useState(0);
   const [autoSubmitted, setAutoSubmitted] = useState(false);
@@ -250,12 +312,16 @@ export function QuickSubmitDialog({
 
         const extractedName = result.extraction.companyName || "";
         const extractedWebsite = result.extraction.website || "";
+        const normalizedStage = normalizeStage(result.extraction.stage);
 
         setCompanyName(extractedName);
         setWebsite(extractedWebsite);
+        setStage(normalizedStage);
 
-        // Auto-submit if both required fields were extracted
-        if (extractedName && extractedWebsite) {
+        // Auto-submit only when all of name, website, and a valid stage were
+        // inferred. Otherwise fall through to the review form so the user can
+        // confirm the details and pick a stage.
+        if (extractedName && extractedWebsite && normalizedStage) {
           setPhase("submitting");
           setAutoSubmitted(true);
 
@@ -265,6 +331,7 @@ export function QuickSubmitDialog({
               { key: result.key, publicUrl: result.publicUrl },
               extractedName,
               extractedWebsite,
+              normalizedStage,
               result.extraction,
             );
             setPhase("done");
@@ -302,7 +369,8 @@ export function QuickSubmitDialog({
         uploadRef.current,
         companyName,
         website,
-        extractionRef.current ?? { industry: null, stage: null, description: null },
+        stage || undefined,
+        extractionRef.current ?? { industry: null, description: null },
       );
     },
     onSuccess: () => {
@@ -416,6 +484,29 @@ export function QuickSubmitDialog({
                     }
                   }}
                 />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="quick-stage">Funding stage</Label>
+                <Select
+                  value={stage || "none"}
+                  onValueChange={(value) =>
+                    setStage(value === "none" ? "" : (value as CreateStartupDtoStage))
+                  }
+                  disabled={isSubmitting || isDone}
+                >
+                  <SelectTrigger id="quick-stage">
+                    <SelectValue placeholder="Not specified" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Not specified</SelectItem>
+                    {STAGE_VALUES.map((value) => (
+                      <SelectItem key={value} value={value}>
+                        {STAGE_LABELS[value]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           )}

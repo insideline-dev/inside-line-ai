@@ -17,7 +17,18 @@ export interface DataGateInfo {
   missingMaterials: string[];
   requiredDocTypes: string[];
   presentDocTypes: string[];
+  founderEmail: string | null;
 }
+
+export type DataGateAutoAdvanceResult =
+  | { status: 'not_pending' }
+  | { status: 'no_investor_context' }
+  | { status: 'no_thesis' }
+  | { status: 'auto_advance_disabled'; missingMaterials: string[] }
+  | { status: 'no_required_docs' }
+  | { status: 'advanced' }
+  | { status: 'already_advanced' }
+  | { status: 'missing_docs_pending'; missingMaterials: string[] };
 
 @Injectable()
 export class DataGateService {
@@ -131,12 +142,21 @@ export class DataGateService {
       .select({
         dataGateStatus: startup.dataGateStatus,
         docRequestedAt: startup.docRequestedAt,
+        contactEmail: startup.contactEmail,
+        userId: startup.userId,
+        pitchDeckPath: startup.pitchDeckPath,
+        pitchDeckUrl: startup.pitchDeckUrl,
       })
       .from(startup)
       .where(eq(startup.id, startupId))
       .limit(1);
 
     if (!row) throw new NotFoundException(`Startup ${startupId} not found`);
+
+    const founderEmail = await this.resolveFounderEmail(
+      row.contactEmail,
+      row.userId,
+    );
 
     // A non-admin viewer IS the investor acting on this deal. Admin viewers have
     // no acting-investor context, so resolution falls back to self-submission /
@@ -168,7 +188,15 @@ export class DataGateService {
         ),
       );
 
-    const presentDocTypes = [...new Set(docs.map((d) => d.category))];
+    // The originally-submitted pitch deck lives on the startup record (not the
+    // data room table), so count it as a present `pitch_deck` document too.
+    const hasSubmittedDeck = Boolean(row.pitchDeckPath || row.pitchDeckUrl);
+    const presentDocTypes = [
+      ...new Set([
+        ...docs.map((d) => d.category),
+        ...(hasSubmittedDeck ? ['pitch_deck'] : []),
+      ]),
+    ];
     const missingMaterials = requiredDocTypes.filter(
       (req) => !presentDocTypes.includes(req),
     );
@@ -196,7 +224,43 @@ export class DataGateService {
       missingMaterials,
       requiredDocTypes,
       presentDocTypes,
+      founderEmail,
     };
+  }
+
+  /**
+   * Resolves the founder email the document request will be sent to. Mirrors
+   * ClaraService.resolveMissingInfoRecipient so the surfaced value matches what
+   * Clara will actually use: prefer the startup's contact email, else fall back
+   * to the owner account's email; null when neither is a valid address.
+   */
+  private async resolveFounderEmail(
+    contactEmail: string | null,
+    ownerUserId: string | null,
+  ): Promise<string | null> {
+    const normalizedContact = contactEmail?.trim().toLowerCase() ?? null;
+    if (normalizedContact && this.isValidEmail(normalizedContact)) {
+      return normalizedContact;
+    }
+
+    if (!ownerUserId) return null;
+
+    const [owner] = await this.drizzle.db
+      .select({ email: user.email })
+      .from(user)
+      .where(eq(user.id, ownerUserId))
+      .limit(1);
+
+    const ownerEmail = owner?.email?.trim().toLowerCase() ?? null;
+    if (ownerEmail && this.isValidEmail(ownerEmail)) {
+      return ownerEmail;
+    }
+
+    return null;
+  }
+
+  private isValidEmail(value: string): boolean {
+    return /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(value);
   }
 
   async skip(startupId: string, userId: string): Promise<void> {
@@ -268,14 +332,23 @@ export class DataGateService {
   async checkAutoAdvance(
     startupId: string,
     actingInvestorId?: string | null,
-  ): Promise<void> {
+  ): Promise<DataGateAutoAdvanceResult> {
     const [row] = await this.drizzle.db
-      .select({ dataGateStatus: startup.dataGateStatus })
+      .select({
+        dataGateStatus: startup.dataGateStatus,
+        docRequestedAt: startup.docRequestedAt,
+        contactEmail: startup.contactEmail,
+        userId: startup.userId,
+        pitchDeckPath: startup.pitchDeckPath,
+        pitchDeckUrl: startup.pitchDeckUrl,
+      })
       .from(startup)
       .where(eq(startup.id, startupId))
       .limit(1);
 
-    if (!row || row.dataGateStatus !== DataGateStatus.PENDING) return;
+    if (!row || row.dataGateStatus !== DataGateStatus.PENDING) {
+      return { status: 'not_pending' };
+    }
 
     // Resolve the investor whose thesis governs the gate. When the caller knows
     // the acting investor (advancing from screening, Clara conversation owner)
@@ -285,7 +358,7 @@ export class DataGateService {
       actingInvestorId,
     );
 
-    if (!investorId) return;
+    if (!investorId) return { status: 'no_investor_context' };
 
     const [thesis] = await this.drizzle.db
       .select({
@@ -296,10 +369,10 @@ export class DataGateService {
       .where(eq(investorThesis.userId, investorId))
       .limit(1);
 
-    if (!thesis?.autoAdvanceDataGate) return;
+    if (!thesis) return { status: 'no_thesis' };
 
     const requiredDocTypes = thesis.requiredDocTypes ?? ['pitch_deck', 'financial'];
-    if (requiredDocTypes.length === 0) return;
+    if (requiredDocTypes.length === 0) return { status: 'no_required_docs' };
 
     const docs = await this.drizzle.db
       .select({ category: dataRoom.category })
@@ -312,9 +385,23 @@ export class DataGateService {
       );
 
     const presentCategories = new Set(docs.map((d) => d.category));
-    const allPresent = requiredDocTypes.every((req) => presentCategories.has(req));
+    // The originally-submitted pitch deck lives on the startup record, not the
+    // data room table — count it so the gate doesn't flag it as missing.
+    if (row.pitchDeckPath || row.pitchDeckUrl) presentCategories.add('pitch_deck');
+    const missingMaterials = requiredDocTypes.filter(
+      (req) => !presentCategories.has(req),
+    );
+    const allPresent = missingMaterials.length === 0;
+
+    if (!thesis.autoAdvanceDataGate && !allPresent) {
+      return { status: 'auto_advance_disabled', missingMaterials };
+    }
 
     if (allPresent) {
+      if (!thesis.autoAdvanceDataGate) {
+        return { status: 'auto_advance_disabled', missingMaterials: [] };
+      }
+
       const [advanced] = await this.drizzle.db
         .update(startup)
         .set({ dataGateStatus: DataGateStatus.COMPLETE })
@@ -330,7 +417,7 @@ export class DataGateService {
         this.logger.debug(
           `[DataGate] Auto-advance skipped for ${startupId} — already advanced by another thread`,
         );
-        return;
+        return { status: 'already_advanced' };
       }
 
       this.logger.log(
@@ -345,7 +432,10 @@ export class DataGateService {
       });
 
       await this.triggerDdPipeline(startupId, investorId);
+      return { status: 'advanced' };
     }
+
+    return { status: 'missing_docs_pending', missingMaterials };
   }
 
   private async hasNewDocsSinceExtraction(startupId: string): Promise<boolean> {

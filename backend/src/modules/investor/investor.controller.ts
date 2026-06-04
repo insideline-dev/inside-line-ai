@@ -453,7 +453,7 @@ export class InvestorController {
       },
     });
 
-    await this.dataGateService.checkAutoAdvance(startupId);
+    await this.dataGateService.checkAutoAdvance(startupId, user.id);
 
     const [postCheck] = await this.drizzle.db
       .select({ dataGateStatus: startup.dataGateStatus })

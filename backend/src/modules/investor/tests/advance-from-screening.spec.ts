@@ -20,12 +20,12 @@ import { ScreeningQueueService } from "../screening-queue.service";
 import { ScreeningCalibrationService } from "../screening-calibration.service";
 import { ScreeningProcessor } from "../../ai/processors/screening.processor";
 import { PipelineService } from "../../ai/services/pipeline.service";
-import { ProgressTrackerService } from "../../ai/orchestrator/progress-tracker.service";
 import { PipelineStateService } from "../../ai/services/pipeline-state.service";
 import { DrizzleService } from "../../../database";
 import { UserRole } from "../../../auth/entities/auth.schema";
 import { DealEventService } from "../../startup/deal-event.service";
 import { ScreeningOverrideService } from "../screening-override.service";
+import { DataGateService } from "../../startup/data-gate.service";
 
 const STARTUP_ID = "11111111-2222-4222-8444-555555555555";
 const investor = {
@@ -44,6 +44,7 @@ describe("InvestorController.advanceFromScreening", () => {
   let pipelineService: { rerunFromPhase: ReturnType<typeof jest.fn> };
   let dealDecisionService: { record: ReturnType<typeof jest.fn> };
   let dealEvents: { record: ReturnType<typeof jest.fn> };
+  let dataGateService: { checkAutoAdvance: ReturnType<typeof jest.fn> };
   let pipelineStateService: {
     getPhaseResult: ReturnType<typeof jest.fn>;
     setPhaseResult: ReturnType<typeof jest.fn>;
@@ -52,7 +53,7 @@ describe("InvestorController.advanceFromScreening", () => {
   function buildSelectMock(latestRow: { id: string } | null) {
     const limit = jest.fn().mockResolvedValue(latestRow ? [latestRow] : []);
     const orderBy = jest.fn().mockReturnValue({ limit });
-    const where = jest.fn().mockReturnValue({ orderBy });
+    const where = jest.fn().mockReturnValue({ orderBy, limit });
     const from = jest.fn().mockReturnValue({ where });
     return jest.fn().mockReturnValue({ from });
   }
@@ -69,6 +70,9 @@ describe("InvestorController.advanceFromScreening", () => {
     pipelineService = { rerunFromPhase: jest.fn().mockResolvedValue(undefined) };
     dealDecisionService = { record: jest.fn().mockResolvedValue({}) };
     dealEvents = { record: jest.fn().mockResolvedValue({}) };
+    dataGateService = {
+      checkAutoAdvance: jest.fn().mockResolvedValue({ status: "missing_docs_pending" }),
+    };
     pipelineStateService = {
       getPhaseResult: jest.fn().mockResolvedValue({ stub: 'phase-result' }),
       setPhaseResult: jest.fn().mockResolvedValue(undefined),
@@ -101,6 +105,7 @@ describe("InvestorController.advanceFromScreening", () => {
           useValue: pipelineStateService,
         },
         { provide: DealEventService, useValue: dealEvents },
+        { provide: DataGateService, useValue: dataGateService },
         {
           provide: DrizzleService,
           useValue: {
@@ -124,26 +129,28 @@ describe("InvestorController.advanceFromScreening", () => {
     expect(pipelineService.rerunFromPhase).not.toHaveBeenCalled();
   });
 
-  it("overrides verdict to 'advance', syncs cached screening state, and queues DD", async () => {
+  it("overrides verdict to 'advance', syncs cached screening state, and enters Data Gates", async () => {
     const res = await controller.advanceFromScreening(STARTUP_ID, investor);
     expect(res.ok).toBe(true);
     expect(res.verdict).toBe("advance");
-    expect(res.note).toMatch(/Research \+ evaluation \+ synthesis queued/);
+    expect(res.path).toBe("data_gate");
+    expect(res.note).toMatch(/Deal moved to Data Gates/);
     expect(drizzleUpdateMock).toHaveBeenCalled();
     expect(dealDecisionService.record).toHaveBeenCalledWith(
       investor.id,
       STARTUP_ID,
       expect.objectContaining({ verdict: "advance" }),
     );
-    expect(pipelineService.rerunFromPhase).toHaveBeenCalledWith(
+    expect(pipelineService.rerunFromPhase).not.toHaveBeenCalled();
+    expect(dataGateService.checkAutoAdvance).toHaveBeenCalledWith(
       STARTUP_ID,
-      "research",
+      investor.id,
     );
     expect(dealEvents.record).toHaveBeenCalledWith(
       expect.objectContaining({
         startupId: STARTUP_ID,
         actorUserId: investor.id,
-        type: "due_diligence.started",
+        type: "due_diligence.data_gate_entered",
       }),
     );
   });
@@ -183,76 +190,6 @@ describe("InvestorController.advanceFromScreening", () => {
     );
   });
 
-  it("falls back to fresh_full_pipeline when pipeline state is missing", async () => {
-    const startPipelineMock = jest.fn().mockResolvedValue('new-run-id');
-    const localPipelineService = {
-      rerunFromPhase: jest
-        .fn()
-        .mockRejectedValue(new Error('Pipeline state not found')),
-      startPipeline: startPipelineMock,
-    };
-    const localStateService = {
-      getPhaseResult: jest.fn().mockResolvedValue(null),
-      setPhaseResult: jest.fn().mockResolvedValue(undefined),
-    };
-    const module: TestingModule = await Test.createTestingModule({
-      controllers: [InvestorController],
-      providers: [
-        { provide: ThesisService, useValue: {} },
-        { provide: DealbreakerParseService, useValue: {} },
-        { provide: MatchService, useValue: {} },
-        { provide: TeamService, useValue: {} },
-        { provide: InvestorNoteService, useValue: {} },
-        { provide: PortfolioService, useValue: {} },
-        { provide: DealPipelineService, useValue: {} },
-        { provide: MessagingService, useValue: {} },
-        { provide: ScoringPreferencesService, useValue: {} },
-        { provide: ScoringConfigService, useValue: {} },
-        { provide: DealDecisionService, useValue: dealDecisionService },
-        { provide: CalibrationService, useValue: {} },
-        { provide: CalibrationProposalService, useValue: {} },
-        { provide: StartupMatchingPipelineService, useValue: {} },
-        { provide: ScreeningQueueService, useValue: {} },
-        { provide: ScreeningCalibrationService, useValue: {} },
-        { provide: ScreeningOverrideService, useValue: {} },
-        { provide: ScreeningProcessor, useValue: {} },
-        { provide: PipelineService, useValue: localPipelineService },
-        {
-          provide: ProgressTrackerService,
-          useValue: { initProgress: jest.fn(), updatePhaseProgress: jest.fn() },
-        },
-        { provide: PipelineStateService, useValue: localStateService },
-        { provide: DealEventService, useValue: dealEvents },
-        {
-          provide: DrizzleService,
-          useValue: {
-            db: { select: drizzleSelectMock, update: drizzleUpdateMock },
-          },
-        },
-      ],
-    }).compile();
-    const localController = module.get(InvestorController);
-    const res = await localController.advanceFromScreening(STARTUP_ID, investor);
-    expect(res.ok).toBe(true);
-    expect(res.path).toBe('fresh_full_pipeline');
-    expect(localPipelineService.rerunFromPhase).toHaveBeenCalledWith(
-      STARTUP_ID,
-      'research',
-    );
-    expect(startPipelineMock).toHaveBeenCalledWith(
-      STARTUP_ID,
-      investor.id,
-    );
-  });
-
-  it("translates pipeline.service errors into a clearer 404", async () => {
-    pipelineService.rerunFromPhase = jest
-      .fn()
-      .mockRejectedValue(new Error("Pipeline state not found"));
-    await expect(
-      controller.advanceFromScreening(STARTUP_ID, investor),
-    ).rejects.toBeInstanceOf(NotFoundException);
-  });
 });
 
 describe("InvestorController.passFromScreening", () => {
@@ -298,13 +235,6 @@ describe("InvestorController.passFromScreening", () => {
         { provide: ScreeningProcessor, useValue: {} },
         { provide: PipelineService, useValue: { rerunFromPhase: jest.fn() } },
         {
-          provide: ProgressTrackerService,
-          useValue: {
-            initProgress: jest.fn(),
-            updatePhaseProgress: jest.fn(),
-          },
-        },
-        {
           provide: PipelineStateService,
           // Truthy values → upstream-ready precheck passes → endpoint picks
           // the rerun_from_eval path (covered by the advance assertions).
@@ -316,6 +246,7 @@ describe("InvestorController.passFromScreening", () => {
           },
         },
         { provide: DealEventService, useValue: dealEvents },
+        { provide: DataGateService, useValue: { checkAutoAdvance: jest.fn() } },
         {
           provide: DrizzleService,
           useValue: {

@@ -16,6 +16,7 @@ import {
   ForbiddenException,
   NotFoundException,
   Logger,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -45,6 +46,7 @@ import { DealEventService } from './deal-event.service';
 import { OpenQuestionService } from '../dd/open-question.service';
 import { UpdateOpenQuestionDto } from '../dd/dto/open-question.dto';
 import { PdfTextExtractorService } from '../ai/services/pdf-text-extractor.service';
+import { PdfOcrService } from '../ai/services/pdf-ocr.service';
 import { FieldExtractorService } from '../ai/services/field-extractor.service';
 import { StorageService } from '../../storage';
 import { RolesGuard } from './guards';
@@ -97,6 +99,7 @@ export class StartupController {
     private dealEvents: DealEventService,
     private openQuestions: OpenQuestionService,
     private pdfTextExtractor: PdfTextExtractorService,
+    private pdfOcr: PdfOcrService,
     private fieldExtractor: FieldExtractorService,
     private storageService: StorageService,
   ) {}
@@ -142,7 +145,7 @@ export class StartupController {
     }
 
     try {
-      const downloadUrl = await this.storageService.getDownloadUrl(body.storageKey, 300);
+      const downloadUrl = await this.storageService.getDownloadUrl(body.storageKey, 900);
       const response = await fetch(downloadUrl, {
         signal: AbortSignal.timeout(30_000),
       });
@@ -152,11 +155,32 @@ export class StartupController {
       const buffer = Buffer.from(await response.arrayBuffer());
       const pdfResult = await this.pdfTextExtractor.extractText(buffer);
 
-      if (!pdfResult.hasContent) {
+      // Mirror the pipeline EXTRACTION phase (ExtractionService): use the parsed
+      // text only when the PDF has a usable, non-sparse text layer; otherwise
+      // fail over to OCR for scanned/image-only or sparse decks.
+      let deckText = '';
+      if (pdfResult.hasContent && !pdfResult.hasSparsePages) {
+        deckText = pdfResult.text;
+      }
+      if (!deckText.trim()) {
+        try {
+          const ocrResult = await this.pdfOcr.extractFromPdf(downloadUrl);
+          deckText = ocrResult.text;
+          this.logger.log(
+            `Deck OCR fallback succeeded: pages=${ocrResult.pages.length} chars=${ocrResult.text.length}`,
+          );
+        } catch (ocrError) {
+          this.logger.warn(
+            `Deck OCR fallback failed: ${ocrError instanceof Error ? ocrError.message : String(ocrError)}`,
+          );
+        }
+      }
+
+      if (!deckText.trim()) {
         return { companyName: null, website: null, extracted: false };
       }
 
-      const fields = await this.fieldExtractor.extractFields(pdfResult.text);
+      const fields = await this.fieldExtractor.extractFields(deckText);
 
       return {
         companyName: fields.companyName || null,
@@ -273,7 +297,10 @@ export class StartupController {
   @Roles(UserRole.FOUNDER, UserRole.INVESTOR, UserRole.ADMIN)
   @ApiOperation({ summary: 'Get startup analysis progress' })
   @ApiResponse({ status: 200, type: GetProgressResponseDto })
-  async getProgress(@CurrentUser() user: User, @Param('id') id: string) {
+  async getProgress(
+    @CurrentUser() user: User,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     if (user.role === UserRole.ADMIN) {
       return this.startupService.adminGetProgress(id);
     }
@@ -357,7 +384,7 @@ export class StartupController {
   // ============ FOUNDER DATA ROOM & MEETINGS ============
 
   @Post(':id/data-room')
-  @Roles(UserRole.FOUNDER, UserRole.ADMIN)
+  @Roles(UserRole.FOUNDER, UserRole.INVESTOR, UserRole.ADMIN)
   @UseInterceptors(FileInterceptor('file'))
   async uploadToDataRoom(
     @CurrentUser() user: User,
@@ -366,7 +393,9 @@ export class StartupController {
     @UploadedFile() file?: { buffer: Buffer; mimetype: string; originalname: string },
   ) {
     if (file) {
-      return this.dataRoomService.uploadFile(startupId, user.id, file, dto.category);
+      return this.dataRoomService.uploadFile(startupId, user.id, file, dto.category, {
+        trustCategory: dto.trustCategory,
+      });
     }
 
     if (dto.assetId) {

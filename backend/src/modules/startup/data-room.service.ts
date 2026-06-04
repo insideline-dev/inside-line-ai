@@ -98,6 +98,7 @@ export class DataRoomService {
     userId: string,
     file: { buffer: Buffer; mimetype: string; originalname: string },
     category: string,
+    options: { trustCategory?: boolean } = {},
   ) {
     const assetRecord = await this.assetService.uploadAndTrack(
       userId,
@@ -110,11 +111,56 @@ export class DataRoomService {
 
     const doc = await this.uploadDocument(startupId, assetRecord.id, category);
 
+    // Trusted manual upload (e.g. an investor filling a specific data-gate slot):
+    // honour the chosen category verbatim and mark the doc completed so the gate
+    // reflects it immediately — no AI re-classification.
+    if (options.trustCategory) {
+      return this.markTrusted(doc, category);
+    }
+
     return this.runClassification(doc, {
       path: assetRecord.key,
       name: file.originalname,
       type: file.mimetype,
     });
+  }
+
+  /**
+   * Mark a freshly-inserted doc as completed with a human-chosen category,
+   * bypassing AI classification. Routed agents are derived deterministically
+   * from the category map.
+   */
+  private async markTrusted(
+    doc: DataRoomRow,
+    category: string,
+  ): Promise<DataRoomRow> {
+    const ownerId = await this.resolveOwnerId(doc.startupId);
+    const [updated] = await this.drizzle.db
+      .update(dataRoom)
+      .set({
+        category,
+        classificationStatus: 'completed',
+        classificationConfidence: '1.000',
+        routedAgents: this.classificationService.getRoutedAgents(
+          category as DocumentCategory,
+        ),
+        classificationError: null,
+        classifiedAt: new Date(),
+      })
+      .where(eq(dataRoom.id, doc.id))
+      .returning();
+
+    const result = (updated as DataRoomRow) ?? doc;
+    this.emit(ownerId, 'document:classified', {
+      startupId: doc.startupId,
+      dataRoomId: doc.id,
+      fileName: category,
+      category: result.category,
+      confidence: 1,
+      routedAgents: result.routedAgents ?? [],
+    });
+    void this.dealTriggers.notifyDocUploaded(doc.startupId, result.id);
+    return result;
   }
 
   /**

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { and, desc, eq, inArray, or, sql } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, or, sql } from 'drizzle-orm';
 import { DrizzleService } from '../../database';
 import { startupMatch, type MatchStatus } from './entities/investor.schema';
 import { startup, StartupStatus } from '../startup/entities/startup.schema';
@@ -39,7 +39,7 @@ export class DealPipelineService {
       })
       .from(startupMatch)
       .leftJoin(startup, eq(startupMatch.startupId, startup.id))
-      .where(eq(startupMatch.investorId, investorId));
+      .where(and(eq(startupMatch.investorId, investorId), isNotNull(startup.dataGateStatus)));
 
     const statuses: MatchStatus[] = [
       'new',
@@ -88,6 +88,7 @@ export class DealPipelineService {
       .where(
         and(
           eq(startup.userId, investorId),
+          isNotNull(startup.dataGateStatus),
           or(
             and(
               eq(startup.status, StartupStatus.ANALYZING),

@@ -14,6 +14,7 @@ export const DataGateInfoSchema = z.object({
   missingMaterials: z.array(z.string()),
   requiredDocTypes: z.array(z.string()),
   presentDocTypes: z.array(z.string()),
+  founderEmail: z.string().nullable(),
 });
 
 export type DataGateInfo = z.infer<typeof DataGateInfoSchema>;

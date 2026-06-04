@@ -21,9 +21,12 @@ interface Scenario {
     userId?: string;
     dataGateStatus?: string | null;
     lastExtractionAt?: Date | null;
+    docRequestedAt?: Date | null;
+    contactEmail?: string | null;
   };
   matches?: Array<{ investorId: string; status: string }>;
   userRole?: UserRole | null;
+  userEmail?: string | null;
   thesis?: { requiredDocTypes: string[] | null; autoAdvanceDataGate?: boolean } | null;
   presentDocs?: string[];
   // Result of the hasNewDocsSinceExtraction count query (docs with
@@ -67,12 +70,16 @@ function makeDb(s: Scenario) {
                 userId: s.startupRow.userId,
                 dataGateStatus: s.startupRow.dataGateStatus ?? null,
                 lastExtractionAt: s.startupRow.lastExtractionAt ?? null,
+                docRequestedAt: s.startupRow.docRequestedAt ?? null,
+                contactEmail: s.startupRow.contactEmail ?? null,
                 id: STARTUP_ID,
               },
             ]
           : [];
       case "user":
-        return s.userRole != null ? [{ role: s.userRole }] : [];
+        return s.userRole != null || s.userEmail != null
+          ? [{ role: s.userRole, email: s.userEmail }]
+          : [];
       case "investorThesis":
         return s.thesis
           ? [
@@ -238,6 +245,54 @@ describe("DataGateService.checkAutoAdvance — owning investor resolution", () =
     await svc.checkAutoAdvance(STARTUP_ID, ACTING_INVESTOR);
 
     expect(pipeline.rerunFromPhase).not.toHaveBeenCalled();
+  });
+
+  it("leaves missing Data Gate documents pending until an explicit Clara request", async () => {
+    const { db } = makeDb({
+      startupRow: {
+        userId: SUBMITTER,
+        dataGateStatus: DataGateStatus.PENDING,
+        contactEmail: "founder@example.com",
+      },
+      matches: [{ investorId: ACTING_INVESTOR, status: "new" }],
+      userRole: UserRole.FOUNDER,
+      thesis: {
+        requiredDocTypes: ["pitch_deck", "financial"],
+        autoAdvanceDataGate: true,
+      },
+      presentDocs: ["pitch_deck"],
+    });
+    const { svc, pipeline } = buildService(db);
+
+    const result = await svc.checkAutoAdvance(STARTUP_ID, ACTING_INVESTOR);
+
+    expect(pipeline.rerunFromPhase).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      status: "missing_docs_pending",
+      missingMaterials: ["financial"],
+    });
+  });
+
+  it("leaves the gate pending without email when founder email is unavailable", async () => {
+    const { db } = makeDb({
+      startupRow: { userId: SUBMITTER, dataGateStatus: DataGateStatus.PENDING },
+      matches: [{ investorId: ACTING_INVESTOR, status: "new" }],
+      userRole: UserRole.FOUNDER,
+      thesis: {
+        requiredDocTypes: ["pitch_deck", "financial"],
+        autoAdvanceDataGate: true,
+      },
+      presentDocs: ["pitch_deck"],
+    });
+    const { svc, pipeline } = buildService(db);
+
+    const result = await svc.checkAutoAdvance(STARTUP_ID, ACTING_INVESTOR);
+
+    expect(pipeline.rerunFromPhase).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      status: "missing_docs_pending",
+      missingMaterials: ["financial"],
+    });
   });
 
   it("does not advance when autoAdvanceDataGate is false", async () => {
